@@ -119,7 +119,7 @@ public class PathClassLoader extends ClassLoader {
     
     @Override
     public InputStream getResourceAsStream(String name) {
-    	InputStream is = super.getResourceAsStream(name);
+    	InputStream is = openResource(name);
     	if(is==null) {
     		// Works even when the file system doesn't provide URLs
     		Path file = resourcePath(name);
@@ -134,6 +134,26 @@ public class PathClassLoader extends ClassLoader {
     	return is;
     }
     
+    /**
+     * Same lookup as {@code ClassLoader.getResourceAsStream()} - the parent first, then
+     * {@link #findResource(String)} - but opens the stream with caching off. A jar (or zip
+     * file system) URL would otherwise make the JDK cache an open JarFile: the archive stays
+     * locked long after the stream is closed, and on Windows it can no longer be deleted.
+     */
+    private InputStream openResource(String name) {
+    	URL url = getResource(name);
+    	if(url==null) {
+    		return null;
+    	}
+    	try {
+    		java.net.URLConnection connection = url.openConnection();
+    		connection.setUseCaches(false);
+    		return connection.getInputStream();
+    	} catch(IOException ex) {
+    		return null;
+    	}
+    }
+
     public Class<?> alreadyLoaded(String className) {
         return findLoadedClass(className);
     }

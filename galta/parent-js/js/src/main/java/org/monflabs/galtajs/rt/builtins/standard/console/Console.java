@@ -111,6 +111,20 @@ public class Console extends NativeObject {
 		context,
 	}
 	
+	/**
+	 * Writes a console line to the output stream. The console always ends a line with '\n',
+	 * like a browser or Node does, and never with the platform line separator that
+	 * {@code PrintStream.println()} would use: script output must not depend on the OS.
+	 */
+	private static void printOut(Object s) {
+		JSRuntimeContext.get().getGlobalContext().getOutStream().print(s + "\n");
+	}
+
+	/** Same as {@link #printOut(Object)}, on the error stream. */
+	private static void printErr(Object s) {
+		JSRuntimeContext.get().getGlobalContext().getErrStream().print(s + "\n");
+	}
+
 	private final class Method extends BaseMethod {
 		private MethodId methodId;
 		
@@ -131,21 +145,21 @@ public class Console extends NativeObject {
 	        		if(!assertion) {
 	        			if(args.length>=2) {
 			        		String s = composeLog(args, 1);
-			        		JSRuntimeContext.get().getGlobalContext().getErrStream().println(s);
+			        		printErr(s);
 	        			} else {
-	        				JSRuntimeContext.get().getGlobalContext().getErrStream().println("Assertion error");
+	        				printErr("Assertion error");
 	        			}
 	        		}
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case clear -> {
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case count -> {
 	        		String label = paramString(args,0,"default");
 	        		int count = counters.computeIfAbsent(label, l -> new AtomicInteger(0)).incrementAndGet();
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("{0}: {1}",label,count));
+	        		printOut(StringFormat.format("{0}: {1}",label,count));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case countReset -> {
@@ -155,63 +169,63 @@ public class Console extends NativeObject {
 	        	}
 	        	case debug -> {
 	        		String s = composeLog(args, 0);
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(s);
+	        		printOut(s);
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case dir -> {
 	        		Object o = param(args,0,RuntimeUtil.UNDEFINED);
                     //String s = ConsoleToString.toString(getEnvironment(), o);
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(o!=null?o:"null");
+	        		printOut(o!=null?o:"null");
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case dirxml -> {
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case error, exception -> {
 	        		String s = composeLog(args, 0);
-	        		JSRuntimeContext.get().getGlobalContext().getErrStream().println(s);
+	        		printErr(s);
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case group -> {
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case groupCollapsed -> {
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case groupEnd -> {
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case info -> {
 	        		String s = composeLog(args, 0);
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(s);
+	        		printOut(s);
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case log -> {
 	        		String s = composeLog(args, 0);
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(s); 
+	        		printOut(s); 
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case profile -> {
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case profileEnd -> {
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case table -> {
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case time -> {
 	        		String label = paramString(args,0,"default");
 	        	    Long start = timers.get(label);
 	        	    if (start != null) {
-	        	    	JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Timer {0} already exists", label));
+	        	    	printOut(StringFormat.format("Timer {0} already exists", label));
 	        	    } else { 
 	        	    	timers.put(label, System.nanoTime());
 	        		}
@@ -221,9 +235,9 @@ public class Console extends NativeObject {
 	        		String label = paramString(args,0,"default");
 	        	    Long start = timers.get(label);
 	        	    if (start == null) {
-	        	    	JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Timer {0} does not exist", label));
+	        	    	printOut(StringFormat.format("Timer {0} does not exist", label));
 	        	    } else { 
-	        	    	JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("{0}: {1}ms", label, nano2Milli(System.nanoTime() - start) ));
+	        	    	printOut(StringFormat.format("{0}: {1}ms", label, nano2Milli(System.nanoTime() - start) ));
 	        	    	timers.remove(label);
 	        		}
     				return RuntimeUtil.UNDEFINED;
@@ -232,7 +246,7 @@ public class Console extends NativeObject {
 	        		String label = paramString(args,0,"default");
 	        	    Long start = timers.get(label);
 	        	    if (start == null) {
-	        	    	JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Timer {0} does not exist", label));
+	        	    	printOut(StringFormat.format("Timer {0} does not exist", label));
 	        	    } else {
 	        	    	StringBuilder b = new StringBuilder();
 	    				StringFormat.format(b, "{0}: {1}ms", label, nano2Milli(System.nanoTime() - start) );
@@ -240,23 +254,23 @@ public class Console extends NativeObject {
 	    					b.append(" ");
 	    					b.append(RuntimeUtil.toString(getEnvironment(), args[i]));
 	    				}
-	    				JSRuntimeContext.get().getGlobalContext().getOutStream().println(b.toString());
+	    				printOut(b.toString());
 	        		}
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case timeStamp -> {
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case trace -> {
 	        		// Could be done in interpreted mode?
 	        		// Should works like the debugger gathering the stack
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(StringFormat.format("Console method {0} is not implemented", getId()));
+	        		printOut(StringFormat.format("Console method {0} is not implemented", getId()));
     				return RuntimeUtil.UNDEFINED;
 	        	}
 	        	case warn -> {
 	        		String s = composeLog(args, 0);
-	        		JSRuntimeContext.get().getGlobalContext().getOutStream().println(s);
+	        		printOut(s);
     				return RuntimeUtil.UNDEFINED;
 	        	}
 

@@ -44,7 +44,7 @@ public class FilePath extends AbstractPath {
             // For sandboxed filesystem, use the scheme with sandboxed path (encoded)
             try {
                 // Normalized, so the URI never shows a ".." climbing above the root
-                return new URI(getFileSystem().provider().getScheme(), "", toAbsolutePath().normalize().toString(), null, null);
+                return new URI(getFileSystem().provider().getScheme(), "", toUriPath(toAbsolutePath().normalize()), null, null);
             } catch (java.net.URISyntaxException e) {
                 throw new IllegalArgumentException(e);
             }

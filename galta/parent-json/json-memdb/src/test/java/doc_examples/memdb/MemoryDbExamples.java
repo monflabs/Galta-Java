@@ -233,6 +233,9 @@ public class MemoryDbExamples extends ProjectTestCase {
 		MemoryJsonDb replica = new MemoryJsonDb();
 		master.insert(JsonKey.of("c", "k1"), JsonObject.of("v", 1));
 		master.insert(JsonKey.of("c", "k2"), JsonObject.of("v", 2));
+		// The replicated documents keep their source timestamp: it must be strictly before the
+		// replication date, or the next replication reports them as conflicts
+		sleep();
 
 		JsonDbSource source = JsonDbSource.newBuilder().db(master).build();
 		JsonDbTarget target = JsonDbTarget.newBuilder()

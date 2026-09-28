@@ -1,2 +1,5 @@
 # Binary fixtures must never be line-ending normalized
 *.bin binary
+
+# Fixtures read verbatim by tests: LF regardless of the platform checking them out
+galta/parent-utilities/test/src/test/resources/doc_examples/** text eol=lf

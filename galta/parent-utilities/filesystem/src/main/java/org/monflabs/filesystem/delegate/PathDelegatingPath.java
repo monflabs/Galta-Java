@@ -68,7 +68,7 @@ public class PathDelegatingPath extends AbstractPath {
     public URI toUri() {
         // Return URI with our scheme; the multi-argument constructor encodes spaces, '#', '%'...
         try {
-            return new URI(getFileSystem().provider().getScheme(), "", toAbsolutePath().toString(), null, null);
+            return new URI(getFileSystem().provider().getScheme(), "", toUriPath(toAbsolutePath()), null, null);
         } catch (java.net.URISyntaxException e) {
             throw new IllegalArgumentException(e);
         }

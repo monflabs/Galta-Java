@@ -223,6 +223,11 @@ public class SandboxTest extends ProjectTestCase {
     }
     
     public void testDriveLikeNameMapsInsideTheRoot() throws IOException {
+        if (File.separator.equals("\\")) {
+            // A name like "x:" cannot exist on Windows: it is a drive, not a file name, and
+            // java.nio.file.Path resolves it as one - there is nothing to map inside the root
+            return;
+        }
         FileSystem[] all = sandboxes(root);
         try {
             int i = 0;

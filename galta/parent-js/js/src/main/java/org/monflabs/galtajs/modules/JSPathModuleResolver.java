@@ -92,7 +92,14 @@ public class JSPathModuleResolver extends JSSourceModuleResolver {
 		// not reach outside it, and a directory is not a module (so that the
 		// ".js" fallback gets its chance for "./lib" next to "lib.js")
 		Path root = rootPath.toAbsolutePath().normalize();
-		Path f = root.resolve(name).normalize();
+		Path f;
+		try {
+			f = root.resolve(name).normalize();
+		} catch(java.nio.file.InvalidPathException ex) {
+			// Not a file name on this filesystem ("host:config" on Windows, for instance):
+			// this resolver simply does not know that module, it is not an error
+			return null;
+		}
 		if(!f.startsWith(root) || !Files.isRegularFile(f)) {
 			return null;
 		}

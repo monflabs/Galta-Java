@@ -123,17 +123,23 @@
 			</dependency>
 			
 			<!-- https://mvnrepository.com/artifact/org.graalvm.sdk/graal-sdk -->
-<!-- TODO: upgrade!-->			
+			<!-- 23.x does not run on a JDK past 23: Truffle calls sun.misc.Unsafe.ensureClassInitialized(),
+			     removed in JDK 24, and every engine creation fails with a NoSuchMethodError. -->
 			<dependency>
 				<groupId>org.graalvm.sdk</groupId>
 				<artifactId>graal-sdk</artifactId>
-				<version>23.0.6</version>
+				<version>25.0.1</version>
 			</dependency>
 			<!-- https://mvnrepository.com/artifact/org.graalvm.js/js -->
+			<!-- GraalJS 24+ split the engine: org.graalvm.js:js is a packaging=pom facade with no
+			     jar of its own, pulling in js-language and truffle-runtime at runtime scope. The
+			     <type>pom</type> is required here and on every dependency declaring it, or Maven
+			     looks for a nonexistent js-25.0.1.jar (and the managed version does not apply). -->
 			<dependency>
 			    <groupId>org.graalvm.js</groupId>
 			    <artifactId>js</artifactId>
-			    <version>23.0.6</version>
+			    <version>25.0.1</version>
+			    <type>pom</type>
 			</dependency>
 			<!-- https://mvnrepository.com/artifact/org.openjdk.nashorn/nashorn-core -->
 			<dependency>

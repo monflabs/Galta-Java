@@ -93,11 +93,22 @@ public class CdpSafetyTest extends TestCase {
 		assertFalse(debugger.getExecutionThread().isAlive());
 	}
 
+	// start() only starts the execution thread: it returns before the script has run
+	// its first statement. A Debugger.pause sent right away pauses there, not where the
+	// test means to pause, so wait for what the script prints on its way.
+	private void awaitOutput(String text) throws InterruptedException {
+		for (int i = 0; i < 500 && !output.toString().contains(text); i++) {
+			Thread.sleep(10);
+		}
+		assertTrue(output.toString(), output.toString().contains(text));
+	}
+
 	// While the script runs, its objects belong to its thread: an evaluation
 	// is refused rather than run concurrently from the connection's thread
 	public void testEvaluateWhileRunningIsRefused() throws Exception {
-		startSession("Busy.js", "var stop = false;\nwhile (!stop) {\n  stop = stop;\n}\nconsole.log('done');\n");
+		startSession("Busy.js", "var stop = false;\nconsole.log('running');\nwhile (!stop) {\n  stop = stop;\n}\nconsole.log('done');\n");
 		debugger.start();
+		awaitOutput("running");
 		try {
 			client.call("Runtime.evaluate", "expression", "stop = true");
 			fail("expected an error while the script runs");
@@ -109,7 +120,7 @@ public class CdpSafetyTest extends TestCase {
 		client.call("Runtime.evaluate", "expression", "stop = true");
 		client.call("Debugger.resume");
 		joinExecution();
-		assertEquals("done", output.toString().trim());
+		assertEquals("running\ndone", output.toString().trim());
 	}
 
 	// An evaluation run for a client never pauses, even on `debugger;`

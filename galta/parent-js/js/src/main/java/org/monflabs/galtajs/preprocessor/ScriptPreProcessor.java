@@ -39,6 +39,13 @@ public class ScriptPreProcessor {
 		return source;
 	}
 	
+	/**
+	 * Preprocessed source always uses '\n', as JavaScript source does, and never the platform
+	 * line separator that {@code BufferedWriter.newLine()} would emit: the result is parsed,
+	 * compared and cached, and must not depend on the OS it was preprocessed on.
+	 */
+	private static final String LINE_BREAK = "\n";
+
 	private static Pattern containsDirectives = Pattern.compile("//[\\ \\t]*#");
 	private static boolean shouldPreprocess(String s) {
 		return containsDirectives.matcher(s).find();
@@ -85,16 +92,16 @@ public class ScriptPreProcessor {
 		            	if(!removeHidden) {
 		            		out.write("//");
 		            		out.write(line); 
-		            		out.newLine();
+		            		out.write(LINE_BREAK);
 		            	}
 	            	} else {
 	            		out.write(line); 
-	            		out.newLine();
+	            		out.write(LINE_BREAK);
 	            	}
 	            } else {
 	            	if(!removeHidden) {
 		            	out.write(line); 
-		            	out.newLine();
+		            	out.write(LINE_BREAK);
 	            	}
 	            }
 	        }

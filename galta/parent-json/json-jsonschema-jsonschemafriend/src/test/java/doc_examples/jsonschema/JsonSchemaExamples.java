@@ -47,7 +47,8 @@ public class JsonSchemaExamples extends ProjectTestCase {
 			schema.validate(JsonObject.parse("{ \"name\": \"A\", \"age\": -1 }"));
 			fail();
 		} catch(JsonException e) {
-			assertEquals("""
+			// jsonschemafriend joins the errors with the platform line separator: compare normalized
+			support.assertNormalizedTextEquals("""
 					Validation errors: "A" at #/name failed against #/properties/name with "Shorter than minLength: 2"
 					-1 at #/age failed against #/properties/age with "Less than minimum: 0\"""", e.getMessage());
 		}

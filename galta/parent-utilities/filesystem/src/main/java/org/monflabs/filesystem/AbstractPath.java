@@ -58,7 +58,17 @@ public abstract class AbstractPath implements Path {
         
         return path;
     }
-    
+
+    /**
+     * A path as the path part of a URI: always "/" separated, whatever the filesystem
+     * separator is. A Windows "\" is not a valid URI path separator, and an absolute URI
+     * whose path does not start with "/" is rejected by {@link java.net.URI}.
+     */
+    protected String toUriPath(Path p) {
+        String s = p.toString();
+        return separator.equals("/") ? s : s.replace(separator, "/");
+    }
+
     @Override
     public AbstractFileSystem getFileSystem() {
         return fileSystem;
