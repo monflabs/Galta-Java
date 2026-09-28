@@ -459,7 +459,7 @@
 			<dependency>
 				<groupId>org.codehaus.plexus</groupId>
 				<artifactId>plexus-utils</artifactId>
-				<version>3.6.1</version>
+				<version>4.1.0</version>
 				<!-- NOT provided: Maven 3.9+ no longer exposes plexus-utils to plugins,
 				     so a plugin using it must bundle it (compile scope). Maven 3.8
 				     still exports it, which hides a wrong scope there. -->
