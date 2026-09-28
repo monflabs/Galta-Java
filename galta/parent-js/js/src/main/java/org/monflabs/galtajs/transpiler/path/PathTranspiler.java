@@ -205,10 +205,6 @@ public class PathTranspiler {
 	        
 	        return targetFiles;
         } catch (Exception e) {
-        	System.out.println("------------------------------------------------------");
-        	System.out.println(e.getClass());
-        	System.out.println(e.getLocalizedMessage());
-        	e.printStackTrace();
             throw new JSTranspilerException(e, "Compilation error: {0}", e.getMessage());
         }
     }
