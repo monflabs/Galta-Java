@@ -553,15 +553,20 @@ public class DebuggerImpl implements Debugger, DebugHook {
 			}
 			resumeModeConsumed = mode;
 			currentPause = null;
+			// Fired here, synchronously, as soon as the resume request is
+			// accepted - not after the paused thread actually wakes (that's an
+			// async detail no CDP client needs to wait on). Bug found via a
+			// real CDP session: without this, Debugger.resumed was never sent
+			// at all, and a client waiting on it (or simply on the script
+			// finishing, which a real client typically also does) hung forever.
+			// Still under the lock, before notifyAll(): the woken thread can
+			// only report its next pause once it reacquires this monitor, so
+			// Debugger.resumed is guaranteed to precede it. Fired after the
+			// unlock, a quick step (the very next statement) could send
+			// Debugger.paused first, leaving the client believing it's running.
+			fireListeners(l -> l.resumed(pause));
 			notifyAll();
 		}
-		// Fired here, synchronously, as soon as the resume request is
-		// accepted - not after the paused thread actually wakes (that's an
-		// async detail no CDP client needs to wait on). Bug found via a
-		// real CDP session: without this, Debugger.resumed was never sent
-		// at all, and a client waiting on it (or simply on the script
-		// finishing, which a real client typically also does) hung forever.
-		fireListeners(l -> l.resumed(pause));
 	}
 
 	private List<String> matchBreakpoints(JSRuntimeContext context, DebugLocation location) {
