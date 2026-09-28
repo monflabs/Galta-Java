@@ -88,7 +88,7 @@
 
 		<!-- Versions shared by several artifacts of the same family -->
 		<maven.api.version>3.9.16</maven.api.version>
-		<javet.version>5.0.1</javet.version>
+		<javet.version>6.0.1</javet.version>
 		<commonmark.version>0.27.0</commonmark.version>
 		<jmh.version>1.37</jmh.version>
 		<graalvm.version>25.0.1</graalvm.version>
