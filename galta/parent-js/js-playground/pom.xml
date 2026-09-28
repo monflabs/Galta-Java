@@ -86,12 +86,6 @@
 					<includes>
 						<include>**/AllLangGaltaJSTests.class</include>
 					</includes>
-				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-surefire-plugin</artifactId>
-				<configuration>
 					<!-- Deep-recursion examples (e.g. es2015/Proper Tail Calls,
 					     which deliberately recurses non-tail-call-optimized to
 					     10000 levels to demonstrate the absence of proper tail

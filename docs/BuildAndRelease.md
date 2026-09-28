@@ -119,16 +119,24 @@ Dependabot (`.github/dependabot.yml`) opens pull requests for new versions weekl
 
 `monflabs-parent` is also the parent of the other Monflabs repositories
 (Galta-Java-Private, UbiGen, RestQL, DraftDB, Salesforce, Commerce,
-DeveloperToolbox), which reference it by coordinates:
+DeveloperToolbox). They are checked out next to Galta-Java, and point at its
+parent POM on disk:
 
 ```xml
 <parent>
   <groupId>org.monflabs.galta.tools</groupId>
   <artifactId>monflabs-parent</artifactId>
   <version>0.8.0</version>
-  <relativePath/>
+  <relativePath>../../Galta-Java/tools/monflabs-parent/pom.xml</relativePath>
 </parent>
 ```
+
+Maven resolves a parent POM while it reads the projects, before building
+anything, so a parent that is neither on disk nor in a Maven repository fails
+the whole build, even when Galta-Java is part of the same reactor (the
+`monflabs-projects` aggregator). With the relative path, a fresh machine works
+from the sibling checkout; when the path does not exist, Maven falls back to
+the local or remote repository as usual.
 
 ## Using Galta in another project
 
