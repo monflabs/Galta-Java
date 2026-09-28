@@ -32,7 +32,6 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		
 		<dependency>
@@ -43,32 +42,27 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>test</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>		
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>filesystem</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js-debugger</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>		
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js</artifactId>
-			<version>${revision}</version>
 			<type>test-jar</type>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js-test-suite</artifactId>
-			<version>${revision}</version>
 			<type>test-jar</type>
 			<scope>test</scope>
 		</dependency>

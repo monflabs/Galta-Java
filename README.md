@@ -22,25 +22,35 @@ rest follows.
 | GaltaJS | `js` (the engine), `js-transpiler-maven` (Maven plugin), `js-template`, `js-vb`, `js-mod-node`, `js-debugger`, `js-precompiled-beautify-js`/`-css`/`-html`, `js-playground` |
 | UI | `ui-commons`, `ui-swing`, `ui-swing-ide`, `playground-core`, `playground-ui-swing` |
 
-For example, the JSON library:
+Import the `galta-bom` bill of materials once, then declare the modules you use
+without a version - for example the JSON library and the JavaScript engine:
 
 ```xml
-<dependency>
-  <groupId>org.monflabs.galta</groupId>
-  <artifactId>json</artifactId>
-  <version>0.8.0</version>
-</dependency>
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>org.monflabs.galta</groupId>
+      <artifactId>galta-bom</artifactId>
+      <version>0.8.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>org.monflabs.galta</groupId>
+    <artifactId>json</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.monflabs.galta</groupId>
+    <artifactId>js</artifactId>
+  </dependency>
+</dependencies>
 ```
 
-or the JavaScript engine:
-
-```xml
-<dependency>
-  <groupId>org.monflabs.galta</groupId>
-  <artifactId>js</artifactId>
-  <version>0.8.0</version>
-</dependency>
-```
+A single module can also be declared directly with `<version>0.8.0</version>`.
 
 Galta requires **Java 21** or later.
 

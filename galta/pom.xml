@@ -15,7 +15,14 @@
 	<name>Galta Libraries</name>
 	<description>Parent of the Galta library modules: utilities, JSON, UI, playground and the GaltaJS scripting engine.</description>
 
+	<!--
+		Plugin versions and configuration, third-party dependency versions, the
+		Java level and the release profiles all come from monflabs-parent (through
+		the root pom). Galta's own artifacts come from galta-bom, imported below:
+		declare them without a version.
+	-->
 	<modules>
+		<module>galta-bom</module>
 		<module>parent-demodata</module>
 		<module>parent-json</module>
 		<module>parent-js</module>
@@ -24,431 +31,40 @@
 		<module>parent-utilities</module>
 	</modules>
 
-	<properties>
-		<revision>0.8.0</revision>
-		<!-- The Java version (maven.compiler*) is declared once, in the root pom
-		     (Galta-Java). Do not redeclare it here - it would override it. -->
-	</properties>
-
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-				<groupId>org.monflabs.galta.tools</groupId>
-				<artifactId>monflabs-bom</artifactId>
+	<dependencyManagement>
+		<dependencies>
+			<!-- Resolved from this reactor: no prior install needed -->
+			<dependency>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>galta-bom</artifactId>
 				<version>${revision}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
 
-<!-- BEGINING OF COPY/PASTE -->
-	<!--
-		url, organization, licenses, developers and scm are declared once in the
-		root pom (Galta-Java) and inherited, so tools and galta publish the same
-		metadata.
+			<!-- Modules used inside Galta but not published, so not in galta-bom -->
+			<dependency>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-test-suite</artifactId>
+				<version>${revision}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-test-suite</artifactId>
+				<version>${revision}</version>
+				<type>test-jar</type>
+			</dependency>
+			<dependency>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-library-v8</artifactId>
+				<version>${revision}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-regexp-joni-custom</artifactId>
+				<version>${revision}</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 
-		Publishing to Maven Central goes through the "central" profile below.
-		Alternative target, kept for reference: the project's own repository.
-		Uncomment and provide credentials for the maven.monflabs.org server id
-		in settings.xml, then run "mvn clean deploy -P javadoc,sources,codesigning".
-
-	<distributionManagement>
-		<repository>
-			<id>maven.monflabs.org</id>
-			<name>maven.monflabs.org-releases</name>
-			<url>https://maven.monflabs.org/galta</url>
-		</repository>
-	</distributionManagement>
--->
-
-	<build>
-		<plugins>
-			<!-- The Java version (maven.compiler*) is declared once in the ROOT pom
-			     and inherited here. Do not redeclare it. -->
-
-			<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-compiler-plugin -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-compiler-plugin</artifactId>
-				<configuration>
-					<source>${maven.compiler.source}</source>
-					<target>${maven.compiler.target}</target>
-			        <debug>true</debug>
-			        <debuglevel>lines,vars,source</debuglevel>
-				</configuration>
-			</plugin>
-
-			<!-- https://mvnrepository.com/artifact/org.jacoco/jacoco-maven-plugin -->
-			<plugin>
-				<groupId>org.jacoco</groupId>
-				<artifactId>jacoco-maven-plugin</artifactId>
-				<executions>
-					<execution>
-						<goals>
-							<goal>prepare-agent</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>report</id>
-						<phase>prepare-package</phase>
-						<goals>
-							<goal>report</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-
-			<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-enforcer-plugin -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-enforcer-plugin</artifactId>
-				<executions>
-					<execution>
-						<id>enforce-maven-and-java</id>
-						<goals>
-							<goal>enforce</goal>
-						</goals>
-						<configuration>
-							<rules>
-								<!-- A real floor: ${maven.version} is the running Maven, so it always matched -->
-								<requireMavenVersion>
-									<version>[3.8.1,)</version>
-								</requireMavenVersion>
-								<requireJavaVersion>
-									<version>${maven.compiler}</version>
-								</requireJavaVersion>
-							</rules>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
-
-			<!-- Ensure tha the pom.xml is flattened properly to be consumed afterwards with ${revision} -->
-			<!-- https://maven.apache.org/maven-ci-friendly.html#install-deploy -->
-			<plugin>
-				<groupId>org.codehaus.mojo</groupId>
-				<artifactId>flatten-maven-plugin</artifactId>
-				<configuration>
-					<updatePomFile>true</updatePomFile>
-					<flattenMode>resolveCiFriendliesOnly</flattenMode>
-				</configuration>
-				<executions>
-					<execution>
-						<id>flatten</id>
-						<phase>process-resources</phase>
-						<goals>
-							<goal>flatten</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>flatten.clean</id>
-						<phase>clean</phase>
-						<goals>
-							<goal>clean</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-		</plugins>
-		
-		<!-- Plugins -->
-		<pluginManagement>
-			<plugins>
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-compiler-plugin -->
-				<plugin>
-				    <groupId>org.apache.maven.plugins</groupId>
-				    <artifactId>maven-compiler-plugin</artifactId>
-				    <version>3.11.0</version>
-				</plugin>
-
-				<!--  https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-surefire-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-surefire-plugin</artifactId>
-					<version>3.5.2</version>
-					<configuration>
-						<!--
-							Per-fork wall-clock budget. When a fork overruns it,
-							surefire KILLS it, which surfaces as the build
-							appearing to hang on whichever suite was running
-							rather than as a clear timeout message.
-
-							This bit once: GeneratorPerformanceTest ran 60
-							million Exchanger handoffs, ~12 s on JDK 21 but
-							~325 s on JDK 25 (its Exchanger is ~19x slower -
-							reproducible with a bare
-							java.util.concurrent.Exchanger and equally on
-							platform threads, so not a virtual-thread effect).
-							At 325 s it sat just past the old 300 s limit, so
-							the run completed or was killed depending on load
-							and JVM - it looked environment-dependent while
-							really being a coin flip against this number.
-
-							That benchmark is now sized at 1M yields, so the
-							suite is far inside the budget; 900 s is headroom so
-							a slow machine or a future JDK regression degrades
-							into a slow build rather than a mystery hang.
-						-->
-						<forkedProcessTimeoutInSeconds>900</forkedProcessTimeoutInSeconds>
-						<forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
-						<forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
-					</configuration>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-deploy-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-deploy-plugin</artifactId>
-					<version>3.0.0</version>
-				</plugin>
-
-				<!--  https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-clean-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-clean-plugin</artifactId>
-					<version>3.2.0</version>
-				</plugin>
-
-				<!--  https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-source-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-source-plugin</artifactId>
-					<version>3.3.0</version>	
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-install-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-install-plugin</artifactId>
-					<version>3.0.1</version>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-jarsigner-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-jarsigner-plugin</artifactId>
-					<version>3.0.0</version>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-resources-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-resources-plugin</artifactId>
-					<version>3.3.0</version>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-shade-plugin -->
-				<plugin>
-				    <groupId>org.apache.maven.plugins</groupId>
-				    <artifactId>maven-shade-plugin</artifactId>
-					<version>3.4.1</version>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-jar-plugin -->
-				<plugin>
-				    <groupId>org.apache.maven.plugins</groupId>
-				    <artifactId>maven-jar-plugin</artifactId>					
-                    <version>3.2.2</version>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.codehaus.mojo/flatten-maven-plugin -->
-				<plugin>
-				    <groupId>org.codehaus.mojo</groupId>
-				    <artifactId>flatten-maven-plugin</artifactId>
-				    <version>1.5.0</version>
-				</plugin>
-				
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-dependency-plugin -->
-				<plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-dependency-plugin</artifactId>
-                    <version>3.3.0</version>
-                </plugin>
-                
-                <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-project-info-reports-plugin -->
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-project-info-reports-plugin</artifactId>
-                    <version>3.3.0</version>
-                </plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-site-plugin -->
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-site-plugin</artifactId>
-                    <version>4.0.0-M12</version>
-                </plugin>
-                
-                <!-- https://mvnrepository.com/artifact/org.codehaus.mojo/versions-maven-plugin -->
-                <plugin>
-	                <groupId>org.codehaus.mojo</groupId>
-	                <artifactId>versions-maven-plugin</artifactId>
-	                <version>2.8.1</version>
-            	</plugin>
-                
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-javadoc-plugin -->
-                <plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-javadoc-plugin</artifactId>
-	                <version>3.6.2</version>
-            	</plugin>
-            	
-				<!-- https://mvnrepository.com/artifact/org.jacoco/jacoco-maven-plugin -->
-				<plugin>
-					<groupId>org.jacoco</groupId>
-					<artifactId>jacoco-maven-plugin</artifactId>
-					<version>0.8.15</version>
-				</plugin>
-				
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-enforcer-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-enforcer-plugin</artifactId>
-					<version>3.1.0</version>
-				</plugin>
-				
-				<!-- https://mvnrepository.com/artifact/org.codehaus.mojo/exec-maven-plugin -->
-				<plugin>
-					<groupId>org.codehaus.mojo</groupId>
-					<artifactId>exec-maven-plugin</artifactId>
-					<version>3.2.0</version>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.codehaus.mojo/build-helper-maven-plugin -->
-				<plugin>
-					<groupId>org.codehaus.mojo</groupId>
-					<artifactId>build-helper-maven-plugin</artifactId>
-					<version>3.6.0</version>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-plugin-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-plugin-plugin</artifactId>
-					<version>3.15.1</version>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-antrun-plugin -->
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-antrun-plugin</artifactId>
-					<version>3.1.0</version>
-				</plugin>
-
-				<!-- https://mvnrepository.com/artifact/org.codehaus.mojo/javacc-maven-plugin -->
-				<plugin>
-					<groupId>org.codehaus.mojo</groupId>
-					<artifactId>javacc-maven-plugin</artifactId>
-					<version>3.0.1</version>
-				</plugin>
-				
-			</plugins>
-		</pluginManagement>		
-		
-	</build>
-	
-	<!-- Build with: 
-		mvn clean install -P javadoc,sources,codesigning
-	-->
-	<!-- Release with: 
-		mvn clean deploy -P javadoc,sources,codesigning
-	-->
-	<profiles>
-		<profile>
-			<id>javadoc</id>
-
-			<build>
-				<plugins>
-					<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-javadoc-plugin -->
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-javadoc-plugin</artifactId>
-						<version>3.6.2</version>
-						<executions>
-							<execution>
-								<id>attach-javadocs</id>
-								<goals>
-									<goal>jar</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-
-		<profile>
-			<id>sources</id>
-			<!--
-				On unless -DskipSources is set. activeByDefault is NOT used: it
-				switches the profile off as soon as any other profile is named on
-				the command line (e.g. -Ptest262), silently dropping the sources jar.
-			-->
-			<activation>
-				<property>
-					<name>!skipSources</name>
-				</property>
-			</activation>
-
-			<build>
-				<plugins>
-					<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-source-plugin -->
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-source-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>attach-sources</id>
-								<goals>
-									<goal>jar-no-fork</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-
-		<profile>
-			<id>codesigning</id>
-
-			<build>
-				<plugins>
-					<!--  The certificate is for now a self signed one as a trust authority cost money -->
-					<!--  The organization does not have yet a money to pay for it  -->
-					<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-jarsigner-plugin -->
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-jarsigner-plugin</artifactId>
-						<version>3.0.0</version>
-						<executions>
-							<execution>
-								<id>sign</id>
-								<goals>
-									<goal>sign</goal>
-								</goals>
-							</execution>
-							<execution>
-								<id>verify</id>
-								<goals>
-									<goal>verify</goal>
-								</goals>
-							</execution>
-						</executions>
-						<configuration>
-							<!-- <storetype>${monflabs.signing.storetype}</storetype> -->
-							<keystore>${monflabs.signing.keystore}</keystore>
-							<alias>${monflabs.signing.alias}</alias>
-							<storepass>${monflabs.signing.storepass}</storepass>
-							<keypass>${monflabs.signing.keypass}</keypass>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-	</profiles>	
-<!-- END OF COPY/PASTE -->
-	
-		
 </project>

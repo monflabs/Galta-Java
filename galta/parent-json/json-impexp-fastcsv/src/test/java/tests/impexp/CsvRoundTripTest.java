@@ -117,6 +117,8 @@ public class CsvRoundTripTest extends ProjectTestCase {
 		assertTrue(closing.isCloseWriter());
 		src.exportTo(closing);
 		assertTrue(w1.closed);
+		// Everything the CSV writer buffered reached the writer before it was closed
+		assertEquals("a"+"\n"+"1"+"\n", w1.toString().replace("\r\n", "\n"));
 
 		TrackingWriter w2 = new TrackingWriter();
 		CsvTarget keeping = CsvTarget.newBuilder().writer( () -> w2 ).closeWriter(false).build();

@@ -17,6 +17,8 @@
 		<dependency>
 			<groupId>org.eclipse.jdt</groupId>
 			<artifactId>org.eclipse.jdt.annotation</artifactId>
+			<!-- Compile-time null annotations: not passed on to consumers -->
+			<optional>true</optional>
 		</dependency>
 	</dependencies>
 

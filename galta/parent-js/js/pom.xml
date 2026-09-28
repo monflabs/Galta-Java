@@ -12,15 +12,20 @@
 	<description>GaltaJS: a JavaScript-inspired scripting engine for the JVM, with an interpreter and a transpiler to Java.</description>
 
 	<dependencies>
+		<!-- Compile-time null annotations (used in the sources): optional, so
+		     they are not passed on to consumers -->
+		<dependency>
+			<groupId>org.eclipse.jdt</groupId>
+			<artifactId>org.eclipse.jdt.annotation</artifactId>
+			<optional>true</optional>
+		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>json</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>javacompiler</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		
 		<dependency>
@@ -31,13 +36,11 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>test</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>filesystem</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>
 
@@ -45,26 +48,33 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js-library-v8</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>
 
-		<!-- For comparing with GraalVM -->
-		<!-- https://mvnrepository.com/artifact/org.graalvm.sdk/graal-sdk -->
+		<!-- For comparing with GraalVM (polyglot API + GraalJS runtime) -->
 		<dependency>
-			<groupId>org.graalvm.sdk</groupId>
-			<artifactId>graal-sdk</artifactId>
+			<groupId>org.graalvm.polyglot</groupId>
+			<artifactId>polyglot</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<!-- https://mvnrepository.com/artifact/org.graalvm.js/js -->
 		<dependency>
-			<groupId>org.graalvm.js</groupId>
-			<artifactId>js</artifactId>
+			<groupId>org.graalvm.polyglot</groupId>
+			<artifactId>js-community</artifactId>
 			<type>pom</type>
 			<scope>test</scope>
 		</dependency>
 
 		
+		<!-- Used directly by this module (was only present transitively) -->
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>utilities</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.caoccao.javet</groupId>
+			<artifactId>javet</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -109,7 +119,6 @@
 			<plugin>
 				<groupId>org.monflabs.galta</groupId>
 				<artifactId>js-transpiler-maven</artifactId>
-				<version>${revision}</version>
 				<executions>
 					<execution>
 						<id>generate</id>
@@ -128,7 +137,6 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>
-				<version>3.6.0</version>
 				<executions>
 					<execution>
 						<id>add-source</id>
@@ -176,17 +184,9 @@
 						</goals>
 					</execution>
 				</executions>
-				<dependencies>
-					<!-- Pinned to the exact engine version this grammar has
-					     always been generated with (see monflabs-bom) - the
-					     plugin's own default may differ and could change
-					     generated output subtly. -->
-					<dependency>
-						<groupId>net.java.dev.javacc</groupId>
-						<artifactId>javacc</artifactId>
-						<version>7.0.13</version>
-					</dependency>
-				</dependencies>
+				<!-- The javacc engine version is pinned in monflabs-parent's
+				     pluginManagement (javacc.version): the plugin's own default
+				     may differ and could change the generated parser subtly. -->
 			</plugin>
 
 			<!-- javacc-maven-plugin registers target/generated-sources/javacc
@@ -202,7 +202,6 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>
-				<version>3.6.0</version>
 				<executions>
 					<execution>
 						<id>add-source-javacc</id>
@@ -234,7 +233,6 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-antrun-plugin</artifactId>
-				<version>3.1.0</version>
 				<executions>
 					<execution>
 						<id>remove-generated-tokenmgrerror</id>

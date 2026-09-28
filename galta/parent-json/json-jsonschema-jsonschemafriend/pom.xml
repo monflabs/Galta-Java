@@ -9,19 +9,26 @@
 	<name>Galta JSON - JSON Schema Validation</name>
 	<description>JSON Schema validation of Galta JSON values, based on jsonschemafriend.</description>
 
+	<!--
+		jsonschemafriend is not on Maven Central: it is published on JitPack only
+		(the scijava repository this module used before no longer serves it, which
+		went unnoticed as long as a local repository already had the jar).
+		Consumers of this module need the same repository.
+	-->
 	<repositories>
-		<!-- browse: https://maven.scijava.org/#browse/browse:public -->
-	    <repository>
-			<id>scijava.public</id>
-			<url>https://maven.scijava.org/content/groups/public</url>
-	    </repository>
+		<repository>
+			<id>jitpack.io</id>
+			<url>https://jitpack.io</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
 	</repositories>
 
 	<dependencies>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>json</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		<dependency>
     		<groupId>net.jimblackler.jsonschemafriend</groupId>
@@ -36,7 +43,6 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>test</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>
 

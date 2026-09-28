@@ -24,7 +24,6 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		
 		<dependency>
@@ -35,20 +34,17 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>test</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>		
 		
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js-debugger</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>filesystem</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
@@ -59,7 +55,6 @@
 			<plugin>
 				<groupId>org.monflabs.galta</groupId>
 				<artifactId>js-transpiler-maven</artifactId>
-				<version>${revision}</version>
 				<executions>
 					<execution>
 						<id>generate</id>
@@ -80,7 +75,6 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>
-				<version>3.6.0</version>
 				<executions>
 					<execution>
 						<id>add-source</id>

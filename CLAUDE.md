@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Galta is a Java mono repo of reusable libraries organized as Maven modules under `galta/` (the build tooling - BOM, mixins, Maven plugins - lives in `tools/`, and the repository root `pom.xml` aggregates both). It includes:
+Galta is a Java mono repo of reusable libraries organized as Maven modules under `galta/` (the build tooling - the shared `monflabs-parent` pom and the Maven plugins - lives in `tools/`, and the repository root `pom.xml` aggregates both). It includes:
 
 - **parent-utilities** — general-purpose Java utilities (strings, I/O, caching, filesystem, runtime compilation)
 - **parent-json** — comprehensive JSON library with path queries, schema, serialization, and third-party adapters
@@ -41,11 +41,11 @@ mvn clean install -pl parent-js/js --also-make
 mvn test -pl parent-js/js-test-rhino
 ```
 
-Requires **Java 21** (`maven.compiler` in the root `pom.xml`) and Maven 3.8.1 or later; the `maven-enforcer-plugin` validates both.
+Requires **Java 21** (`maven.compiler.release` in `tools/monflabs-parent`) and Maven 3.8.1 or later; the `maven-enforcer-plugin` validates both.
 
 ## Version Management
 
-Version is managed via Maven CI-friendly `${revision}` (declared in the root `pom.xml` and in `galta/pom.xml`) and resolved by `flatten-maven-plugin`. The `monflabs-bom` BOM centralises all dependency versions; modules import it via `dependencyManagement`.
+Version is managed via Maven CI-friendly `${revision}` (root `pom.xml`, plus `galta/galta-bom`; `tools/monflabs-parent` carries it as a literal) and resolved by `flatten-maven-plugin`. `tools/monflabs-parent` is the parent of everything (here and in the peer Monflabs repositories): it holds the Java level, every third-party dependency version (`dependencyManagement`) and every plugin version (`pluginManagement`). Galta's own artifacts are managed by `galta/galta-bom`, imported by `galta/pom.xml`. Module poms declare dependencies and plugins without versions; see `docs/BuildAndRelease.md`.
 
 ## Module Dependency Order
 

@@ -1,0 +1,1002 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+	child.project.url.inherit.append.path="false">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Shared parent of every Monflabs Maven project: Galta-Java itself (its root
+		pom references this file by relativePath, so a fresh clone builds without
+		anything installed) and the peer repositories (Galta-Java-Private, UbiGen,
+		RestQL, DraftDB, Salesforce, Commerce, DeveloperToolbox), which reference
+		it by coordinates.
+
+		It holds, in ONE place:
+		  - the Java level and encodings (properties),
+		  - the version of every third-party library used by the Monflabs
+		    projects (dependencyManagement - declare dependencies without a
+		    version),
+		  - the version and default configuration of every Maven plugin
+		    (pluginManagement - declare plugins without a version),
+		  - the build rules applied everywhere (enforcer, flatten, jacoco),
+		  - the release profiles (javadoc, sources, codesigning, central) and an
+		    on-demand dependency-analyze profile,
+		  - the metadata shared by every repository (organization, license,
+		    developers). url, scm and issueManagement are per repository.
+
+		Galta's own artifacts are NOT managed here: import org.monflabs.galta:galta-bom
+		for them (a BOM for consumers, which must not carry these third-party pins).
+
+		The version is a literal, not ${revision}: this pom has no parent to
+		inherit the property from, and a literal version is what children
+		reference anyway. Keep it equal to the Galta ${revision}.
+	-->
+	<groupId>org.monflabs.galta.tools</groupId>
+	<artifactId>monflabs-parent</artifactId>
+	<version>0.8.0</version>
+	<packaging>pom</packaging>
+
+	<name>Monflabs Parent</name>
+	<description>Shared Maven parent of the Monflabs projects: Java level, third-party dependency versions, plugin versions and configuration, build rules and release profiles.</description>
+	<url>https://github.com/monflabs/Galta-Java</url>
+	<inceptionYear>2019</inceptionYear>
+
+	<organization>
+		<name>Monflabs</name>
+		<url>https://github.com/monflabs</url>
+	</organization>
+
+	<licenses>
+		<license>
+			<name>Apache License, Version 2.0</name>
+			<url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<developers>
+		<developer>
+			<id>priand</id>
+			<name>Philippe Riand</name>
+			<email>phil@riand.com</email>
+			<organization>Monflabs</organization>
+			<organizationUrl>https://github.com/monflabs</organizationUrl>
+		</developer>
+	</developers>
+
+	<scm child.scm.connection.inherit.append.path="false"
+		child.scm.developerConnection.inherit.append.path="false"
+		child.scm.url.inherit.append.path="false">
+		<connection>scm:git:https://github.com/monflabs/Galta-Java.git</connection>
+		<developerConnection>scm:git:ssh://git@github.com/monflabs/Galta-Java.git</developerConnection>
+		<url>https://github.com/monflabs/Galta-Java</url>
+		<tag>HEAD</tag>
+	</scm>
+
+	<properties>
+		<!-- Java level: `release` also checks API usage against that JDK -->
+		<maven.compiler.release>21</maven.compiler.release>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+		<!--
+			The Galta version this parent belongs to (= its own version). Children
+			use it for Galta's Maven plugins below and, in the peer repositories,
+			to import org.monflabs.galta:galta-bom:${galta.version}.
+		-->
+		<galta.version>0.8.0</galta.version>
+
+		<!-- Versions shared by several artifacts of the same family -->
+		<maven.api.version>3.9.16</maven.api.version>
+		<javet.version>5.0.1</javet.version>
+		<commonmark.version>0.27.0</commonmark.version>
+		<jmh.version>1.37</jmh.version>
+		<graalvm.version>25.0.1</graalvm.version>
+		<javacc.version>7.0.13</javacc.version>
+	</properties>
+
+	<dependencyManagement>
+	        <dependencies>
+				<!-- https://mvnrepository.com/artifact/junit/junit -->
+				<dependency>
+					<groupId>junit</groupId>
+					<artifactId>junit</artifactId>
+		    		<version>4.13.2</version>
+					<scope>test</scope>
+				</dependency>
+
+			
+				<!--
+					Utilities
+				-->
+				<!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-simple -->
+				<!-- Libraries log through slf4j-api only; a binding (slf4j-simple...)
+				     belongs to applications and tests. -->
+				<dependency>
+					<groupId>org.slf4j</groupId>
+					<artifactId>slf4j-api</artifactId>
+					<version>2.0.20</version>
+				</dependency>
+				<dependency>
+					<groupId>org.slf4j</groupId>
+					<artifactId>slf4j-simple</artifactId>
+					<version>2.0.20</version>
+				</dependency>
+
+				<!-- Compile-time null annotations (CLASS retention): declare them
+				     <optional>true</optional> so they do not reach consumers. -->
+				<dependency>
+					<groupId>org.eclipse.jdt</groupId>
+					<artifactId>org.eclipse.jdt.annotation</artifactId>
+					<version>2.4.100</version>
+				</dependency>
+			
+				<!-- JDK Annotations for Eclipse -->
+				<!-- https://github.com/lastnpe/eclipse-null-eea-augments?tab=readme-ov-file -->
+				<!-- https://mvnrepository.com/artifact/org.lastnpe.eea/jdk-eea -->
+	<!--
+				<dependency>
+				    <groupId>org.lastnpe.eea</groupId>
+				    <artifactId>jdk-eea</artifactId>
+				    <version>2.4.0</version>
+				</dependency>
+	-->
+					
+				<!--
+					JSON libraries
+				-->
+				<!-- https://mvnrepository.com/artifact/org.json/json -->
+				<dependency>
+					<groupId>org.json</groupId>
+					<artifactId>json</artifactId>
+					<version>20260814</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/com.google.code.gson/gson -->
+				<dependency>
+					<groupId>com.google.code.gson</groupId>
+					<artifactId>gson</artifactId>
+					<version>2.14.0</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/com.jayway.jsonpath/json-path -->
+				<dependency>
+			    	<groupId>com.jayway.jsonpath</groupId>
+			    	<artifactId>json-path</artifactId>
+			    	<version>3.0.0</version>
+				</dependency>
+			
+				<!-- https://mvnrepository.com/artifact/net.jimblackler.jsonschemafriend/core -->
+				<dependency>
+				    <groupId>net.jimblackler.jsonschemafriend</groupId>
+				    <artifactId>core</artifactId>
+				    <version>0.12.5</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/org.snakeyaml/snakeyaml-engine -->
+				<dependency>
+					<groupId>org.snakeyaml</groupId>
+					<artifactId>snakeyaml-engine</artifactId>
+					<version>3.1.1</version>
+				</dependency>
+
+			
+			
+				<!--
+					CSV Libraries 
+				-->
+				<!-- https://mvnrepository.com/artifact/de.siegmar/fastcsv -->
+					<dependency>
+				    <groupId>de.siegmar</groupId>
+				    <artifactId>fastcsv</artifactId>
+				    <version>4.4.0</version>
+				</dependency>
+
+			
+				<!--
+					JavaScript Interpreters
+				-->
+				<!-- https://mvnrepository.com/artifact/org.mozilla/rhino -->
+				<dependency>
+					<groupId>org.mozilla</groupId>
+					<artifactId>rhino</artifactId>
+					<version>1.9.1</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/org.mozilla/rhino-tools -->
+				<dependency>
+					<groupId>org.mozilla</groupId>
+					<artifactId>rhino-tools</artifactId>
+					<version>1.9.1</version>
+				</dependency>
+			
+			<!-- GraalVM polyglot API and the GraalJS community runtime (the
+			     coordinates to use since GraalVM 23.1). js-community is a
+			     packaging=pom facade (no jar of its own) pulling in the language and
+			     the Truffle runtime, hence the <type>pom</type>, required here and on
+			     every dependency declaring it.
+			     GraalVM 23.x does not run on a JDK past 23: Truffle calls
+			     sun.misc.Unsafe.ensureClassInitialized(), removed in JDK 24, and every
+			     engine creation fails with a NoSuchMethodError.
+			     The legacy org.graalvm.sdk:graal-sdk / org.graalvm.js:js coordinates
+			     are not managed: use these instead. -->
+			<dependency>
+				<groupId>org.graalvm.polyglot</groupId>
+				<artifactId>polyglot</artifactId>
+				<version>${graalvm.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.graalvm.polyglot</groupId>
+				<artifactId>js-community</artifactId>
+				<version>${graalvm.version}</version>
+				<type>pom</type>
+			</dependency>
+				<!-- https://mvnrepository.com/artifact/org.openjdk.nashorn/nashorn-core -->
+				<dependency>
+				    <groupId>org.openjdk.nashorn</groupId>
+				    <artifactId>nashorn-core</artifactId>
+				    <version>15.7</version>
+				</dependency>
+
+				<!-- https://mvnrepository.com/artifact/org.jruby.joni/joni -->
+				<dependency>
+	    			<groupId>org.jruby.joni</groupId>
+	    			<artifactId>joni</artifactId>
+	    			<version>2.2.7</version>
+				</dependency>
+			
+				<!--
+					Database
+				-->
+				<!-- https://mvnrepository.com/artifact/com.h2database/h2 -->
+				<dependency>
+				    <groupId>com.h2database</groupId>
+				    <artifactId>h2</artifactId>
+				    <version>2.5.252</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
+				<dependency>
+					<groupId>org.postgresql</groupId>
+					<artifactId>postgresql</artifactId>
+					<version>42.7.13</version>
+				</dependency>
+
+			
+				<!-- Justify is a JSON validator based on the JSON Schema specification
+				and the JSON Processing API. -->
+				<!-- https://mvnrepository.com/artifact/org.leadpony.justify/justify -->
+				<dependency>
+					<groupId>org.leadpony.justify</groupId>
+					<artifactId>justify</artifactId>
+					<version>3.1.0</version>
+				</dependency>
+			
+				<!-- https://mvnrepository.com/artifact/org.jsoup/jsoup -->
+	<!-- Conflits with Vaadin.			
+				<dependency>
+					<groupId>org.jsoup</groupId>
+					<artifactId>jsoup</artifactId>
+					<version>1.8.3</version>
+				</dependency>
+	-->
+			
+				<!-- https://mvnrepository.com/artifact/com.beust/jcommander -->
+				<dependency>
+				    <groupId>com.beust</groupId>
+				    <artifactId>jcommander</artifactId>
+				    <version>1.82</version>
+				</dependency>
+
+				<!--
+					GraphQL
+				-->
+			
+			
+				<!--
+					Vaadin components
+				-->
+		        <!-- https://vaadin.com/directory/component/ace -->
+		        <dependency>
+		           <groupId>de.f0rce</groupId>
+		           <artifactId>ace</artifactId>
+		           <version>3.4.2</version>
+		        </dependency>
+	        
+		        <!-- https://vaadin.com/directory/component/xterm-console-addon -->
+		        <!-- https://github.com/FlowingCode/XTermConsoleAddon -->
+		        <dependency>
+		            <groupId>com.flowingcode.addons</groupId>
+		            <artifactId>xterm-console</artifactId>
+		            <version>2.1.1</version>
+		        </dependency>
+	        	<!-- Line Awesome Icons For Vaadin -->
+				<!-- https://mvnrepository.com/artifact/org.parttio/line-awesome -->
+				<dependency>
+				    <groupId>org.parttio</groupId>
+				    <artifactId>line-awesome</artifactId>
+				    <version>1.1.0</version>
+				</dependency>
+			
+			
+				<!--
+					Swing
+				-->
+				<!-- https://mvnrepository.com/artifact/org.swingexplorer/swingexplorer-core -->
+				<dependency>
+					<groupId>org.swingexplorer</groupId>
+					<artifactId>swingexplorer-core</artifactId>
+					<version>1.7.0</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/org.kordamp.ikonli/ikonli-swing -->
+				<dependency>
+		        	<groupId>org.kordamp.ikonli</groupId>
+		        	<artifactId>ikonli-swing</artifactId>
+		        	<version>12.4.0</version>
+		    	</dependency>
+		    	<!-- There are many other icons library -->
+		    	<!-- https://mvnrepository.com/artifact/org.kordamp.ikonli/ikonli-bootstrapicons-pack -->
+				<dependency>
+				    <groupId>org.kordamp.ikonli</groupId>
+				    <artifactId>ikonli-bootstrapicons-pack</artifactId>
+				    <version>12.4.0</version>
+				</dependency>
+			
+			
+				<!-- Flatlaf -->
+				<!-- https://mvnrepository.com/artifact/com.formdev/flatlaf -->
+				<dependency>
+				    <groupId>com.formdev</groupId>
+				    <artifactId>flatlaf</artifactId>
+				    <version>3.7.2</version>
+				</dependency>
+
+				<!-- RTSyntaxTextArea -->
+				<!-- https://mvnrepository.com/artifact/com.fifesoft/rsyntaxtextarea -->
+				<dependency>
+					<groupId>com.fifesoft</groupId>
+					<artifactId>rsyntaxtextarea</artifactId>
+					<version>3.6.0</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/com.fifesoft/languagesupport -->
+				<dependency>
+					<groupId>com.fifesoft</groupId>
+					<artifactId>languagesupport</artifactId>
+					<version>3.4.1</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/com.fifesoft/spellchecker -->
+				<dependency>
+					<groupId>com.fifesoft</groupId>
+					<artifactId>spellchecker</artifactId>
+					<version>3.4.1</version>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/com.fifesoft/rstaui -->
+				<dependency>
+				    <groupId>com.fifesoft</groupId>
+				    <artifactId>rstaui</artifactId>
+				    <version>3.3.2</version>
+				</dependency>
+
+				<!--
+					ByteBuddy
+				-->
+				<!-- https://mvnrepository.com/artifact/net.bytebuddy/byte-buddy -->
+				<dependency>
+					<groupId>net.bytebuddy</groupId>
+					<artifactId>byte-buddy</artifactId>
+					<version>1.18.3</version>
+				</dependency>
+				<!--
+				https://mvnrepository.com/artifact/net.bytebuddy/byte-buddy-agent -->
+				<dependency>
+					<groupId>net.bytebuddy</groupId>
+					<artifactId>byte-buddy-agent</artifactId>
+					<version>1.18.3</version>
+				</dependency>
+
+				<!--
+					Markdown handling
+				-->
+			<dependency>
+				<groupId>org.commonmark</groupId>
+				<artifactId>commonmark</artifactId>
+				<version>${commonmark.version}</version>
+			</dependency>
+				<!-- https://mvnrepository.com/artifact/org.commonmark/commonmark-ext-gfm-tables -->
+				<dependency>
+					<groupId>org.commonmark</groupId>
+					<artifactId>commonmark-ext-gfm-tables</artifactId>
+					<version>${commonmark.version}</version>
+				</dependency>
+
+
+				<!--
+					JavaCC
+				-->
+				<!-- https://mvnrepository.com/artifact/net.java.dev.javacc/javacc -->
+				<dependency>
+					<groupId>net.java.dev.javacc</groupId>
+					<artifactId>javacc</artifactId>
+					<version>7.0.13</version>
+				</dependency>
+
+
+				<!--
+					FTP Server 
+				-->
+				<!-- https://mvnrepository.com/artifact/org.apache.ftpserver/ftpserver-core -->
+				<dependency>
+					<groupId>org.apache.ftpserver</groupId>
+					<artifactId>ftpserver-core</artifactId>
+					<version>1.2.1</version>
+				</dependency>
+
+				<!--
+					Selenium
+				-->
+				<!-- https://mvnrepository.com/artifact/org.seleniumhq.selenium/selenium-java -->
+				<dependency>
+					<groupId>org.seleniumhq.selenium</groupId>
+					<artifactId>selenium-java</artifactId>
+					<version>4.49.0</version>
+				</dependency>
+
+
+				<!--
+					Maven
+				-->
+				<!-- https://mvnrepository.com/artifact/org.apache.maven/maven-plugin-api -->
+				<dependency>
+					<groupId>org.apache.maven</groupId>
+					<artifactId>maven-plugin-api</artifactId>
+					<version>${maven.api.version}</version>
+					<!-- Maven plugin projects: the API is provided by the running Maven -->
+					<scope>provided</scope>
+				</dependency>
+				<!-- https://mvnrepository.com/artifact/org.apache.maven/maven-core -->
+				<dependency>
+					<groupId>org.apache.maven</groupId>
+					<artifactId>maven-core</artifactId>
+					<version>${maven.api.version}</version>
+					<!-- Maven plugin projects: the API is provided by the running Maven -->
+					<scope>provided</scope>
+				</dependency>
+			<dependency>
+				<groupId>org.codehaus.plexus</groupId>
+				<artifactId>plexus-utils</artifactId>
+				<version>3.6.1</version>
+				<!-- NOT provided: Maven 3.9+ no longer exposes plexus-utils to plugins,
+				     so a plugin using it must bundle it (compile scope). Maven 3.8
+				     still exports it, which hides a wrong scope there. -->
+			</dependency>
+				<!-- https://mvnrepository.com/artifact/org.apache.maven.plugin-tools/maven-plugin-annotations -->
+				<dependency>
+				    <groupId>org.apache.maven.plugin-tools</groupId>
+				    <artifactId>maven-plugin-annotations</artifactId>
+				    <version>3.15.1</version>
+					<!-- Maven plugin projects: the API is provided by the running Maven -->
+					<scope>provided</scope>
+				</dependency>
+
+			<!--
+				V8 through Javet (cross-engine comparisons): one native artifact
+				per OS/architecture, selected by profiles in the using module
+			-->
+			<dependency>
+				<groupId>com.caoccao.javet</groupId>
+				<artifactId>javet</artifactId>
+				<version>${javet.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.caoccao.javet</groupId>
+				<artifactId>javet-v8-macos-x86_64</artifactId>
+				<version>${javet.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.caoccao.javet</groupId>
+				<artifactId>javet-v8-macos-arm64</artifactId>
+				<version>${javet.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.caoccao.javet</groupId>
+				<artifactId>javet-v8-windows-x86_64</artifactId>
+				<version>${javet.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.caoccao.javet</groupId>
+				<artifactId>javet-v8-linux-x86_64</artifactId>
+				<version>${javet.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.caoccao.javet</groupId>
+				<artifactId>javet-v8-linux-arm64</artifactId>
+				<version>${javet.version}</version>
+			</dependency>
+
+			<!--
+				Benchmarks (JMH) and the reference JSON library they compare with
+			-->
+			<dependency>
+				<groupId>org.openjdk.jmh</groupId>
+				<artifactId>jmh-core</artifactId>
+				<version>${jmh.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.openjdk.jmh</groupId>
+				<artifactId>jmh-generator-annprocess</artifactId>
+				<version>${jmh.version}</version>
+			</dependency>
+			<!-- Jackson is deliberately NOT managed here: an inherited pin wins over
+			     any BOM a child imports, so it would override the Jackson of Spring
+			     Boot based projects. json-performance pins its benchmark reference
+			     version itself. -->
+
+			<!--
+				Transitive versions pinned so every path converges (checked by the
+				dependencyConvergence rule): rsyntaxtextarea add-ons disagree on
+				autocomplete, jsonschemafriend's dependencies on commons-logging
+			-->
+			<dependency>
+				<groupId>com.fifesoft</groupId>
+				<artifactId>autocomplete</artifactId>
+				<version>3.3.2</version>
+			</dependency>
+			<dependency>
+				<groupId>commons-logging</groupId>
+				<artifactId>commons-logging</artifactId>
+				<version>1.3.2</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+	<build>
+		<pluginManagement>
+			<plugins>
+				<!-- Default lifecycle -->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-clean-plugin</artifactId>
+					<version>3.5.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-resources-plugin</artifactId>
+					<version>3.5.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<version>3.16.0</version>
+					<configuration>
+						<release>${maven.compiler.release}</release>
+						<debug>true</debug>
+						<debuglevel>lines,vars,source</debuglevel>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-surefire-plugin</artifactId>
+					<!-- Stay on 3.5.x: surefire 3.6 runs JUnit 4 through the JUnit
+					     Platform, which does not pick up the JUnit 3 style suite()
+					     classes the test modules include (0 tests run). Move to 3.6
+					     together with a JUnit 5 migration. -->
+					<version>3.5.5</version>
+					<configuration>
+						<!--
+							Per-fork wall-clock budget. When a fork overruns it, surefire
+							KILLS it, which surfaces as the build appearing to hang on
+							whichever suite was running rather than as a clear timeout.
+							900 s is headroom: a slow machine or a JDK regression degrades
+							into a slow build rather than a mystery hang.
+						-->
+						<forkedProcessTimeoutInSeconds>900</forkedProcessTimeoutInSeconds>
+						<forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
+						<forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-jar-plugin</artifactId>
+					<version>3.5.1</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-install-plugin</artifactId>
+					<version>3.2.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-deploy-plugin</artifactId>
+					<version>3.2.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-site-plugin</artifactId>
+					<version>3.21.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-project-info-reports-plugin</artifactId>
+					<version>3.9.0</version>
+				</plugin>
+
+				<!-- Packaging and release -->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-source-plugin</artifactId>
+					<version>3.4.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-javadoc-plugin</artifactId>
+					<version>3.12.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-shade-plugin</artifactId>
+					<version>3.6.2</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-jarsigner-plugin</artifactId>
+					<version>3.1.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-gpg-plugin</artifactId>
+					<version>3.2.8</version>
+				</plugin>
+				<plugin>
+					<groupId>org.sonatype.central</groupId>
+					<artifactId>central-publishing-maven-plugin</artifactId>
+					<version>0.11.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>flatten-maven-plugin</artifactId>
+					<version>1.8.0</version>
+				</plugin>
+
+				<!-- Build helpers -->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-enforcer-plugin</artifactId>
+					<version>3.6.3</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-dependency-plugin</artifactId>
+					<version>3.11.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-antrun-plugin</artifactId>
+					<version>3.2.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-plugin-plugin</artifactId>
+					<version>3.15.1</version>
+				</plugin>
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>build-helper-maven-plugin</artifactId>
+					<version>3.6.2</version>
+				</plugin>
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>exec-maven-plugin</artifactId>
+					<version>3.6.4</version>
+				</plugin>
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>versions-maven-plugin</artifactId>
+					<version>2.22.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.jacoco</groupId>
+					<artifactId>jacoco-maven-plugin</artifactId>
+					<version>0.8.15</version>
+				</plugin>
+				<!-- Galta's own Maven plugins -->
+				<plugin>
+					<groupId>org.monflabs.galta.tools</groupId>
+					<artifactId>filesystem-resources-manifest</artifactId>
+					<version>${galta.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.monflabs.galta</groupId>
+					<artifactId>js-transpiler-maven</artifactId>
+					<version>${galta.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>javacc-maven-plugin</artifactId>
+					<version>3.2.1</version>
+					<dependencies>
+						<!-- The exact engine version the grammars are generated with:
+						     the plugin's own default may differ and change the output -->
+						<dependency>
+							<groupId>net.java.dev.javacc</groupId>
+							<artifactId>javacc</artifactId>
+							<version>${javacc.version}</version>
+						</dependency>
+					</dependencies>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+
+		<plugins>
+			<!--
+				Resolve ${revision} in the installed/deployed poms (Maven CI-friendly
+				versions); resolveCiFriendliesOnly keeps everything else as written.
+			-->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>flatten-maven-plugin</artifactId>
+				<configuration>
+					<updatePomFile>true</updatePomFile>
+					<flattenMode>resolveCiFriendliesOnly</flattenMode>
+				</configuration>
+				<executions>
+					<execution>
+						<id>flatten</id>
+						<phase>process-resources</phase>
+						<goals>
+							<goal>flatten</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>flatten.clean</id>
+						<phase>clean</phase>
+						<goals>
+							<goal>clean</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+				<executions>
+					<!-- Build rules: violations fail the build -->
+					<execution>
+						<id>enforce-build-rules</id>
+						<goals>
+							<goal>enforce</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<requireMavenVersion>
+									<version>[3.8.1,)</version>
+								</requireMavenVersion>
+								<requireJavaVersion>
+									<version>${maven.compiler.release}</version>
+								</requireJavaVersion>
+								<!-- Every plugin version comes from pluginManagement -->
+								<requirePluginVersions>
+									<message>Declare the plugin version in monflabs-parent's pluginManagement.</message>
+								</requirePluginVersions>
+								<banDuplicatePomDependencyVersions/>
+								<banDynamicVersions/>
+							</rules>
+						</configuration>
+					</execution>
+					<!--
+						Dependency convergence: reported, not enforced (yet). Transitive
+						version conflicts are listed as warnings on every build so the
+						drift stays visible; switch <fail> to true once they are resolved.
+					-->
+					<execution>
+						<id>report-dependency-convergence</id>
+						<goals>
+							<goal>enforce</goal>
+						</goals>
+						<configuration>
+							<fail>false</fail>
+							<rules>
+								<dependencyConvergence/>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>prepare-package</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+	<profiles>
+		<!-- Attach the javadoc jar: mvn install -P javadoc -->
+		<profile>
+			<id>javadoc</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-javadocs</id>
+								<goals>
+									<goal>jar</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<!--
+			Attach the sources jar. On unless -DskipSources is set: activeByDefault
+			is NOT used, it switches the profile off as soon as any other profile is
+			named on the command line (e.g. -Ptest262), silently dropping the jar.
+		-->
+		<profile>
+			<id>sources</id>
+			<activation>
+				<property>
+					<name>!skipSources</name>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-sources</id>
+								<goals>
+									<goal>jar-no-fork</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<!--
+			Sign the jars with the Monflabs certificate (self-signed for now). The
+			monflabs.signing.* properties come from settings.xml.
+		-->
+		<profile>
+			<id>codesigning</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-jarsigner-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>sign</id>
+								<goals>
+									<goal>sign</goal>
+								</goals>
+							</execution>
+							<execution>
+								<id>verify</id>
+								<goals>
+									<goal>verify</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<keystore>${monflabs.signing.keystore}</keystore>
+							<alias>${monflabs.signing.alias}</alias>
+							<storepass>${monflabs.signing.storepass}</storepass>
+							<keypass>${monflabs.signing.keypass}</keypass>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<!--
+			Maven Central release: sources + javadoc jars, GPG signatures and the
+			Central Portal publisher (mvn clean deploy -P central). Needs a GPG key
+			and a Central Portal token under the server id "central" in
+			~/.m2/settings.xml. autoPublish is false: the bundle is uploaded and
+			validated, then released by hand from https://central.sonatype.com.
+			A repository lists the artifacts it does not publish in its own
+			<excludeArtifacts> (merged with this configuration).
+		-->
+		<profile>
+			<id>central</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-sources</id>
+								<goals>
+									<goal>jar-no-fork</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-javadocs</id>
+								<goals>
+									<goal>jar</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-gpg-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>sign-artifacts</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>sign</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.sonatype.central</groupId>
+						<artifactId>central-publishing-maven-plugin</artifactId>
+						<extensions>true</extensions>
+						<configuration>
+							<publishingServerId>central</publishingServerId>
+							<autoPublish>false</autoPublish>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<!--
+			On-demand dependency hygiene report: used-but-undeclared and
+			declared-but-unused dependencies, per module.
+				mvn verify -P dependency-analyze -DskipTests
+		-->
+		<profile>
+			<id>dependency-analyze</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-dependency-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>analyze</id>
+								<goals>
+									<goal>analyze-only</goal>
+								</goals>
+								<configuration>
+									<failOnWarning>false</failOnWarning>
+									<ignoreNonCompile>true</ignoreNonCompile>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+
+</project>

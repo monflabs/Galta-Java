@@ -18,14 +18,6 @@
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-compiler-plugin</artifactId>
-				<configuration>
-					<source>${maven.compiler.source}</source>
-					<target>${maven.compiler.target}</target>
-				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-plugin-plugin</artifactId>
 				<configuration>
 					<goalPrefix>monflabs</goalPrefix>
@@ -38,7 +30,6 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js</artifactId>
-			<version>${revision}</version>
 		</dependency>
 
 		<dependency>
@@ -54,5 +45,11 @@
 		    <artifactId>maven-plugin-annotations</artifactId>
 		</dependency>
 
+		<!-- DirectoryScanner. Compile scope: Maven 3.9+ no longer provides
+		     plexus-utils to plugins, so the plugin must bring it itself. -->
+		<dependency>
+			<groupId>org.codehaus.plexus</groupId>
+			<artifactId>plexus-utils</artifactId>
+		</dependency>
 	</dependencies>
 </project>

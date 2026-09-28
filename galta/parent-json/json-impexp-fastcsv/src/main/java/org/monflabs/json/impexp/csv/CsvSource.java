@@ -38,7 +38,7 @@ import org.monflabs.util.iterators.Iterators;
 
 import de.siegmar.fastcsv.reader.CloseableIterator;
 import de.siegmar.fastcsv.reader.CsvReader;
-import de.siegmar.fastcsv.reader.CsvRow;
+import de.siegmar.fastcsv.reader.CsvRecord;
 
 //
 // Uses: https://github.com/osiegmar/FastCSV
@@ -65,8 +65,8 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 		Object get(String name);
 	}
 	private class RowImpl implements Row {
-		private CsvRow csvRow;
-		private RowImpl(CsvRow csvRow) {
+		private CsvRecord csvRow;
+		private RowImpl(CsvRecord csvRow) {
 			this.csvRow = csvRow;
 		}
 		@Override
@@ -182,8 +182,8 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 	private Function<Row,String> keyFunction;
 	private Function<Row,Instant> timestampFunction;
 	
-	private CsvReader csvReader;
-    private CloseableIterator<CsvRow> csvIterator;
+	private CsvReader<CsvRecord> csvReader;
+    private CloseableIterator<CsvRecord> csvIterator;
 	private Map<String,ColumnMapper> colMappers;
 	private Long estimatedCount;
 	
@@ -238,7 +238,7 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 		Map<String,Column> columns = getColumns();
 		if(firstRowAsHeader) {
 			// An empty input has no header, and then no documents
-			CsvRow firstRow = csvIterator.hasNext() ? csvIterator.next() : null;
+			CsvRecord firstRow = csvIterator.hasNext() ? csvIterator.next() : null;
 			if(firstRow!=null) {
 				int count = firstRow.getFieldCount();
 				for(int i=0; i<count; i++) {
@@ -268,15 +268,14 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 			}
 		}
 	}
-	protected CsvReader createCsvReader(Reader reader) {
+	protected CsvReader<CsvRecord> createCsvReader(Reader reader) {
 		return CsvReader.builder()
 	    	.fieldSeparator(fieldSeparator)
-	    	//.quoteCharacter('"')
-	    	//.commentStrategy(CommentStrategy.SKIP)
-	    	//.commentCharacter('#')
-	    	.skipEmptyRows(true)
-	    	.errorOnDifferentFieldCount(false)
-			.build(skipByteOrderMark(reader));
+	    	.skipEmptyLines(true)
+	    	// Short and long rows are accepted: missing cells read as null
+	    	.allowExtraFields(true)
+	    	.allowMissingFields(true)
+			.ofCsvRecord(skipByteOrderMark(reader));
 	}
 	/**
 	 * Skip a leading UTF-8 byte order mark, so it does not end up in the first column name.
@@ -296,7 +295,7 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 
 	@Override
 	public void close() {
-		CsvReader r = csvReader;
+		CsvReader<CsvRecord> r = csvReader;
 		csvReader = null;
 		csvIterator = null;
 		colMappers = null;
@@ -321,9 +320,9 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 		if(estimateCount) {
 			if(estimatedCount==null) {
 				long count = -1;
-				try(CsvReader r = createCsvReader(readerFactory.get())) {
+				try(CsvReader<CsvRecord> r = createCsvReader(readerFactory.get())) {
 					count = 0;
-					for(CloseableIterator<CsvRow> it=r.iterator(); it.hasNext(); it.next()) {
+					for(CloseableIterator<CsvRecord> it=r.iterator(); it.hasNext(); it.next()) {
 						count++;
 					}
 					if(firstRowAsHeader && count>0) {

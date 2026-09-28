@@ -168,7 +168,7 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 		this.csvWriter = createCsvWriter(writer);
 		if(columns!=null) {
 			if(firstRowAsHeader) {
-				csvWriter.writeRow(columns.keySet());
+				csvWriter.writeRecord(columns.keySet());
 			}
 		}
 	}
@@ -176,8 +176,18 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 	@Override
 	public void close() {
 		Writer w = writer;
+		CsvWriter cw = csvWriter;
 		writer = null;
 		csvWriter = null;
+		if(cw!=null) {
+			// The CSV writer buffers internally: push its content to the writer
+			// before the writer is closed or handed back to the caller
+			try {
+				cw.flush();
+			} catch(IOException ex) {
+				throw new JsonException(ex,"Error while flushing the CSV writer");
+			}
+		}
 		if(w!=null) {
 			if(closeWriter) {
 				IOStreamUtil.close(w);
@@ -204,7 +214,7 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 					columns.put(k,new Column(k,null));
 				}
 				if(firstRowAsHeader) {
-					csvWriter.writeRow(columns.keySet());
+					csvWriter.writeRecord(columns.keySet());
 				}
 			} else if(columnsInferred) {
 				// The header is already written: a property that is not part of the columns
@@ -218,7 +228,7 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 				}
 			}
 
-			csvWriter.writeRow( () ->
+			csvWriter.writeRecord( () ->
 				Iterators.map(columns.entrySet().iterator(), (e) -> {
 					Column column = e.getValue();
 					// A cell writer is always invoked, so it can compute columns missing from the JSON

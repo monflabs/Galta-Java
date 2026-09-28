@@ -4,6 +4,20 @@
 	child.project.url.inherit.append.path="false">
 	<modelVersion>4.0.0</modelVersion>
 
+	<!--
+		monflabs-parent (tools/monflabs-parent) holds the Java level, the
+		third-party dependency versions, the plugin versions and configuration,
+		the build rules and the release profiles. It is found by relativePath,
+		so a fresh clone builds without anything installed. Its version is a
+		literal: keep it equal to ${revision} below.
+	-->
+	<parent>
+		<groupId>org.monflabs.galta.tools</groupId>
+		<artifactId>monflabs-parent</artifactId>
+		<version>0.8.0</version>
+		<relativePath>tools/monflabs-parent/pom.xml</relativePath>
+	</parent>
+
 	<groupId>org.monflabs.galta</groupId>
 	<artifactId>Galta-Java</artifactId>
 	<version>${revision}</version>
@@ -12,37 +26,13 @@
 	<name>Galta</name>
 	<description>Galta: a Java mono repo of reusable libraries - general-purpose utilities, a JSON library, Swing UI components, and GaltaJS, a JavaScript-inspired scripting engine for the JVM.</description>
 	<url>https://github.com/monflabs/Galta-Java</url>
-	<inceptionYear>2019</inceptionYear>
 
 	<!--
-		Project metadata required by Maven Central on every published artifact.
-		It is declared once here and inherited by every module (tools and galta).
-		The child.*.inherit.append.path attributes keep the url/scm values as
-		they are instead of appending each module's artifactId.
+		organization, licenses and developers come from monflabs-parent; url, scm
+		and issueManagement are this repository's. The child.*.inherit.append.path
+		attributes keep the url/scm values as they are instead of appending each
+		module's artifactId.
 	-->
-	<organization>
-		<name>Monflabs</name>
-		<url>https://github.com/monflabs</url>
-	</organization>
-
-	<licenses>
-		<license>
-			<name>Apache License, Version 2.0</name>
-			<url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
-			<distribution>repo</distribution>
-		</license>
-	</licenses>
-
-	<developers>
-		<developer>
-			<id>priand</id>
-			<name>Philippe Riand</name>
-			<email>phil@riand.com</email>
-			<organization>Monflabs</organization>
-			<organizationUrl>https://github.com/monflabs</organizationUrl>
-		</developer>
-	</developers>
-
 	<scm child.scm.connection.inherit.append.path="false"
 		child.scm.developerConnection.inherit.append.path="false"
 		child.scm.url.inherit.append.path="false">
@@ -62,132 +52,27 @@
 		<module>galta</module>
 	</modules>
 
-	<build>
-		<plugins>
-			<!--
-				Resolve ${revision} in the installed/deployed pom. Without it this
-				root pom - the parent of every module - would be published with a
-				literal ${revision} version and no consumer could resolve it.
-				resolveCiFriendliesOnly keeps everything else (name, description,
-				licenses, developers, scm...) exactly as written.
-			-->
-			<plugin>
-				<groupId>org.codehaus.mojo</groupId>
-				<artifactId>flatten-maven-plugin</artifactId>
-				<version>1.5.0</version>
-				<configuration>
-					<updatePomFile>true</updatePomFile>
-					<flattenMode>resolveCiFriendliesOnly</flattenMode>
-				</configuration>
-				<executions>
-					<execution>
-						<id>flatten</id>
-						<phase>process-resources</phase>
-						<goals>
-							<goal>flatten</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>flatten.clean</id>
-						<phase>clean</phase>
-						<goals>
-							<goal>clean</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-		</plugins>
-	</build>
-
 	<properties>
+		<!-- The Galta version (Maven CI-friendly). When it changes, also update
+		     monflabs-parent's literal version and this pom's parent version. -->
 		<revision>0.8.0</revision>
-
-		<!--
-			Java level and encodings. The same values live in the mixin-javatools
-			mixin (tools/parent-tools-mixins), which other Monflabs repositories
-			apply to their root pom. Galta-Java cannot apply it: the mixin is built
-			by this very reactor, and mixin-maven-plugin resolves it while the
-			project model is being read - before anything is built - so a fresh
-			clone, or any new ${revision}, could never find it. A repository's root
-			pom is the one place where these properties may be declared (see the
-			comment in mixin-javatools); keep the two in sync.
-			Do not redeclare maven.compiler* in any other pom.
-		-->
-		<maven.compiler>21</maven.compiler>
-		<maven.compiler.source>${maven.compiler}</maven.compiler.source>
-		<maven.compiler.target>${maven.compiler}</maven.compiler.target>
-		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 	</properties>
 
 	<profiles>
 		<!--
-			Maven Central release: sources + javadoc jars, GPG signatures and the
-			Central Portal publisher. It covers both tools (BOM, mixins, maven
-			plugins) and galta.
-
-				mvn clean deploy -P central
-
-			Needs a GPG key (gpg-agent, or -Dgpg.passphrase) and a Central Portal
-			user token under the server id "central" in ~/.m2/settings.xml.
-			autoPublish is false: the bundle is uploaded and validated, then
-			released by hand from https://central.sonatype.com/publishing.
-
-			Test, benchmark and sample modules are not published: they are listed
-			in excludeArtifacts below and set maven.deploy.skip themselves.
+			Maven Central release (mvn clean deploy -P central): the profile itself
+			is defined in monflabs-parent; this adds the Galta specifics. Test,
+			benchmark and sample modules are not published: they are listed here
+			and set maven.deploy.skip themselves.
 		-->
 		<profile>
 			<id>central</id>
 			<build>
 				<plugins>
 					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-source-plugin</artifactId>
-						<version>3.3.0</version>
-						<executions>
-							<execution>
-								<id>attach-sources</id>
-								<goals>
-									<goal>jar-no-fork</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-javadoc-plugin</artifactId>
-						<version>3.6.2</version>
-						<executions>
-							<execution>
-								<id>attach-javadocs</id>
-								<goals>
-									<goal>jar</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-gpg-plugin</artifactId>
-						<version>3.2.7</version>
-						<executions>
-							<execution>
-								<id>sign-artifacts</id>
-								<phase>verify</phase>
-								<goals>
-									<goal>sign</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
 						<groupId>org.sonatype.central</groupId>
 						<artifactId>central-publishing-maven-plugin</artifactId>
-						<version>0.9.0</version>
-						<extensions>true</extensions>
 						<configuration>
-							<publishingServerId>central</publishingServerId>
-							<autoPublish>false</autoPublish>
 							<deploymentName>Galta ${revision}</deploymentName>
 							<excludeArtifacts>
 								<!-- Keep in sync with the modules setting maven.deploy.skip -->

@@ -12,18 +12,17 @@ modules it needs.
   than part way through.
 - **Maven 3.8.1** or later, enforced by the same rule.
 
-The compiler settings (`maven.compiler` and the source encoding) are declared
-once, in the root `pom.xml`; no other pom redeclares them. The same values are
-published as the `mixin-javatools` mixin (in `tools/`) for other Monflabs
-repositories, but Galta-Java cannot apply that mixin to itself: the mixin is
-built by this reactor, while `mixin-maven-plugin` needs it before anything is
-built, so a fresh clone could never resolve it. Keep the two in sync.
+The Java level (`maven.compiler.release`) and the source encoding are declared
+once, in `monflabs-parent` (see [Dependency and plugin versions](#dependency-and-plugin-versions));
+no other pom redeclares them.
 
 ## Building
 
-The repository root `pom.xml` aggregates `tools/` (the dependency BOM, the
-Java mixin shared with other repositories and the Maven plugins used by the build) and `galta/` (the
-libraries). A first build runs from the root, which installs `tools/`; after
+The repository root `pom.xml` aggregates `tools/` (`monflabs-parent`, the
+parent pom shared with the other Monflabs repositories, and the Maven plugins
+used by the build) and `galta/` (the libraries). The root pom inherits
+`monflabs-parent` by relative path, so a fresh clone builds from the root with
+nothing installed beforehand. A first build runs from the root, which installs `tools/`; after
 that, library builds can run from `galta/`.
 
 ```sh
@@ -79,32 +78,101 @@ run it.
 
 ## Versioning
 
-The version is a Maven CI-friendly `${revision}` property, declared in the
-root `pom.xml` and in `galta/pom.xml` (both must carry the same value; the
-second lets `galta/` build on its own) and resolved at build time by
-`flatten-maven-plugin`, so a version bump is a two-line edit rather than a
-change to every module pom. The flattened pom that gets installed and
+The version is a Maven CI-friendly `${revision}` property, resolved at build
+time by `flatten-maven-plugin`: the flattened pom that gets installed and
 deployed has the version resolved and keeps everything else - name,
-description, licenses, developers, scm - as written.
+description, licenses, developers, scm - as written. A version bump changes:
 
-Dependency versions are centralised in the `monflabs-bom` BOM, which modules
-import through `dependencyManagement` - a third-party version is bumped in the
-BOM, not per module.
+- `<revision>` in the root `pom.xml` and in `galta/galta-bom/pom.xml` (the BOM
+  has no parent to inherit it from);
+- the literal `<version>` and the `galta.version` property of
+  `tools/monflabs-parent/pom.xml`, and the root pom's `<parent><version>`
+  (a parent is located before properties are known, so it is not `${revision}`).
+
+## Dependency and plugin versions
+
+Every version is declared in exactly one place:
+
+| What | Where |
+|---|---|
+| Java level, encodings | `monflabs-parent` properties |
+| Third-party libraries | `monflabs-parent` `dependencyManagement` |
+| Maven plugins (versions and default configuration) | `monflabs-parent` `pluginManagement` |
+| Galta's own artifacts | `galta-bom`, imported by `galta/pom.xml` |
+
+Module poms therefore declare dependencies and plugins **without a version**.
+The enforcer rules in `monflabs-parent` fail the build on a plugin without a
+version, on duplicated dependency declarations and on dynamic versions
+(`LATEST`, ranges); dependency convergence is reported as a warning on every
+build (it does not fail it yet). `mvn verify -P dependency-analyze -DskipTests`
+reports, per module, the dependencies that are used but not declared, or
+declared but not used.
+
+To see what can be upgraded:
+
+```sh
+mvn versions:display-plugin-updates -f tools/monflabs-parent/pom.xml
+mvn versions:display-dependency-updates -f tools/monflabs-parent/pom.xml
+```
+
+Dependabot (`.github/dependabot.yml`) opens pull requests for new versions weekly.
+
+`monflabs-parent` is also the parent of the other Monflabs repositories
+(Galta-Java-Private, UbiGen, RestQL, DraftDB, Salesforce, Commerce,
+DeveloperToolbox), which reference it by coordinates:
+
+```xml
+<parent>
+  <groupId>org.monflabs.galta.tools</groupId>
+  <artifactId>monflabs-parent</artifactId>
+  <version>0.8.0</version>
+  <relativePath/>
+</parent>
+```
+
+## Using Galta in another project
+
+Import `galta-bom` and declare the Galta modules without a version. The BOM only
+manages Galta's own artifacts (it has no parent, so it does not push the
+Monflabs third-party versions onto your project):
+
+```xml
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>org.monflabs.galta</groupId>
+      <artifactId>galta-bom</artifactId>
+      <version>0.8.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>org.monflabs.galta</groupId>
+    <artifactId>js</artifactId>
+  </dependency>
+</dependencies>
+```
 
 ## Publishing
 
 Galta is published to **Maven Central** under the `org.monflabs.galta` group
-id (the build tooling under `org.monflabs.galta.tools`), through the Sonatype
-Central Portal. The `central` profile, declared in the root `pom.xml` so it
-covers both `tools/` and `galta/`, adds everything Central requires:
+id (the build tooling, including `monflabs-parent`, under
+`org.monflabs.galta.tools`), through the Sonatype Central Portal. The `central`
+profile, defined in `monflabs-parent` and completed by the root `pom.xml` (the
+list of artifacts not published), adds everything Central requires:
 
 - a sources jar and a javadoc jar for every jar module,
 - a GPG signature (`.asc`) for every file,
 - the Central Portal publisher (`central-publishing-maven-plugin`).
 
-The project metadata Central checks - name, description, url, license,
-developers, scm - is declared once in the root `pom.xml` and inherited by
-every module; each module adds its own name and description.
+The project metadata Central checks is declared once: license, developers and
+organization in `monflabs-parent`, url and scm in the root `pom.xml`, inherited
+by every module; each module adds its own name and description. `galta-bom`,
+which has no parent, carries its own copy.
 
 ### One-time setup
 
@@ -129,7 +197,7 @@ every module; each module adds its own name and description.
 
 ```sh
 # From the repository root
-# 1. Set the release version in pom.xml and galta/pom.xml (<revision>)
+# 1. Set the release version (see Versioning for the places to change)
 # 2. Full build, including the long test262 compliance sweep
 mvn clean install -P test262
 # 3. Build, sign and upload the bundle
@@ -162,12 +230,11 @@ profile. The two lists must be kept in sync when a module is added.
 
 ### Other repositories
 
-`galta/pom.xml` keeps a commented-out `distributionManagement` block for the
-project's own repository (`https://maven.monflabs.org/galta`). Uncommenting it,
-with credentials for the `maven.monflabs.org` server id in `settings.xml`,
-lets `mvn clean deploy -P javadoc,sources,codesigning` publish there instead;
-`codesigning` signs the jars with `jarsigner`, which is separate from the GPG
-signatures Central requires.
+To publish to the project's own repository (`https://maven.monflabs.org/galta`)
+instead, add a `distributionManagement` block to the root `pom.xml`, with
+credentials for its server id in `settings.xml`, and run
+`mvn clean deploy -P javadoc,sources,codesigning`; `codesigning` signs the jars
+with `jarsigner`, which is separate from the GPG signatures Central requires.
 
 ## Module dependency order
 

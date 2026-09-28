@@ -21,27 +21,22 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>playground-core</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>playground-ui-swing</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js-debugger</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js-mod-node</artifactId>
-			<version>${revision}</version>
 		</dependency>
 
 		<dependency>
@@ -52,8 +47,32 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>test</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
+		</dependency>
+		<!-- Used directly by this module (was only present transitively) -->
+		<dependency>
+			<groupId>com.fifesoft</groupId>
+			<artifactId>rsyntaxtextarea</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>filesystem</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>ui-commons</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>ui-swing</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>ui-swing-ide</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>utilities</artifactId>
 		</dependency>
 	</dependencies>
 
@@ -92,7 +111,6 @@
 			<plugin>
 				<groupId>org.monflabs.galta.tools</groupId>
 				<artifactId>filesystem-resources-manifest</artifactId>
-				<version>${revision}</version>
 				<executions>
 					<execution>
 						<id>generate</id>

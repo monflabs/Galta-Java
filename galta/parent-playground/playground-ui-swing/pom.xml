@@ -19,13 +19,11 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>playground-core</artifactId>
-			<version>${revision}</version>
 		</dependency>
 
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>ui-swing-ide</artifactId>
-			<version>${revision}</version>
 		</dependency>
 
 		<!-- https://mvnrepository.com/artifact/com.fifesoft/languagesupport -->
@@ -34,12 +32,20 @@
 			<artifactId>languagesupport</artifactId>
 		</dependency>
 
-		<!-- https://mvnrepository.com/artifact/com.fifesoft/spellchecker -->
+
+		<!-- Used directly by this module (was only present transitively) -->
 		<dependency>
 			<groupId>com.fifesoft</groupId>
-			<artifactId>spellchecker</artifactId>
+			<artifactId>rsyntaxtextarea</artifactId>
 		</dependency>
-
+		<dependency>
+			<groupId>org.commonmark</groupId>
+			<artifactId>commonmark</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>utilities</artifactId>
+		</dependency>
 	</dependencies>
 
 </project>

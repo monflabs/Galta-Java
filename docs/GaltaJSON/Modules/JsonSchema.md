@@ -9,6 +9,17 @@ The core library reads and navigates JSON Schema documents (see [Schema](/GaltaJ
 </dependency>
 ```
 
+jsonschemafriend is not on Maven Central: it is published on [JitPack](https://jitpack.io), so a project using this module also declares that repository:
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+```
+
 Two classes, in `org.monflabs.json.jsonschema`:
 
 | Class | Role |

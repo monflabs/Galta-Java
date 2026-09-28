@@ -15,17 +15,14 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>json</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>json-config</artifactId>
-			<version>${revision}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>ui-swing</artifactId>
-			<version>${revision}</version>
 		</dependency>
 	
 		<dependency>
@@ -33,14 +30,23 @@
 			<artifactId>rsyntaxtextarea</artifactId>
 		</dependency>
 
-		<dependency>
-			<groupId>com.fifesoft</groupId>
-			<artifactId>languagesupport</artifactId>
-		</dependency>
 
 		<dependency>
 			<groupId>com.fifesoft</groupId>
 			<artifactId>rstaui</artifactId>
+		</dependency>
+		<!-- Used directly by this module (was only present transitively) -->
+		<dependency>
+			<groupId>com.formdev</groupId>
+			<artifactId>flatlaf</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>ui-commons</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>utilities</artifactId>
 		</dependency>
 	</dependencies>
 

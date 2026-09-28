@@ -16,7 +16,6 @@
 		<maven.deploy.skip>true</maven.deploy.skip>
 		<maven.javadoc.skip>true</maven.javadoc.skip>
 		<gpg.skip>true</gpg.skip>
-    	<javet.version>5.0.1</javet.version>
 	</properties>
 
 	<dependencies>
@@ -25,7 +24,6 @@
 		<dependency>
 		    <groupId>com.caoccao.javet</groupId>
 		    <artifactId>javet</artifactId>
-		    <version>${javet.version}</version>
 		</dependency>
 
 
@@ -37,7 +35,6 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>test</artifactId>
-			<version>${revision}</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
@@ -70,7 +67,6 @@
 				<dependency>
 					<groupId>com.caoccao.javet</groupId>
     				<artifactId>javet-v8-macos-x86_64</artifactId>			    
-		    		<version>${javet.version}</version>
 				</dependency>			
 			</dependencies>
 		</profile>
@@ -88,7 +84,6 @@
 				<dependency>
 				    <groupId>com.caoccao.javet</groupId>
 					<artifactId>javet-v8-macos-arm64</artifactId>
-		    		<version>${javet.version}</version>
 				</dependency>
 			</dependencies>
 		</profile>
@@ -106,7 +101,6 @@
 				<dependency>
 				    <groupId>com.caoccao.javet</groupId>
 				    <artifactId>javet-v8-windows-x86_64</artifactId>
-		    		<version>${javet.version}</version>
 				</dependency>
 			</dependencies>
 		</profile>
@@ -125,7 +119,6 @@
 				<dependency>
 				    <groupId>com.caoccao.javet</groupId>
 				    <artifactId>javet-v8-linux-x86_64</artifactId>
-		    		<version>${javet.version}</version>
 				</dependency>
 			</dependencies>
 		</profile>
@@ -143,7 +136,6 @@
 				<dependency>
 				    <groupId>com.caoccao.javet</groupId>
 				    <artifactId>javet-v8-linux-x86_64</artifactId>
-		    		<version>${javet.version}</version>
 				</dependency>
 			</dependencies>
 		</profile>
@@ -164,7 +156,6 @@
 				<dependency>
 				    <groupId>com.caoccao.javet</groupId>
 				    <artifactId>javet-v8-linux-arm64</artifactId>
-		    		<version>${javet.version}</version>
 				</dependency>
 			</dependencies>
 		</profile>
