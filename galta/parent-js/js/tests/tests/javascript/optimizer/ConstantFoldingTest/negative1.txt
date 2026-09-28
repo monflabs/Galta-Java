@@ -1,0 +1,5 @@
+ASTProgram
++- ASTAdd
+    +- ASTLiteral: 1
+    +- ASTMember: .PI
+        +- ASTIdentifier: Math

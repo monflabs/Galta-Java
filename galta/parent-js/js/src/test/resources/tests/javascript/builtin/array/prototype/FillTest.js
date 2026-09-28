@@ -1,0 +1,8 @@
+assertEquals( [4, 4, 4] , [1, 2, 3].fill(4) )
+assertEquals( [1, 4, 4] , [1, 2, 3].fill(4, 1) )
+assertEquals( [1, 4, 3] , [1, 2, 3].fill(4, 1, 2) )
+assertEquals( [1, 2, 3] , [1, 2, 3].fill(4, 1, 1) )
+assertEquals( [1, 2, 3] , [1, 2, 3].fill(4, 3, 3) )
+assertEquals( [4, 2, 3] , [1, 2, 3].fill(4, -3, -2) )
+assertEquals( [1, 2, 3] , [1, 2, 3].fill(4, NaN, NaN) )
+assertEquals( [1, 2, 3] , [1, 2, 3].fill(4, 3, 5) )

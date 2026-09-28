@@ -1,0 +1,14 @@
+Sample Data File
+================
+
+This is a sample data file stored as a resource.
+
+ID,Name,Value
+1,Alpha,100
+2,Beta,200
+3,Gamma,300
+4,Delta,400
+5,Epsilon,500
+
+Total Records: 5
+Last Updated: 2024-12-19

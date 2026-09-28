@@ -1,0 +1,27 @@
+{
+  "series": {
+    "name": "Bond Movies",
+    "movies": [
+      {
+        "name": "Licence to Kill",
+        "star": "Timothy Dalton",
+        "rating": 6.6
+      },
+      {
+        "name": "GoldenEye",
+        "star": "Pierce Brosnan",
+        "rating": 7.2
+      },
+      {
+        "name": "Tomorrow Never Dies",
+        "star": "Pierce Brosnan",
+        "rating": 6.5
+      },
+      {
+        "name": "Skyfall",
+        "star": "Daniel Craig",
+        "rating": 7.8
+      }
+    ]
+  }
+}

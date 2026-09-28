@@ -1,0 +1,12 @@
+{
+  "date":"2020-12-25",
+  "computer":{
+    "display":{
+      "hres":"1920",
+      "vres":"1080"
+    },
+    "language":"en",
+    "connected":true,
+    "vpn":"false"
+  }
+}

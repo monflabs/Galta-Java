@@ -1,0 +1,221 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+	child.project.url.inherit.append.path="false">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>org.monflabs.galta</groupId>
+	<artifactId>Galta-Java</artifactId>
+	<version>${revision}</version>
+	<packaging>pom</packaging>
+
+	<name>Galta</name>
+	<description>Galta: a Java mono repo of reusable libraries - general-purpose utilities, a JSON library, Swing UI components, and GaltaJS, a JavaScript-inspired scripting engine for the JVM.</description>
+	<url>https://github.com/monflabs/Galta-Java</url>
+	<inceptionYear>2019</inceptionYear>
+
+	<!--
+		Project metadata required by Maven Central on every published artifact.
+		It is declared once here and inherited by every module (tools and galta).
+		The child.*.inherit.append.path attributes keep the url/scm values as
+		they are instead of appending each module's artifactId.
+	-->
+	<organization>
+		<name>Monflabs</name>
+		<url>https://github.com/monflabs</url>
+	</organization>
+
+	<licenses>
+		<license>
+			<name>Apache License, Version 2.0</name>
+			<url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<developers>
+		<developer>
+			<id>priand</id>
+			<name>Philippe Riand</name>
+			<email>phil@riand.com</email>
+			<organization>Monflabs</organization>
+			<organizationUrl>https://github.com/monflabs</organizationUrl>
+		</developer>
+	</developers>
+
+	<scm child.scm.connection.inherit.append.path="false"
+		child.scm.developerConnection.inherit.append.path="false"
+		child.scm.url.inherit.append.path="false">
+		<connection>scm:git:https://github.com/monflabs/Galta-Java.git</connection>
+		<developerConnection>scm:git:ssh://git@github.com/monflabs/Galta-Java.git</developerConnection>
+		<url>https://github.com/monflabs/Galta-Java</url>
+		<tag>HEAD</tag>
+	</scm>
+
+	<issueManagement>
+		<system>GitHub</system>
+		<url>https://github.com/monflabs/Galta-Java/issues</url>
+	</issueManagement>
+
+	<modules>
+		<module>tools</module>
+		<module>galta</module>
+	</modules>
+
+	<build>
+		<plugins>
+			<!--
+				Resolve ${revision} in the installed/deployed pom. Without it this
+				root pom - the parent of every module - would be published with a
+				literal ${revision} version and no consumer could resolve it.
+				resolveCiFriendliesOnly keeps everything else (name, description,
+				licenses, developers, scm...) exactly as written.
+			-->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>flatten-maven-plugin</artifactId>
+				<version>1.5.0</version>
+				<configuration>
+					<updatePomFile>true</updatePomFile>
+					<flattenMode>resolveCiFriendliesOnly</flattenMode>
+				</configuration>
+				<executions>
+					<execution>
+						<id>flatten</id>
+						<phase>process-resources</phase>
+						<goals>
+							<goal>flatten</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>flatten.clean</id>
+						<phase>clean</phase>
+						<goals>
+							<goal>clean</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+	<properties>
+		<revision>0.8.0</revision>
+
+		<!--
+			Java level and encodings. The same values live in the mixin-javatools
+			mixin (tools/parent-tools-mixins), which other Monflabs repositories
+			apply to their root pom. Galta-Java cannot apply it: the mixin is built
+			by this very reactor, and mixin-maven-plugin resolves it while the
+			project model is being read - before anything is built - so a fresh
+			clone, or any new ${revision}, could never find it. A repository's root
+			pom is the one place where these properties may be declared (see the
+			comment in mixin-javatools); keep the two in sync.
+			Do not redeclare maven.compiler* in any other pom.
+		-->
+		<maven.compiler>21</maven.compiler>
+		<maven.compiler.source>${maven.compiler}</maven.compiler.source>
+		<maven.compiler.target>${maven.compiler}</maven.compiler.target>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+	</properties>
+
+	<profiles>
+		<!--
+			Maven Central release: sources + javadoc jars, GPG signatures and the
+			Central Portal publisher. It covers both tools (BOM, mixins, maven
+			plugins) and galta.
+
+				mvn clean deploy -P central
+
+			Needs a GPG key (gpg-agent, or -Dgpg.passphrase) and a Central Portal
+			user token under the server id "central" in ~/.m2/settings.xml.
+			autoPublish is false: the bundle is uploaded and validated, then
+			released by hand from https://central.sonatype.com/publishing.
+
+			Test, benchmark and sample modules are not published: they are listed
+			in excludeArtifacts below and set maven.deploy.skip themselves.
+		-->
+		<profile>
+			<id>central</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<version>3.3.0</version>
+						<executions>
+							<execution>
+								<id>attach-sources</id>
+								<goals>
+									<goal>jar-no-fork</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<version>3.6.2</version>
+						<executions>
+							<execution>
+								<id>attach-javadocs</id>
+								<goals>
+									<goal>jar</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-gpg-plugin</artifactId>
+						<version>3.2.7</version>
+						<executions>
+							<execution>
+								<id>sign-artifacts</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>sign</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.sonatype.central</groupId>
+						<artifactId>central-publishing-maven-plugin</artifactId>
+						<version>0.9.0</version>
+						<extensions>true</extensions>
+						<configuration>
+							<publishingServerId>central</publishingServerId>
+							<autoPublish>false</autoPublish>
+							<deploymentName>Galta ${revision}</deploymentName>
+							<excludeArtifacts>
+								<!-- Keep in sync with the modules setting maven.deploy.skip -->
+								<excludeArtifact>utilities-tests</excludeArtifact>
+								<excludeArtifact>json-tests</excludeArtifact>
+								<excludeArtifact>json-config-test</excludeArtifact>
+								<excludeArtifact>json-performance</excludeArtifact>
+								<excludeArtifact>js-all</excludeArtifact>
+								<excludeArtifact>js-library-v8</excludeArtifact>
+								<excludeArtifact>js-regexp-joni-custom</excludeArtifact>
+								<excludeArtifact>js-playground-cheerpj</excludeArtifact>
+								<excludeArtifact>js-test-rhino</excludeArtifact>
+								<excludeArtifact>js-test-suite</excludeArtifact>
+								<excludeArtifact>js-test-test262</excludeArtifact>
+								<excludeArtifact>js-transpiler-maven-tests</excludeArtifact>
+								<excludeArtifact>js-precompiled-typescript</excludeArtifact>
+								<excludeArtifact>parent-demodata</excludeArtifact>
+								<excludeArtifact>demo-airline</excludeArtifact>
+								<excludeArtifact>demo-dvdrental</excludeArtifact>
+								<excludeArtifact>demo-northwind</excludeArtifact>
+								<excludeArtifact>demo-retail</excludeArtifact>
+								<excludeArtifact>demo-tour-de-france</excludeArtifact>
+							</excludeArtifacts>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+
+</project>

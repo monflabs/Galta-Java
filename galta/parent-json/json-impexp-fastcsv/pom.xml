@@ -1,0 +1,67 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.monflabs.galta</groupId>
+		<artifactId>parent-json</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>json-impexp-fastcsv</artifactId>
+	<name>Galta JSON Import/Export - CSV</name>
+	<description>CSV source and target for Galta JSON Import/Export, based on FastCSV.</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>utilities</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>json</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>json-impexp</artifactId>
+			<version>${revision}</version>
+		</dependency>
+
+		<!-- https://mvnrepository.com/artifact/de.siegmar/fastcsv -->
+		<dependency>
+		    <groupId>de.siegmar</groupId>
+		    <artifactId>fastcsv</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>test</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- Run the suite only (it includes the doc examples): every test class
+					     must be registered in it, and is not run a second time on its own -->
+					<includes>
+						<include>**/AllJsonImpExpCsvTests.class</include>
+					</includes>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

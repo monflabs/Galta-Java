@@ -1,0 +1,1 @@
+# GaltaJS Playground for CheerpJ

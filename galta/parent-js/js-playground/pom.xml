@@ -1,0 +1,150 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.monflabs.galta</groupId>
+		<artifactId>parent-js</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>js-playground</artifactId>
+	<name>GaltaJS Playground</name>
+	<description>Interactive GaltaJS playground application.</description>
+
+	<properties>
+        <app.name>jsplayground</app.name>
+        <!-- Main-Class of the executable jar built by the shade plugin (target/jsplayground.jar) -->
+        <main.class>playground.GaltaJSPlayground</main.class>
+        <app.version>1.0.0</app.version>
+	</properties>
+
+
+	<dependencies>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>playground-core</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>playground-ui-swing</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js-debugger</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js-mod-node</artifactId>
+			<version>${revision}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>test</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- The suite only: without includes every test class also runs on its own, twice in total -->
+					<includes>
+						<include>**/AllLangGaltaJSTests.class</include>
+					</includes>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- Deep-recursion examples (e.g. es2015/Proper Tail Calls,
+					     which deliberately recurses non-tail-call-optimized to
+					     10000 levels to demonstrate the absence of proper tail
+					     calls) can run the default JVM thread stack right down
+					     to its limit. A genuine StackOverflowError that lands
+					     while some unrelated JDK class is mid-<clinit> corrupts
+					     that class for the rest of this forked JVM's life
+					     (NoClassDefFoundError on every later use, even in
+					     completely unrelated tests) - a real, if intermittent,
+					     hazard confirmed via direct reproduction, not a
+					     hypothetical. A larger stack gives normal recursion
+					     depths (a few thousand levels) enough headroom to never
+					     approach that danger zone in the first place. -->
+					<argLine>-Xss64m</argLine>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.monflabs.galta.tools</groupId>
+				<artifactId>filesystem-resources-manifest</artifactId>
+				<version>${revision}</version>
+				<executions>
+					<execution>
+						<id>generate</id>
+						<goals>
+							<goal>generate-sources</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<sourceDirectory>src/main/resources/snippets</sourceDirectory>
+				</configuration>
+			</plugin>
+	       	<!--
+            	Fat jar creation
+            -->
+            <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-shade-plugin -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<executions>
+					<execution>
+<!--						<phase>package</phase> -->
+						<goals>
+							<goal>shade</goal>
+						</goals>
+						<configuration>
+							<finalName>${app.name}</finalName>
+							<createDependencyReducedPom>false</createDependencyReducedPom>
+							<filters>
+								<filter>
+									<artifact>*:*</artifact>
+									<excludes>
+										<exclude>META-INF/*.SF</exclude>
+										<exclude>META-INF/*.DSA</exclude>
+										<exclude>META-INF/*.RS</exclude>
+										<exclude>org/eclipse/**</exclude>
+										<exclude>org/apache/commons/logging/**</exclude>
+										<exclude>src/org/eclipse/jdt/**</exclude>
+									</excludes>
+								</filter>
+							</filters>
+							<transformers>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer">
+								</transformer>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+									<mainClass>${main.class}</mainClass>
+								</transformer>
+							</transformers>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+</project>

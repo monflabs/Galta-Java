@@ -1,0 +1,158 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.monflabs.galta</groupId>
+		<artifactId>parent-js</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>js-test-rhino</artifactId>
+	<name>GaltaJS Rhino Tests</name>
+	<description>Runs the Mozilla Rhino test suite against GaltaJS. Not published.</description>
+
+	<properties>
+		<!-- Not published: excluded from the Maven Central bundle (see the root pom central profile) -->
+		<maven.deploy.skip>true</maven.deploy.skip>
+		<maven.javadoc.skip>true</maven.javadoc.skip>
+		<gpg.skip>true</gpg.skip>
+		<!--
+			Rhino's ECMA test suite, pinned to one commit for reproducibility
+			(the same reasoning as galtajs.test262.commit in js-test-test262's
+			own pom.xml - see its own comment) - the mozilla/rhino repo has no
+			tag matching the exact revision this test suite was validated
+			against, and `master` moves. Bumping the suite is a one-line
+			change here + `mvn -Pfetch-externals generate-test-resources`.
+		-->
+		<galtajs.rhino.commit>6e3510c21571e0a17cddad1383f0dd766f8c4230</galtajs.rhino.commit>
+		<galtajs.rhino.dir>${project.basedir}/rhino</galtajs.rhino.dir>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>test</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>		
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>filesystem</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js-debugger</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>		
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js</artifactId>
+			<version>${revision}</version>
+			<type>test-jar</type>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js-test-suite</artifactId>
+			<version>${revision}</version>
+			<type>test-jar</type>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+	
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<includes>
+						<include>**/AllEcmaTests.class</include>
+					</includes>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+	<profiles>
+		<profile>
+			<!--
+				Fetches the Rhino ECMA test suite, pinned to
+				galtajs.rhino.commit above, into ${galtajs.rhino.dir} - a
+				plain git working directory, NOT a submodule. See
+				js-test-test262's own identical profile (same id, same
+				mechanism, mirrors Nashorn's core/pom.xml fetch-externals
+				profile, same auto-activate-when-missing behavior) for the
+				full rationale.
+
+				Auto-activates whenever rhino/.git is missing - i.e. a fresh
+				clone - so a plain `mvn test`/`mvn install` on this module
+				fetches the suite automatically the first time. To FORCE a
+				re-fetch (e.g. right after bumping galtajs.rhino.commit),
+				activate it explicitly:
+					mvn -pl parent-js/js-test-rhino -Pfetch-externals generate-test-resources
+			-->
+			<id>fetch-externals</id>
+			<activation>
+				<file>
+					<missing>rhino/.git</missing>
+				</file>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.codehaus.mojo</groupId>
+						<artifactId>exec-maven-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>init-rhino</id>
+								<phase>generate-test-resources</phase>
+								<goals><goal>exec</goal></goals>
+								<configuration>
+									<executable>git</executable>
+									<successCodes><successCode>0</successCode><successCode>128</successCode></successCodes>
+									<commandlineArgs>init -q ${galtajs.rhino.dir}</commandlineArgs>
+								</configuration>
+							</execution>
+							<execution>
+								<id>fetch-rhino</id>
+								<phase>generate-test-resources</phase>
+								<goals><goal>exec</goal></goals>
+								<configuration>
+									<executable>git</executable>
+									<workingDirectory>${galtajs.rhino.dir}</workingDirectory>
+									<commandlineArgs>-c protocol.version=2 fetch -q --depth 1 https://github.com/mozilla/rhino ${galtajs.rhino.commit}</commandlineArgs>
+								</configuration>
+							</execution>
+							<execution>
+								<id>checkout-rhino</id>
+								<phase>generate-test-resources</phase>
+								<goals><goal>exec</goal></goals>
+								<configuration>
+									<executable>git</executable>
+									<workingDirectory>${galtajs.rhino.dir}</workingDirectory>
+									<commandlineArgs>checkout -q ${galtajs.rhino.commit}</commandlineArgs>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+</project>
+

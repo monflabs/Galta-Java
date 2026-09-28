@@ -1,0 +1,9 @@
+# Internal notes and history
+
+The documents below are historical records: design briefs and session logs written while a feature was being built. They are kept for the rationale they contain, but they describe the code as it was at the time. Nothing in them should be taken as current behavior without checking the source; the living references are the other Architecture pages and [Known ECMAScript gaps](/GaltaJS/KnownGaps).
+
+- [Transpiled module live bindings, design brief](/GaltaJS/Architecture/Notes/TranspiledModuleLiveBindingsDesignBrief) - the P1-P4 plan (plus the `resolveExport()` override discovered along the way) that gave transpiled modules spec-shaped import/export live bindings and hoisting. Marked implemented on 2026-08-25/26; the ordering arguments and prerequisites are still accurate to what was built. See [Transpiler](/GaltaJS/Architecture/Transpiler) and [Modules runtime](/GaltaJS/Architecture/ModulesRuntime).
+- [Test262 transpiler parity, session record](/GaltaJS/Architecture/Notes/Test262TranspilerParitySession) - an exhaustive log of the work that drove the transpiler-only test262 filter to zero entries. A changelog, not a specification; for remaining gaps see [Known gaps](/GaltaJS/KnownGaps).
+- [Runtime performance playbook](/GaltaJS/Architecture/Notes/PerformancePlaybook) - the phased plan for interpreter fast paths (scope resolution, slots, inline caches) and a parallel transpiler track. Several phases are implemented (see [Optimizer](/GaltaJS/Architecture/Optimizer) and [Interpreter](/GaltaJS/Architecture/Interpreter)); the document keeps its original numbering, file lists and verification commands, some of which reference paths from an older checkout.
+
+The five attempts at async scheduling that led to the current coroutine design ([Async runtime](/GaltaJS/Architecture/AsyncRuntime)) are recorded in the git history and in the class comments of `rt/executors/JSAsyncExecutor.java`, not in a separate document.

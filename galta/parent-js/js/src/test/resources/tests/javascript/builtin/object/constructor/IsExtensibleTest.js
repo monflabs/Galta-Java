@@ -1,0 +1,10 @@
+assertFalse( Object.isExtensible() )
+assertFalse( Object.isExtensible(null) )
+assertFalse( Object.isExtensible(undefined) )
+assertFalse( Object.isExtensible(true) )
+assertFalse( Object.isExtensible(0) )
+assertFalse( Object.isExtensible(1.1) )
+assertFalse( Object.isExtensible("ABC") )
+
+assertTrue( Object.isExtensible({}) )
+assertTrue( Object.isExtensible([]) )

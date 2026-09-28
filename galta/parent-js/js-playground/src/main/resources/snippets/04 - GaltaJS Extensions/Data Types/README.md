@@ -1,0 +1,3 @@
+# Data Types
+
+GaltaJS has a greater support for JavaTypes including numbers, date, collections...

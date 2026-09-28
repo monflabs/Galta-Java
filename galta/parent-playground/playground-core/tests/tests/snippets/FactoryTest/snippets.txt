@@ -1,0 +1,23 @@
+/
+  README.md: ### Readme .
+  main.js: // Main .
+/A
+  README.md: ### Readme A
+/A/AA
+  README.md: ### Readme AA
+  main.js: // Main AA
+/A/AB
+  README.md: ### Readme AB
+  main.js: // Main AB
+  res1.md: ### RES 1
+  res2.md: ### RES 2
+/A/AB/ABA
+  README.md: ### Readme ABA
+  main.js: // Main ABA
+  res.md: ### RES 1
+/B
+  README.md: ### Readme B
+  main.js: // Main B
+/B/BA
+  README.md: ### Readme BA
+  main.js: // Main BA

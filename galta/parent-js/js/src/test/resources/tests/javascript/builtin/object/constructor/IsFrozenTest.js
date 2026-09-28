@@ -1,0 +1,10 @@
+assertTrue( Object.isFrozen() )
+assertTrue( Object.isFrozen(null) )
+assertTrue( Object.isFrozen(undefined) )
+assertTrue( Object.isFrozen(true) )
+assertTrue( Object.isFrozen(0) )
+assertTrue( Object.isFrozen(1.1) )
+assertTrue( Object.isFrozen("ABC") )
+
+assertFalse( Object.isFrozen({}) )
+assertFalse( Object.isFrozen([]) )

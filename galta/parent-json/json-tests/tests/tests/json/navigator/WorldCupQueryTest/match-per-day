@@ -1,0 +1,191 @@
+[
+  {
+    "date":"2018-06-14",
+    "matches":[
+      "Russia vs Saudi Arabia"
+    ]
+  },
+  {
+    "date":"2018-06-15",
+    "matches":[
+      "Egypt vs Uruguay",
+      "Portugal vs Spain",
+      "Morocco vs Iran"
+    ]
+  },
+  {
+    "date":"2018-06-16",
+    "matches":[
+      "France vs Australia",
+      "Peru vs Denmark",
+      "Argentina vs Iceland",
+      "Croatia vs Nigeria"
+    ]
+  },
+  {
+    "date":"2018-06-17",
+    "matches":[
+      "Brazil vs Switzerland",
+      "Costa Rica vs Serbia",
+      "Germany vs Mexico"
+    ]
+  },
+  {
+    "date":"2018-06-18",
+    "matches":[
+      "Sweden vs South Korea",
+      "Belgium vs Panama",
+      "Tunisia vs England"
+    ]
+  },
+  {
+    "date":"2018-06-19",
+    "matches":[
+      "Poland vs Senegal",
+      "Colombia vs Japan",
+      "Russia vs Egypt"
+    ]
+  },
+  {
+    "date":"2018-06-20",
+    "matches":[
+      "Uruguay vs Saudi Arabia",
+      "Portugal vs Morocco",
+      "Iran vs Spain"
+    ]
+  },
+  {
+    "date":"2018-06-21",
+    "matches":[
+      "France vs Peru",
+      "Denmark vs Australia",
+      "Argentina vs Croatia"
+    ]
+  },
+  {
+    "date":"2018-06-22",
+    "matches":[
+      "Nigeria vs Iceland",
+      "Brazil vs Costa Rica",
+      "Serbia vs Switzerland"
+    ]
+  },
+  {
+    "date":"2018-06-23",
+    "matches":[
+      "Germany vs Sweden",
+      "South Korea vs Mexico",
+      "Belgium vs Tunisia"
+    ]
+  },
+  {
+    "date":"2018-06-24",
+    "matches":[
+      "England vs Panama",
+      "Poland vs Colombia",
+      "Japan vs Senegal"
+    ]
+  },
+  {
+    "date":"2018-06-25",
+    "matches":[
+      "Uruguay vs Russia",
+      "Saudi Arabia vs Egypt",
+      "Iran vs Portugal",
+      "Spain vs Morocco"
+    ]
+  },
+  {
+    "date":"2018-06-26",
+    "matches":[
+      "Denmark vs France",
+      "Australia vs Peru",
+      "Nigeria vs Argentina",
+      "Iceland vs Croatia"
+    ]
+  },
+  {
+    "date":"2018-06-27",
+    "matches":[
+      "Serbia vs Brazil",
+      "Switzerland vs Costa Rica",
+      "South Korea vs Germany",
+      "Mexico vs Sweden"
+    ]
+  },
+  {
+    "date":"2018-06-28",
+    "matches":[
+      "England vs Belgium",
+      "Panama vs Tunisia",
+      "Japan vs Poland",
+      "Senegal vs Colombia"
+    ]
+  },
+  {
+    "date":"2018-06-30",
+    "matches":[
+      "Uruguay vs Portugal",
+      "France vs Argentina"
+    ]
+  },
+  {
+    "date":"2018-07-01",
+    "matches":[
+      "Spain vs Russia",
+      "Croatia vs Denmark"
+    ]
+  },
+  {
+    "date":"2018-07-02",
+    "matches":[
+      "Brazil vs Mexico",
+      "Belgium vs Japan"
+    ]
+  },
+  {
+    "date":"2018-07-03",
+    "matches":[
+      "Sweden vs Switzerland",
+      "Colombia vs England"
+    ]
+  },
+  {
+    "date":"2018-07-06",
+    "matches":[
+      "Uruguay vs France",
+      "Brazil vs Belgium"
+    ]
+  },
+  {
+    "date":"2018-07-07",
+    "matches":[
+      "Russia vs Croatia",
+      "Sweden vs England"
+    ]
+  },
+  {
+    "date":"2018-07-10",
+    "matches":[
+      "France vs Belgium"
+    ]
+  },
+  {
+    "date":"2018-07-11",
+    "matches":[
+      "Croatia vs England"
+    ]
+  },
+  {
+    "date":"2018-07-14",
+    "matches":[
+      "Belgium vs England"
+    ]
+  },
+  {
+    "date":"2018-07-15",
+    "matches":[
+      "France vs Croatia"
+    ]
+  }
+]

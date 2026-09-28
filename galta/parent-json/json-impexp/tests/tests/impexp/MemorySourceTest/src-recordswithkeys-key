@@ -1,0 +1,14 @@
+[
+  {
+    "key":"col1!!k1",
+    "value":"a"
+  },
+  {
+    "key":"col1!!k2",
+    "value":"b"
+  },
+  {
+    "key":"col2!!k1",
+    "value":"c"
+  }
+]

@@ -1,0 +1,8 @@
+ASTProgram: let a
++- ASTVariableDeclScopedLet
+|   +- ASTVariableDecl$Entry: ASTIdentifier: a
+|       +- ASTIdentifier: a
+|       +- ASTLiteral: 3
++- ASTAssign
+    +- ASTIdentifier: a
+    +- ASTLiteral: 44

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(rm -rf parent-js/js/src/test/java/compiled parent-js/js-test-test262/src/test/java/compiled)",
+      "Bash(mvn -q -pl parent-js/js --also-make install -DskipTests)",
+      "Bash(mvn -q -pl parent-js/js-test-test262 test -Dtest=Test262OneTest)",
+      "Bash(echo \"EXIT $?\")",
+      "Bash(xxd)",
+      "Bash(mvn -q -pl parent-js/js test -Dtest=StrictModeExhaustiveStrictTest)",
+      "Bash(mvn -q -pl parent-js/js test -Dtest=AllGaltaJSTests)",
+      "Bash(mvn -q -pl parent-js/js-test-rhino test)",
+      "Bash(awk -F/ '{print $1\"/\"$2}')",
+      "Bash(awk -F/ '{print $1\"/\"$2\"/\"$3}')",
+      "Bash(awk -F/ '{print $4}')",
+      "Bash(awk 'NR==93,NR==2705' src/test/java/test/test262/Test262BaseTest.java)",
+      "Bash(awk 'NR==2716,NR==2740' src/test/java/test/test262/Test262BaseTest.java)"
+    ]
+  }
+}

@@ -1,0 +1,255 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.monflabs.galta</groupId>
+		<artifactId>parent-js</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>js</artifactId>
+	<name>GaltaJS</name>
+	<description>GaltaJS: a JavaScript-inspired scripting engine for the JVM, with an interpreter and a transpiler to Java.</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>json</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>javacompiler</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>test</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>filesystem</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- For comparing with V8 -->
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js-library-v8</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- For comparing with GraalVM -->
+		<!-- https://mvnrepository.com/artifact/org.graalvm.sdk/graal-sdk -->
+		<dependency>
+			<groupId>org.graalvm.sdk</groupId>
+			<artifactId>graal-sdk</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.graalvm.js/js -->
+		<dependency>
+			<groupId>org.graalvm.js</groupId>
+			<artifactId>js</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-clean-plugin</artifactId>
+				<configuration>
+					<filesets>
+						<fileset>
+							<directory>${project.basedir}/src/test/java/compiled</directory>
+						</fileset>
+					</filesets>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<includes>
+						<include>**/AllGaltaJSTests.class</include>
+						<include>**/AllDocExamplesTests.class</include>
+					</includes>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+	            <configuration>
+	                <excludes>
+	                    <exclude>**/compiled/*</exclude>
+	                </excludes>
+	                <!-- Transpiled test output saved under src/test/java/compiled/ for
+	                     inspection only: never compiled by the build itself -->
+	                <testExcludes>
+	                    <testExclude>**/compiled/*</testExclude>
+	                </testExcludes>
+	             </configuration>
+            </plugin>
+            
+<!--           
+			<plugin>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-transpiler-maven</artifactId>
+				<version>${revision}</version>
+				<executions>
+					<execution>
+						<id>generate</id>
+						<goals>
+							<goal>generate-sources</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<sourceDirectory>${basedir}/src/test/resources/tests/galtajs/modules/resources</sourceDirectory>
+					<includes>
+					    <include>**/*.js</include>
+					</includes>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<version>3.6.0</version>
+				<executions>
+					<execution>
+						<id>add-source</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>add-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>
+									${project.build.directory}/generated-sources/js</source>
+							</sources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+-->            
+            
+            <!-- https://stackoverflow.com/questions/14722873/sharing-src-test-classes-between-modules-in-a-multi-module-maven-project --> 
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<executions>
+					<execution>
+						<goals>
+							<goal>test-jar</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- Generates JSParser.java (+ support classes) from
+			     src/main/javacc/.../JSParser.jj into
+			     target/generated-sources/javacc, bound to the standard
+			     generate-sources phase - editing the .jj and running
+			     `mvn install` now regenerates the parser automatically, no
+			     manual step. https://mvnrepository.com/artifact/org.codehaus.mojo/javacc-maven-plugin -->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>javacc-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<goals>
+							<goal>javacc</goal>
+						</goals>
+					</execution>
+				</executions>
+				<dependencies>
+					<!-- Pinned to the exact engine version this grammar has
+					     always been generated with (see monflabs-bom) - the
+					     plugin's own default may differ and could change
+					     generated output subtly. -->
+					<dependency>
+						<groupId>net.java.dev.javacc</groupId>
+						<artifactId>javacc</artifactId>
+						<version>7.0.13</version>
+					</dependency>
+				</dependencies>
+			</plugin>
+
+			<!-- javacc-maven-plugin registers target/generated-sources/javacc
+			     as a compile source root itself, which the Maven CLI honours
+			     automatically - but m2e has no bundled connector for this
+			     plugin, so Eclipse never runs it (or learns about that
+			     folder) on its own, leaving generated types like Token
+			     unresolved in the IDE even though `mvn install` is fine.
+			     build-helper-maven-plugin's add-source goal is one m2e
+			     supports natively, so this registers the same folder
+			     explicitly for Eclipse's benefit (harmless, redundant with
+			     javacc-maven-plugin's own registration, for the CLI build). -->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<version>3.6.0</version>
+				<executions>
+					<execution>
+						<id>add-source-javacc</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>add-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>${project.build.directory}/generated-sources/javacc</source>
+							</sources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- TokenMgrError.java is the ONE javacc-generated support file
+			     GaltaJS hand-customizes (adds errorLine/errorColumn fields
+			     ScriptError.java depends on - see that file's own doc
+			     comment) - kept as a normal, hand-maintained source file in
+			     src/main/java/.../parser/ instead of being regenerated.
+			     javacc-maven-plugin has no per-file exclusion, so it always
+			     emits ITS OWN vanilla TokenMgrError.java alongside
+			     JSParser.java above; left alone, that would collide with
+			     the hand-maintained one as a duplicate class. Deleting the
+			     generated copy here (after javacc's own generate-sources
+			     execution above, before compile) leaves exactly one copy -
+			     the hand-maintained one - for javac to see. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-antrun-plugin</artifactId>
+				<version>3.1.0</version>
+				<executions>
+					<execution>
+						<id>remove-generated-tokenmgrerror</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>run</goal>
+						</goals>
+						<configuration>
+							<target>
+								<delete file="${project.build.directory}/generated-sources/javacc/org/monflabs/galtajs/parser/TokenMgrError.java"/>
+							</target>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

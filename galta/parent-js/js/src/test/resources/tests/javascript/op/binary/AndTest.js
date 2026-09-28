@@ -1,0 +1,12 @@
+assertEquals(false,true && false)
+assertEquals(true,true && true)
+assertEquals(false,false && true)
+assertEquals(false,false && false)
+assertEquals(0,0 && 1)
+assertEquals(0,1 && 0)
+assertEquals(0,0 && 0)
+assertEquals(1,1 && 1)
+
+assertEquals("","" && "")
+assertEquals("","" && "A")
+assertEquals("","A" && "")

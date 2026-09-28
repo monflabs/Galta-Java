@@ -1,0 +1,5668 @@
+/*
+  GaltaJS Parser
+
+  Inspired from
+  		http://svn.dojotoolkit.org/src/trunk/tools/jslinker/src/org/dojo/jsl/parser/EcmaScript.jjt
+        https://github.com/javacc/javacc/blob/master/docs/grammars/EcmaScript.jjt
+        https://github.com/highsource/javascript-codemodel/tree/master/parser/src/main/javacc
+
+		ES 6 grammar
+        https://gist.github.com/rbuckton/0d8c1f1c607f52f5ae37
+*/
+
+options {
+	/*
+	 * Default value is true. If true, all methods and class variables 
+	 * are specified as static in the generated parser and token manager. This allows only 
+	 * one parser object to be present, but it improves the performance of the parser.
+	 */
+	STATIC = false;
+
+	/*
+	 * Default value is false. When set to true, the generated parser 
+	 * uses an input stream object that processes Java Unicode escapes before 
+	 * sending characters to the token manager.
+	 * We set it to false as strings can contain there own escape and we don't want them
+	 * to be processed. 
+	 */
+	JAVA_UNICODE_ESCAPE = false;
+
+	/*
+	 * Default value is false. When set to true, the generated parser 
+	 * uses uses an input stream object that reads Unicode files. By default, ASCII files 
+	 * are assumed. 
+	 */
+	UNICODE_INPUT = true;
+
+	/*
+	 * For debugging
+	 */
+	DEBUG_PARSER = false;
+	DEBUG_TOKEN_MANAGER = false;
+
+	/*
+	 * JDK Version
+	 */
+	//JDK_VERSION = "1.5";
+	
+	//USER_CHAR_STREAM = true;
+
+}
+
+PARSER_BEGIN(JSParser)
+
+
+package org.monflabs.galtajs.parser;
+
+import org.monflabs.util.io.FastStringReader;
+import org.monflabs.galtajs.*;
+import org.monflabs.galtajs.rt.*;
+import org.monflabs.galtajs.rt.util.NumberFormatting;
+import org.monflabs.galtajs.rt.RuntimeUtil.MODE;
+import org.monflabs.galtajs.node.*;
+import org.monflabs.galtajs.node.clazz.*;
+import org.monflabs.galtajs.node.literal.*;
+import org.monflabs.galtajs.node.control.*;
+import org.monflabs.galtajs.node.variable.*;
+import org.monflabs.galtajs.node.debug.*;
+
+
+import java.util.*;
+
+@SuppressWarnings({"unused","null"})
+public class JSParser {
+	// ECMAScript 2023 - Shebang
+	// It is easier to impolement it as this level because of space handling
+    private static final int removeShebang(String s) {
+        if(s.startsWith("#!")) {
+          int len = s.length();
+          int pos = 2;
+          while(pos<len) {
+            char c = s.charAt(pos++);
+            if(c=='\n') {
+              if(pos<len && s.charAt(pos)=='\r') {
+                pos++;
+              }
+              return pos;
+            }
+            if(c=='\r') {
+              if(pos<len && s.charAt(pos)=='\n') {
+                pos++;
+              }
+              return pos;
+            }
+            // Line separator (U+2028) and paragraph separator (U+2029) are
+            // also LineTerminators per the spec, ending the hashbang comment.
+            if(c=='\u2028' || c=='\u2029') {
+              return pos;
+            }
+          }
+          return len;
+        }
+        return 0;
+    }
+
+    // Used by checkSemiColon() to detect a MultiLineComment that spans a
+    // LineTerminator (spec 12.4: such a comment counts as a LineTerminator
+    // for ASI purposes even though its closing "*/" doesn't).
+    private static final boolean containsLineTerminator(String s) {
+        for(int i=0; i<s.length(); i++) {
+            char c = s.charAt(i);
+            if(c=='\n' || c=='\r' || c=='\u2028' || c=='\u2029') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // This avoid an exception to be created when it reaches the EOF
+	// The JavaCharStream.FillBuff() should be modified accordingly
+	static final java.io.IOException EOF_EXCEPTION = new java.io.IOException();  
+	 
+ 	// JSEnvironment used for the compilation
+  	public JSEnvironment env;
+  	public NodeFactory nodeFactory;
+  	// Gates ASTDebugHook insertion (the CDP-oriented instrumentation) - see
+  	// ASTDebugHook's own doc comment.
+  	public boolean debug;
+
+  	// True while parsing directly within a generator's own FormalParameters/
+  	// FunctionBody, where "yield" is the YieldExpression keyword rather than
+  	// a usable identifier. Reset to false when descending into a *nested*
+  	// ordinary (non-generator) function's own name/params/body - per spec,
+  	// FunctionDeclaration/FunctionExpression's own FormalParameters/
+  	// FunctionBody are never parameterized by the enclosing context, only by
+  	// whether that function is itself a generator. Left UNCHANGED when
+  	// descending into an arrow function, since arrows have no own
+  	// [[GeneratorKind]] and inherit the enclosing restriction. Strict-mode
+  	// reserved-ness of "yield" is a separate, still-unhandled gap (the
+  	// parser doesn't track strict-mode-ness at all - see KnownGaps.md).
+  	private boolean yieldReserved = false;
+
+  	// Mirrors yieldReserved's exact save/set/restore structure/rationale
+  	// (see its own comment above), but for "await": UnaryExpression()'s
+  	// "await" alternative (below) is only the actual AwaitExpression
+  	// production when this is true - otherwise "await" falls through to
+  	// being an ordinary identifier (Identifier_Name() already accepts the
+  	// AWAIT token unconditionally as a plain name). Explicitly set FALSE
+  	// only inside a NON-async function/method/arrow/getter/setter's own
+  	// FormalParameters/FunctionBody (and TRUE again inside a nested async
+  	// one) - test262 language/expressions/in/private-field-rhs-await-
+  	// absent.js: "await(null)" inside a non-async static class method must
+  	// be an ordinary function CALL to a same-named outer identifier, not
+  	// the await operator.
+  	//
+  	// Defaults to TRUE (opposite of yieldReserved's FALSE default) - unlike
+  	// "yield", which is NEVER valid outside a generator, GaltaJS treats
+  	// top-level "await" as already allowed everywhere by design (matching
+  	// its "scripting engine for the JVM", not a strict module-vs-script
+  	// distinguishing browser/Node runtime - see AsyncAwait2Test.js's own
+  	// top-level "await runAllTests();"). Confirmed via AllGaltaJSTests: a
+  	// FALSE default broke that pre-existing, intentional top-level-await
+  	// usage - TRUE preserves it while the explicit FALSE at every genuinely
+  	// non-async function boundary still fixes the reported bug.
+  	private boolean awaitReserved = true;
+
+  	// Global import statements used by the compilation
+  	public ArrayList<String> imports = new ArrayList<String>();
+
+  	// Placeholder for error recovery
+  	public ErrorList errorList;
+
+  	public JSParser(JSEnvironment env, String text, boolean debug) {
+  		this(new FastStringReader(text,removeShebang(text)));
+  		this.env = env;
+  		this.nodeFactory = NodeFactory.DEFAULT;
+  		this.debug = debug;
+  	}
+
+  	// Helper when forwarding an exception
+  	private ParseException generateParseException(Throwable t) {
+  	  ParseException e = generateParseException();
+  	  e.initCause(t);
+  	  return e;
+ 	}
+
+ 	// [no LineTerminator here] check for postfix ++/--
+ 	private boolean noLineTerminatorBeforeNextToken() {
+ 	  return noLineTerminatorBefore(1);
+ 	}
+
+ 	// [no LineTerminator here] check between "async" and the following token,
+ 	// e.g. AsyncArrowFunction's "async [no LineTerminator here] ...".
+ 	private boolean noLineTerminatorAfterAsync() {
+ 	  return getToken(1).kind==ASYNC && noLineTerminatorBefore(2);
+ 	}
+
+ 	// True when token `index` could be consumed by Identifier_Name() - i.e.
+ 	// looks like the start of a BindingIdentifier. Used to disambiguate
+ 	// "using"/"await using" (a contextual-keyword declaration form) from
+ 	// "using" used as an ordinary identifier (e.g. "using = 1", "using.foo()",
+ 	// "using;") - a plain expression statement can't have an identifier
+ 	// directly follow another identifier with no operator between them, so
+ 	// checking the NEXT token looks like a binding identifier is enough to
+ 	// tell the two apart without a full syntactic lookahead.
+ 	private boolean looksLikeBindingIdentifier(int index) {
+ 	  int k = getToken(index).kind;
+ 	  return k==IDENTIFIER_NAME || k==GET || k==SET || k==ASYNC || k==AWAIT
+ 	      || k==SYNCHRONIZED || k==USING || k==STATIC || (k==YIELD && !yieldReserved);
+ 	}
+
+ 	// "using [no LineTerminator here] BindingIdentifier"
+ 	private boolean isUsingDeclaration() {
+ 	  return getToken(1).kind==USING && noLineTerminatorBefore(2) && looksLikeBindingIdentifier(2);
+ 	}
+
+ 	// "await [no LineTerminator here] using [no LineTerminator here] BindingIdentifier" -
+ 	// the LineTerminator restriction is spec'd only between "using" and the
+ 	// identifier (matching plain "using"); requiring none between "await" and
+ 	// "using" either is a deliberate, harmless over-restriction (real code
+ 	// never splits "await using" across lines) that keeps this check simple
+ 	// and avoids a separate ASI edge case.
+ 	private boolean isAwaitUsingDeclaration() {
+ 	  return getToken(1).kind==AWAIT && getToken(2).kind==USING
+ 	      && noLineTerminatorBefore(2) && noLineTerminatorBefore(3) && looksLikeBindingIdentifier(3);
+ 	}
+
+ 	// A for-of loop head's own carve-out: "using" is excluded from starting a
+ 	// ForDeclaration when the identifier immediately after it is literally
+ 	// "of" - otherwise "for (using of of items)" would be genuinely
+ 	// ambiguous with "using" as a plain ForBinding identifier followed by
+ 	// the for-of separator "of" (then "of items" as the collection
+ 	// expression). Confirmed against test262's
+ 	// language/statements/using/syntax/using-for-using-of-of.js, which
+ 	// requires the latter reading unconditionally. "await using" has no
+ 	// equivalent ambiguity - there's no reading where "await" alone is the
+ 	// ForBinding and "using" doubles as the for-of separator, since "using"
+ 	// is never literally "of" or "in".
+ 	private boolean isUsingDeclarationForOfHead() {
+ 	  return isUsingDeclaration() && !"of".equals(getToken(2).image);
+ 	}
+
+ 	// "let" starts a LexicalDeclaration only when immediately followed by a
+ 	// BindingIdentifier, "[" (ArrayBindingPattern) or "{" (ObjectBindingPattern) -
+ 	// the spec's "[lookahead ∉ { let [ }]" disambiguation (generalized here to
+ 	// also cover the "{" pattern case, which needs the same treatment).
+ 	// Otherwise "let" is just a plain Identifier: "for (let in obj)",
+ 	// "for (let;;)", "let: 1;" (label), "var let = 2;", "let = 1;" all rely on
+ 	// this. No LineTerminator restriction applies (unlike "using" above) -
+ 	// per spec, a LexicalDeclaration may span a line break after "let".
+ 	private boolean isLetDeclaration() {
+ 	  return getToken(1).kind==LET &&
+ 	      (looksLikeBindingIdentifier(2) || getToken(2).kind==LBRACKET || getToken(2).kind==LBRACE);
+ 	}
+
+ 	// IterationStatement()'s 3-clause-for alternative uses
+ 	// LOOKAHEAD("for" "(" [ForInitialization()] ";"), a full syntactic trial-
+ 	// parse that recursively descends into ForInitialization()'s grammar -
+ 	// including into a nested function/generator body's own statement list.
+ 	// insertSemiColon()/checkSemiColon() (ASI) are JAVACODE productions, which
+ 	// JavaCC's trial-lookahead generator has no way to represent, so it
+ 	// silently omits them from the generated jj_3R_* trial-scan methods -
+ 	// confirmed by grepping the generated JSParser.java: insertSemiColon is
+ 	// never referenced in any jj_3R_* method. This makes the trial's token-
+ 	// consumption count diverge from the real parse specifically when a
+ 	// nested function body's LAST statement relies on ASI via the closing "}"
+ 	// (no explicit ";"), wrongly failing the whole lookahead and misparsing
+ 	// what should be an ordinary 3-clause for-loop (test262
+ 	// language/statements/for/S12.6.3_A2.1.js/S12.6.3_A2.2.js -
+ 	// "for((function(){var x=1})();;){break;}" - and
+ 	// language/statements/let/syntax/let-closure-inside-initialization.js,
+ 	// same shape: a closure literal with no trailing ";" inside the loop
+ 	// head).
+ 	//
+ 	// Fixed by NOT extending the broken JavaCC trial machinery - instead, a
+ 	// hand-written token scan (same style as isLetDeclaration()/
+ 	// isUsingDeclaration() above) answering the ONE question this lookahead
+ 	// actually needs: does a bare, depth-0 ";" appear somewhere in
+ 	// ForInitialization() before the for-loop's own closing ")"? This never
+ 	// invokes any JAVACODE production, so there's no ASI blind spot to hit.
+ 	// Doesn't need to recognize "in"/"of" at all: a for-in/for-of loop head
+ 	// never contains a bare ";" anywhere before its own closing ")" (a real
+ 	// ";" can only appear there inside a NESTED braced body, which stays at
+ 	// depth>0 and is correctly skipped by the depth tracking below) - so
+ 	// "found a depth-0 ';'" and "this is a 3-clause for-loop" are
+ 	// equivalent questions. Tokens 1/2 ("for"/"(") are matched by the
+ 	// syntactic part of this lookahead's own LOOKAHEAD("for" "(", {...})
+ 	// clause, so the scan starts at token 3.
+ 	//
+ 	// A FIRST attempt at this exact scan (same session) treated ONLY LBRACE/
+ 	// RBRACE as depth-affecting and broke language.literals's
+ 	// TemplateStringTest: a template literal interpolation's OPENING "${" is
+ 	// its own dedicated token kind (TEMPLATE_EXPR_START - see its own TOKEN
+ 	// declaration above), NOT a plain LBRACE, but the interpolation's CLOSING
+ 	// "}" IS tokenized as a genuine RBRACE (the lexer's own internal
+ 	// nestedBlocks counter decides what a "}" closes, but either way it's
+ 	// still an RBRACE token). Without counting TEMPLATE_EXPR_START as a
+ 	// depth++ too, the scan's depth went negative at that RBRACE and bailed
+ 	// out early - not just wrong for THAT one for-loop, but corrupting the
+ 	// REAL PARSER's own shared token stream for everything scanned past
+ 	// (this predicate uses getToken(i), not a throwaway token manager - same
+ 	// general hazard computeSoleObjectLiteralProgram()'s own comment already
+ 	// documents, just a different trigger). Fixed by treating
+ 	// TEMPLATE_EXPR_START the same as LBRACE below.
+ 	private boolean isForInitializationSemicolonNext() {
+ 	// MUST independently re-check "for" "(" itself (getToken(1)/getToken(2))
+ 	// before scanning, exactly like the analogous "import" "." ... "("
+ 	// LOOKAHEAD above redundantly re-checks getToken(1).kind==IMPORT - a
+ 	// combined LOOKAHEAD(syntactic, {semantic}) clause's semantic predicate
+ 	// can be evaluated as part of a BROADER speculative lookahead computation
+ 	// (e.g. MainSourceElements()'s own (...)* loop-continuation check, which
+ 	// must determine whether ANY alternative anywhere - including deep
+ 	// inside IterationStatement() - could possibly match) WITHOUT the
+ 	// syntactic "for" "(" prefix having actually matched first. Without this
+ 	// guard, calling getToken(i) from i=3 onward for an input that doesn't
+ 	// even start with "for" scans arbitrary, unrelated later source through
+ 	// the REAL PARSER's shared token stream - confirmed via test262
+ 	// language/statementList/*regexp-literal*.js (a bare "{}/1/;", no "for"
+ 	// anywhere): forced this predicate to lex far enough ahead to disturb
+ 	// the lexer's post-"}" regex/division disambiguation state before
+ 	// Block()'s own token_source.SwitchTo(DEFAULT) call ever got a chance to
+ 	// run - same class of hazard computeSoleObjectLiteralProgram()'s own
+ 	// comment documents for a different reason.
+ 	  if(getToken(1).kind!=FOR || getToken(2).kind!=LPAREN) return false;
+ 	  int depth = 0;
+ 	  for(int i=3; ; i++) {
+ 	    int k = getToken(i).kind;
+ 	    if(k==EOF) return false;
+ 	    if(depth==0 && k==SEMICOLON) return true;
+ 	    if(k==LPAREN || k==LBRACKET || k==LBRACE || k==TEMPLATE_EXPR_START) {
+ 	      depth++;
+ 	    } else if(k==RPAREN || k==RBRACKET || k==RBRACE) {
+ 	      depth--;
+ 	      if(depth<0) return false;
+ 	    }
+ 	  }
+ 	}
+
+
+ 	// ClassElement()'s FieldDefinition alternative has no support at all for
+ 	// the Stage-3+ decorators proposal's "accessor" auto-accessor keyword
+ 	// (`accessor x;` / `accessor #x = 1;`) - test262 grammar-field-accessor.js
+ 	// (both language/statements/class and language/expressions/class) only
+ 	// exercises the SYNTAX (flags:[generated], no runtime assertions - just
+ 	// must not throw a SyntaxError), so this predicate only needs to gate
+ 	// PARSING it, not implement real auto-accessor semantics (no [[Get]]/
+ 	// [[Set]] backing-field wiring - same "narrow, syntax-only" scope as
+ 	// class-static-block-related work elsewhere in this file).
+ 	//
+ 	// "accessor" has no dedicated token kind (unlike "static"/"get"/"set" -
+ 	// see their own < STATIC: "static" > etc. declarations above) - matched by
+ 	// IMAGE against the ordinary IDENTIFIER_NAME token instead, exactly like
+ 	// "of" (for-of's own separator) is handled elsewhere in this file, so
+ 	// nothing here can regress "accessor" used as a perfectly ordinary
+ 	// identifier/property name anywhere else in the language - it only ever
+ 	// becomes special when consumed via this ONE guarded LOOKAHEAD.
+ 	// Mirrors "static"'s own disambiguation (getToken(2).kind!=ASSIGN/
+ 	// SEMICOLON/RBRACE - see ClassElement()'s tstat handling) so `accessor;`/
+ 	// `accessor = 1;` (accessor used AS the field's own name) still parses as
+ 	// that, not as this modifier; the spec's own "accessor [no LineTerminator
+ 	// here] ClassElementName" restriction is enforced via noLineTerminatorBefore.
+ 	private boolean isAccessorFieldModifier() {
+ 	  Token t1 = getToken(1);
+ 	  return t1.kind==IDENTIFIER_NAME && "accessor".equals(t1.image)
+ 	      && noLineTerminatorBefore(2)
+ 	      && getToken(2).kind!=ASSIGN && getToken(2).kind!=SEMICOLON && getToken(2).kind!=RBRACE;
+ 	}
+
+
+ 	// YieldExpression's "yield [no LineTerminator here] * AssignmentExpression" form:
+ 	// true when the token right after "yield" is "*" with no LineTerminator before it
+ 	// (a plain space is fine - only a line break disqualifies the yield* form).
+ 	private boolean isYieldStar() {
+ 	  return getToken(1).kind==STAR && noLineTerminatorBeforeNextToken();
+ 	}
+
+ 	// "continue/break [no LineTerminator here] LabelIdentifier": true only when
+ 	// the next token could actually start a label AND has no LineTerminator
+ 	// before it - a semantic-only LOOKAHEAD would otherwise force JavaCC to
+ 	// commit to Identifier_Name() even when the next token isn't one (e.g.
+ 	// plain "continue;"), causing a spurious parse error.
+ 	private boolean noLineTerminatorBeforeLabel() {
+ 	  int k = getToken(1).kind;
+ 	  return noLineTerminatorBeforeNextToken() &&
+ 	    (k==IDENTIFIER_NAME || k==GET || k==SET || k==ASYNC || k==AWAIT || k==SYNCHRONIZED || k==USING
+ 	      || (k==YIELD && !yieldReserved));
+ 	}
+
+ 	// "return [no LineTerminator here] Expression": true only when the next
+ 	// token isn't one of the statement-boundary tokens ASI already treats
+ 	// specially, and there's no LineTerminator before it. Same reasoning as
+ 	// noLineTerminatorBeforeLabel() above - enumerating Expression()'s full
+ 	// FIRST-set isn't practical, so this checks the (small) exclusion set
+ 	// instead.
+ 	private boolean noLineTerminatorBeforeReturnExpression() {
+ 	  int k = getToken(1).kind;
+ 	  return noLineTerminatorBeforeNextToken() && k!=SEMICOLON && k!=RBRACE && k!=EOF;
+ 	}
+
+ 	// "yield [no LineTerminator here] AssignmentExpression": same exclusion-set
+ 	// reasoning as noLineTerminatorBeforeReturnExpression() above, but with a
+ 	// broader exclusion set - unlike "return", a bare "yield" (no operand) can
+ 	// also appear nested inside a parenthesized expression, array literal,
+ 	// argument list, or ternary, so RPAREN/RBRACKET/COMMA/COLON must also be
+ 	// treated as "no operand follows" here.
+ 	//
+ 	// Hand-written rather than relying on javacc's own generated LOOKAHEAD(2)
+ 	// simulation for "can AssignmentExpression start here": this specific
+ 	// javacc invocation generates a degenerate jj_3_N() body for that check
+ 	// (just `jj_scan_token(0)` - literally "is the next token EOF" - never
+ 	// matching any real operand token), for reasons not fully understood;
+ 	// this explicit check sidesteps that generation defect entirely rather
+ 	// than depending on it.
+ 	private boolean noLineTerminatorBeforeYieldOperand() {
+ 	  int k = getToken(1).kind;
+ 	  return noLineTerminatorBeforeNextToken() && k!=SEMICOLON && k!=RBRACE && k!=RPAREN && k!=RBRACKET && k!=COMMA && k!=COLON && k!=EOF;
+ 	}
+
+ 	// MainSourceElements()'s GaltaJS "bare object literal at top level" extension
+ 	// must only fire when the object-literal-shaped "{...}" is the ENTIRE
+ 	// program/eval'd text - not merely the first "{"-shaped thing seen, since
+ 	// MainSourceElements()'s alternation lives inside a (...)* loop and is
+ 	// otherwise re-tried on every iteration (e.g. the SECOND statement in
+ 	// eval('{}{}'), which must be a real empty Block, not an ObjectLiteral).
+ 	//
+ 	// Precomputed ONCE per MainProgram() call (see computeSoleObjectLiteralProgram()
+ 	// below, invoked from MainProgram() before MainSourceElements() runs) rather
+ 	// than checked via forward token lookahead from the CURRENT parse position.
+ 	// A lookahead that peeks token-by-token past the object literal's closing "}"
+ 	// to confirm EOF follows would force the REAL parser's shared token stream to
+ 	// lex whatever comes right after that "}" (e.g. a following regexp literal's
+ 	// leading "/") using the lexer's default NO_REGEX state - permanently
+ 	// mis-caching it as division BEFORE Block()'s own (correct)
+ 	// token_source.SwitchTo(DEFAULT) ever gets a chance to run for the real,
+ 	// non-object-literal interpretation. Using a throwaway JSParserTokenManager
+ 	// over the same source text - never touching the real parser's token_source/
+ 	// jj_input_stream - avoids that side effect entirely.
+ 	private boolean isSoleTopLevelObjectLiteral() {
+ 	  return isSoleObjectLiteralProgram;
+ 	}
+
+ 	private boolean isSoleObjectLiteralProgram = false;
+
+ 	// Same token vocabulary Identifier_Name() itself accepts (see that production) -
+ 	// used below to mirror the ORIGINAL three lookaheads' narrow shape-recognition
+ 	// ("{" ident ":", "{" string ":", "{" "}") rather than accepting anything that
+ 	// merely has balanced braces. GaltaJS's own ObjectLiteral() grammar is more
+ 	// lenient than strict ECMAScript (e.g. it happily starts parsing "{ function
+ 	// f() {} }" as some kind of property list, only rejecting it later at
+ 	// EVALUATE time with a SyntaxError) - so a full trial-parse-based check
+ 	// (matching ObjectLiteral() then requiring EOF) would wrongly treat a real
+ 	// Block containing a FunctionDeclaration as the sole-object-literal case.
+ 	// Confirmed via test262 language/eval-code/direct/block-decl-onlystrict.js
+ 	// (eval('{ function f() {} }')), which must stay a Block.
+ 	private static boolean isIdentifierNameLikeToken(int kind) {
+ 	  return kind==IDENTIFIER_NAME || kind==GET || kind==SET || kind==ASYNC || kind==AWAIT
+ 	      || kind==SYNCHRONIZED || kind==LET || kind==YIELD || kind==USING || kind==STATIC;
+ 	}
+
+ 	private boolean computeSoleObjectLiteralProgram(String text) {
+ 	  JSParserTokenManager scanTM = new JSParserTokenManager(new SimpleCharStream(new org.monflabs.util.io.FastStringReader(text, removeShebang(text)), 1, 1));
+ 	  Token t1 = scanTM.getNextToken();
+ 	  if (t1.kind != LBRACE) return false;
+ 	  Token t2 = scanTM.getNextToken();
+ 	  int depth;
+ 	  if (t2.kind == RBRACE) {
+ 	    depth = 0;
+ 	  } else if (t2.kind == STRING_LITERAL || isIdentifierNameLikeToken(t2.kind)) {
+ 	    Token t3 = scanTM.getNextToken();
+ 	    if (t3.kind != COLON) return false;
+ 	    depth = 1;
+ 	  } else {
+ 	    return false;
+ 	  }
+ 	  while (depth > 0) {
+ 	    Token t = scanTM.getNextToken();
+ 	    if (t.kind == LBRACE) depth++;
+ 	    else if (t.kind == RBRACE) depth--;
+ 	    else if (t.kind == EOF) return false;
+ 	  }
+ 	  Token last = scanTM.getNextToken();
+ 	  // Tolerate a single trailing ";" before EOF: the decompiled-test-mode pass
+ 	  // (AST -> regenerated JS source -> re-parsed) always appends ";" after an
+ 	  // expression-statement (ASTNode.decompileStatement()'s default), so a bare
+ 	  // object literal's own decompiled-and-reparsed form is "{ ... };", not
+ 	  // "{ ... }" - without this, the round-trip would wrongly demote it to a
+ 	  // Block. Confirmed via AllGaltaJSDecompiledTests / ObjectAsExpressionTest.
+ 	  if (last.kind == SEMICOLON) {
+ 	    last = scanTM.getNextToken();
+ 	  }
+ 	  return last.kind == EOF;
+ 	}
+
+ 	// True if there is no LineTerminator/comment attached as a special token
+ 	// immediately before getToken(index).
+ 	private boolean noLineTerminatorBefore(int index) {
+ 	  Token next = getToken(index);
+ 	  if (next.specialToken != null) {
+ 	    Token specialT = next.specialToken;
+ 	    while (specialT != null) {
+ 	      if (specialT.kind == LINE_TERMINATOR || specialT.kind == SINGLE_LINE_COMMENT) {
+ 	        return false;
+ 	      }
+ 	      specialT = specialT.specialToken;
+ 	    }
+ 	  }
+ 	  return true;
+ 	}
+
+ 	// Helper to check if we have an arrow function pattern: scan for => after balanced parens
+ 	// It allows these use casas:
+   	//  f = (_ = 
+   	//  	  (
+   	//  		function() { throw new Test262Error(); } ()
+   	//        ) 
+   	//  	) => {}
+   	//  ;
+ 	private boolean isArrowFunctionWithParens() {
+ 	  int parenDepth = 0;
+ 	  int i = 1;
+ 	  // Skip optional async and * ("async" only counts here if not separated
+ 	  // from what follows by a LineTerminator, per AsyncArrowHead's grammar restriction)
+ 	  Token t = getToken(i);
+ 	  if (t.kind == ASYNC && noLineTerminatorBefore(i+1)) {
+ 	    i++;
+ 	  }
+ 	  t = getToken(i);
+ 	  if (t.kind == STAR) {
+ 	    i++;
+ 	  }
+ 	  // Expect opening paren
+ 	  t = getToken(i);
+ 	  if (t.kind != LPAREN) return false;
+ 	  i++;
+ 	  parenDepth = 1;
+ 	  // Scan until we find matching closing paren
+ 	  while (parenDepth > 0 && i < 1000) {
+ 	    t = getToken(i++);
+ 	    if (t.kind == LPAREN) {
+ 	      parenDepth++;
+ 	    } else if (t.kind == RPAREN) {
+ 	      parenDepth--;
+ 	    } else if (t.kind == 0) {
+ 	      return false; // EOF
+ 	    }
+ 	  }
+ 	  if (parenDepth != 0) {
+ 	    return false;
+ 	  }
+ 	  // Tolerate an optional TypeScript return-type annotation between the
+ 	  // closing ")" and the arrow itself - "(a: number): string => ..." -
+ 	  // using the same peek-only scanner skipType() itself is built on (see
+ 	  // scanTypeEnd()'s own doc comment). Gated on supportTypeHints(): with
+ 	  // the flag off, a ":" here is never tolerated, byte-for-byte today's
+ 	  // behavior (a genuine ": Type" would simply fail this lookahead, same
+ 	  // as before this method existed).
+ 	  t = getToken(i);
+ 	  if (env.supportTypeHints() && t.kind == COLON) {
+ 	    i = scanTypeEnd(i + 1);
+ 	    t = getToken(i);
+ 	  }
+ 	  // Check if next token is =>
+ 	  return t.kind == FATARROW;
+ 	}
+
+ 	// Semantic lookahead for FunctionArrowHead's plain-identifier form: optional
+ 	// "async" (respecting [no LineTerminator here]), optional "*", an identifier, "=>".
+ 	private boolean isArrowFunctionWithIdentifier() {
+ 	  int i = 1;
+ 	  Token t = getToken(i);
+ 	  if (t.kind == ASYNC && noLineTerminatorBefore(i+1)) {
+ 	    i++;
+ 	  }
+ 	  t = getToken(i);
+ 	  if (t.kind == STAR) {
+ 	    i++;
+ 	  }
+ 	  // "yield" (outside a generator, i.e. !yieldReserved) is a valid
+ 	  // ArrowParameters BindingIdentifier just like any other contextual
+ 	  // keyword - reuse looksLikeBindingIdentifier() (already handles
+ 	  // YIELD/USING/SYNCHRONIZED/etc. consistently for other constructs)
+ 	  // instead of the narrower hand-rolled token-kind list this used to
+ 	  // check, which omitted YIELD entirely and rejected e.g. `yield => 1;`
+ 	  // in sloppy-mode code (test262
+ 	  // arrow-function/syntax/arrowparameters-bindingidentifier-yield.js)
+ 	  // even though Identifier_Name() below already accepts it correctly.
+ 	  if (!looksLikeBindingIdentifier(i)) {
+ 	    return false;
+ 	  }
+ 	  i++;
+ 	  return getToken(i).kind == FATARROW;
+ 	}
+
+ 	// True for the TypeScript-only modifier words "keyof"/"infer"/"readonly" -
+ 	// none of them have a dedicated TOKEN (unlike "typeof", already a real JS
+ 	// operator token reused as-is below), so matched by IMAGE against the
+ 	// ordinary IDENTIFIER_NAME token, exactly like "accessor"
+ 	// (isAccessorFieldModifier() above) or "type"/"interface"/"declare"
+ 	// below - never touches how these words parse as ordinary identifiers
+ 	// anywhere outside a type expression.
+ 	private static boolean isTypeModifierWord(Token t) {
+ 	  return t.kind==IDENTIFIER_NAME
+ 	      && ("keyof".equals(t.image) || "infer".equals(t.image) || "readonly".equals(t.image));
+ 	}
+
+ 	// True when token `i` continues a type expression that is otherwise
+ 	// "complete" at depth 0 - i.e. more type content is expected right after
+ 	// it. Shared by scanTypeEnd()'s own depth-0 stop/continue decision below.
+ 	private static boolean isTypeContinuationToken(Token t) {
+ 	  int k = t.kind;
+ 	  // "=>" is deliberately NOT included here - whether it continues a type
+ 	  // depends on lastCloser (only a function type's own parameter list, a
+ 	  // ")", may precede it), which scanTypeEnd() below checks itself via
+ 	  // its own dedicated isArrowContinuation condition.
+ 	  return k==BIT_OR || k==BIT_AND || k==HOOK || k==COLON || k==DOT || k==EXTENDS || k==TYPEOF
+ 	      || isTypeModifierWord(t);
+ 	}
+
+ 	// Peek-only (uses getToken(i), never consumes/advances the real token
+ 	// stream): returns the 1-based token index of the first token AFTER a
+ 	// single type expression starting at token `start`. Callers only ever
+ 	// invoke this once a leading ":" (or similar) has already been consumed/
+ 	// confirmed, so the type is never empty - the token at `start` always
+ 	// belongs to it.
+ 	//
+ 	// This is a hand-written depth-tracking scanner in the same style as
+ 	// isForInitializationSemicolonNext()/isArrowFunctionWithParens() above -
+ 	// not a real type grammar, since nothing here is ever type-CHECKED (see
+ 	// skipType()'s own doc comment for the full rationale and its
+ 	// documented, narrow edge cases: compound ">"-family tokens like ">>"/
+ 	// ">="/">>="/">>>"/">>>=" the lexer already fuses, and "keyof"/"typeof"/
+ 	// "infer"/"readonly" always being treated as needing an operand).
+ 	//
+ 	// Depth tracks "(","[","{","<" (and TEMPLATE_EXPR_START, matching
+ 	// isForInitializationSemicolonNext()'s own reasoning for why a template
+ 	// literal's "${" must count too) as openers; while depth>0, every token
+ 	// is unconditionally consumed (no stop-check applies inside brackets).
+ 	// At depth 0, scanning stops at the first token that doesn't continue
+ 	// the type - EXCEPT "=>", which continues (a function type's own arrow)
+ 	// only when the token that most recently returned depth to 0 was ")"
+ 	// (the function type's own parameter list) - otherwise "=>" ends the
+ 	// type (e.g. an arrow FUNCTION's own body arrow, immediately following a
+ 	// simple, non-parenthesized return type - see FunctionArrowDeclaration()).
+ 	private int scanTypeEnd(int start) {
+ 	  int depth = 0;
+ 	  boolean expectMore = true;
+ 	  int lastCloser = 0;
+ 	  int i = start;
+ 	  while (true) {
+ 	    Token t = getToken(i);
+ 	    int k = t.kind;
+ 	    if (k == EOF) {
+ 	      return i;
+ 	    }
+ 	    if (depth == 0 && !expectMore) {
+ 	      // Only "[" (an array/tuple suffix, "T[]") and "<" (generic args,
+ 	      // "Foo<T>") can validly open directly onto an already-COMPLETE type
+ 	      // unit with no preceding continuation operator. "(" and "{" (a
+ 	      // function type's own parameter list, an object type literal) are
+ 	      // deliberately NOT included here - unlike "T[]"/"Foo<T>", a type
+ 	      // never legitimately restarts with "(" or "{" except right after a
+ 	      // continuation operator ("|"/"&"/":"/...) or as the type's own
+ 	      // FIRST token, both of which already leave expectMore true, so
+ 	      // they never reach this check at all. Without this narrower set, a
+ 	      // return type immediately followed by "{" (the function's own
+ 	      // body, not an object type literal) is wrongly swallowed as if it
+ 	      // continued into one.
+ 	      boolean isOpener = (k==LBRACKET || k==LT);
+ 	      boolean isArrowContinuation = (k==FATARROW && lastCloser==RPAREN);
+ 	      if (!isOpener && !isTypeContinuationToken(t) && !isArrowContinuation) {
+ 	        return i;
+ 	      }
+ 	    }
+ 	    switch (k) {
+ 	      case LPAREN: case LBRACKET: case LBRACE: case LT: case TEMPLATE_EXPR_START:
+ 	        depth++; expectMore = true; lastCloser = 0; break;
+ 	      case RPAREN: case RBRACKET: case RBRACE: case GT: case GE:
+ 	        depth--; expectMore = false; lastCloser = k; break;
+ 	      case RSHIFT: case RSHIFTASSIGN:
+ 	        depth -= 2; expectMore = false; lastCloser = k; break;
+ 	      case RUNSHIFT: case RUNSHIFTASSIGN:
+ 	        depth -= 3; expectMore = false; lastCloser = k; break;
+ 	      case FATARROW:
+ 	        // Only ever reached here via the isArrowContinuation branch above
+ 	        // (a function type's own "=>") - the return type that must
+ 	        // follow it still needs at least one more token.
+ 	        expectMore = true; lastCloser = 0; break;
+ 	      default:
+ 	        expectMore = isTypeContinuationToken(t);
+ 	        lastCloser = 0;
+ 	        break;
+ 	    }
+ 	    if (depth < 0) {
+ 	      depth = 0;
+ 	    }
+ 	    i++;
+ 	  }
+ 	}
+
+ 	// Peek-only, mirroring scanTypeEnd() above but for a "<...>" type-
+ 	// parameter/argument list specifically: pure bracket balancing, no
+ 	// continuation-operator logic at all - unlike a type expression, nothing
+ 	// that follows a closed generics clause (an "extends"/"implements"
+ 	// clause, a "(" parameter list, a "{" body, ...) is ever part of the
+ 	// generics themselves. `start` must point at the leading "<".
+ 	private int scanTypeParametersEnd(int start) {
+ 	  int depth = 0;
+ 	  int i = start;
+ 	  while (true) {
+ 	    int k = getToken(i).kind;
+ 	    if (k == EOF) {
+ 	      return i;
+ 	    }
+ 	    switch (k) {
+ 	      case LPAREN: case LBRACKET: case LBRACE: case LT: case TEMPLATE_EXPR_START:
+ 	        depth++; break;
+ 	      case RPAREN: case RBRACKET: case RBRACE: case GT: case GE:
+ 	        depth--; break;
+ 	      case RSHIFT: case RSHIFTASSIGN:
+ 	        depth -= 2; break;
+ 	      case RUNSHIFT: case RUNSHIFTASSIGN:
+ 	        depth -= 3; break;
+ 	    }
+ 	    i++;
+ 	    if (depth <= 0) {
+ 	      return i;
+ 	    }
+ 	  }
+ 	}
+
+ 	// True when a ClassElement()/PropertyEntry() method definition's own
+ 	// entry point - "[async] [*] [#]? PropertyName [<TypeParams>]? (" - is
+ 	// ahead, replacing a plain LOOKAHEAD(["async"] ["*"] ["#"] PropertyName()
+ 	// "(") production-reference lookahead: that syntactic form has no way to
+ 	// tolerate an optional generic type-parameter clause between the name
+ 	// and "(" ("map<R>(...)"), since (like skipType() elsewhere) a generic
+ 	// clause is only ever consumed via the JAVACODE skipTypeParameters(),
+ 	// which a production-reference trial parse cannot represent (same
+ 	// documented gap as isForInitializationSemicolonNext()'s own ASI case).
+ 	// A computed name ("[expr]() {}", e.g. "[Symbol.iterator]() {}") is
+ 	// recognized structurally by balancing its own "["/"]" pair - tracking
+ 	// only bracket tokens (not every opener/closer scanTypeEnd() itself
+ 	// tracks) is enough, since a computed key's own AssignmentExpression
+ 	// can never contain an UNbalanced "["/"]" of its own.
+ 	private boolean isMethodEntry() {
+ 	  int i = 1;
+ 	  if (getToken(i).kind == ASYNC && noLineTerminatorBefore(i+1)) {
+ 	    i++;
+ 	  }
+ 	  if (getToken(i).kind == STAR) {
+ 	    i++;
+ 	  }
+ 	  if (getToken(i).kind == HASH) {
+ 	    i++;
+ 	  }
+ 	  // A PropertyEntry() spread ("...expr", e.g. "{ a: 'N', ...obj }") is
+ 	  // never a PropertyName - without this check, the "..." token itself
+ 	  // gets blindly skipped below as if it WERE the (single-token) name,
+ 	  // and a spread of an immediately-invoked/called expression
+ 	  // ("...(() => {...})()") then looks exactly like "name(", a false
+ 	  // positive method match.
+ 	  if (getToken(i).kind == SPREAD) {
+ 	    return false;
+ 	  }
+ 	  // The class body's / object literal's own closing "}" (the loop-exit
+ 	  // check evaluates this predicate too), or any other token that can
+ 	  // never start an element: bail out WITHOUT peeking past it. Peeking
+ 	  // at getToken(2) here would make the REAL parser's shared lexer
+ 	  // tokenize whatever follows the "}" - e.g. a regex literal's leading
+ 	  // "/" - while still in the post-"}" NO_REGEX state, before
+ 	  // Statement()'s own token_source.SwitchTo(DEFAULT) for a class
+ 	  // declaration ever runs (test262 language/statementList/
+ 	  // class-regexp-literal.js: `class C {}/1/;` - same hazard
+ 	  // computeSoleObjectLiteralProgram()'s own comment documents).
+ 	  int nameKind = getToken(i).kind;
+ 	  if (nameKind == RBRACE || nameKind == SEMICOLON || nameKind == COMMA || nameKind == RPAREN || nameKind == EOF) {
+ 	    return false;
+ 	  }
+ 	  if (nameKind == LBRACKET) {
+ 	    int depth = 1;
+ 	    i++;
+ 	    while (depth > 0) {
+ 	      int k = getToken(i).kind;
+ 	      if (k == EOF) {
+ 	        return false;
+ 	      }
+ 	      if (k == LBRACKET) {
+ 	        depth++;
+ 	      } else if (k == RBRACKET) {
+ 	        depth--;
+ 	      }
+ 	      i++;
+ 	    }
+ 	  } else {
+ 	    i++;
+ 	  }
+ 	  if (env.supportTypeHints() && getToken(i).kind == LT) {
+ 	    i = scanTypeParametersEnd(i);
+ 	  }
+ 	  return getToken(i).kind == LPAREN;
+ 	}
+
+ 	// "type [no LineTerminator implied by ASI concerns - see below]
+ 	// BindingIdentifier" - true only when this is genuinely the start of a
+ 	// TypeScript type-alias STATEMENT, not "type" used as a plain
+ 	// identifier ("type = 5;", "type.foo()", "type;"). Neither "type" nor
+ 	// "interface" (isInterfaceStart() below) has a dedicated TOKEN - matched
+ 	// by IMAGE against IDENTIFIER_NAME, exactly like "accessor"/"keyof"/
+ 	// "infer"/"readonly" above, so this never affects how either word parses
+ 	// as an ordinary identifier anywhere else. Gated on supportTypeHints():
+ 	// with the flag off, "type"/"interface" remain plain identifiers
+ 	// unconditionally, byte-for-byte today's behavior.
+ 	private boolean isTypeAliasStart() {
+ 	  Token t1 = getToken(1);
+ 	  return env.supportTypeHints() && t1.kind==IDENTIFIER_NAME && "type".equals(t1.image)
+ 	      && looksLikeBindingIdentifier(2);
+ 	}
+
+ 	// See isTypeAliasStart() above - same shape, for "interface X {...}".
+ 	private boolean isInterfaceStart() {
+ 	  Token t1 = getToken(1);
+ 	  return env.supportTypeHints() && t1.kind==IDENTIFIER_NAME && "interface".equals(t1.image)
+ 	      && looksLikeBindingIdentifier(2);
+ 	}
+
+ 	// "declare" ambient-declaration modifier - true only when immediately
+ 	// followed by one of the statement forms it can legally prefix. Matched
+ 	// by IMAGE, same reasoning as isTypeAliasStart() above; "declare" itself
+ 	// contributes nothing to the resulting AST (see Statement()'s own
+ 	// handling) - it's swallowed and the underlying statement parses
+ 	// exactly as it would without it.
+ 	private boolean isDeclareStart() {
+ 	  Token t1 = getToken(1);
+ 	  if (!(env.supportTypeHints() && t1.kind==IDENTIFIER_NAME && "declare".equals(t1.image))) {
+ 	    return false;
+ 	  }
+ 	  Token t2 = getToken(2);
+ 	  return t2.kind==FUNCTION || t2.kind==CLASS || t2.kind==VAR || t2.kind==LET || t2.kind==CONST
+ 	      || (t2.kind==IDENTIFIER_NAME && ("type".equals(t2.image) || "interface".equals(t2.image)));
+ 	}
+
+ 	// ---------------------------------------------------------------------
+ 	// Type-hint consumption helpers - called ONLY from action blocks
+ 	// ("{ skipTypeAnnotationIfAny(); }"), NEVER referenced as a grammar
+ 	// expansion. The four JAVACODE token-skippers they delegate to
+ 	// (skipType()/skipTypeParameters()/skipInterfaceBody()/
+ 	// skipDeclareSignature(), at the bottom of this file) must not appear
+ 	// in any BNF expansion either, not even inside an optional guarded by a
+ 	// LOOKAHEAD({env.supportTypeHints() ...}) predicate: javacc compiles a
+ 	// JAVACODE reference reached by a SYNTACTIC lookahead trial as
+ 	//     { jj_la = 0; jj_scanpos = jj_lastpos; return false; }
+ 	// - an unconditional "lookahead satisfied, stop scanning" - and does NOT
+ 	// evaluate the guarding semantic predicate at all in that trial. Any
+ 	// production reachable through a syntactic LOOKAHEAD (FunctionDeclaration
+ 	// and ClassDeclaration via a computed class-member name, a for-in/of
+ 	// head's destructuring initializer, ...) was therefore mis-parsed the
+ 	// moment such a clause was added to it, flag on or off (test262
+ 	// language/statements/for-of/dstr/*-init-fn-*.js, class
+ 	// cpn-*-accessors-*-from-function-expression.js). An action block is
+ 	// invisible to trial parses, so the trial simply scans the raw tokens
+ 	// (correct with the flag off; with it on, a type annotation sitting in
+ 	// one of those trial-scanned positions is a documented limitation, not
+ 	// a mis-parse elsewhere).
+ 	// ---------------------------------------------------------------------
+
+ 	// ": Type"
+ 	private void skipTypeAnnotationIfAny() throws ParseException {
+ 	  if(env.supportTypeHints() && getToken(1).kind==COLON) {
+ 	    getNextToken();
+ 	    skipType();
+ 	  }
+ 	}
+
+ 	// "<T, ...>"
+ 	private void skipTypeParametersIfAny() throws ParseException {
+ 	  if(env.supportTypeHints() && getToken(1).kind==LT) {
+ 	    skipTypeParameters();
+ 	  }
+ 	}
+
+ 	// "?" / "?:" optional-member marker, then an optional ": Type" - "?:"
+ 	// lexes as ONE token (ELVIS, GaltaJS's own Elvis operator) when written
+ 	// without a space, the idiomatic TypeScript style.
+ 	private void skipOptionalMarkerAndTypeIfAny() throws ParseException {
+ 	  if(!env.supportTypeHints()) {
+ 	    return;
+ 	  }
+ 	  int k = getToken(1).kind;
+ 	  if(k==ELVIS) {
+ 	    getNextToken();
+ 	    skipType();
+ 	    return;
+ 	  }
+ 	  if(k==HOOK) {
+ 	    getNextToken();
+ 	  }
+ 	  skipTypeAnnotationIfAny();
+ 	}
+
+ 	// "implements A, B<T>" - "implements" has no dedicated TOKEN (matched by
+ 	// image, same reasoning as "type"/"interface"/"declare").
+ 	private void skipImplementsClauseIfAny() throws ParseException {
+ 	  Token t = getToken(1);
+ 	  if(env.supportTypeHints() && t.kind==IDENTIFIER_NAME && "implements".equals(t.image)) {
+ 	    getNextToken();
+ 	    skipType();
+ 	    while(getToken(1).kind==COMMA) {
+ 	      getNextToken();
+ 	      skipType();
+ 	    }
+ 	  }
+ 	}
+
+ 	// "extends A, B<T>" on an interface (an interface may extend several)
+ 	private void skipInterfaceExtendsIfAny() throws ParseException {
+ 	  if(getToken(1).kind==EXTENDS) {
+ 	    getNextToken();
+ 	    skipType();
+ 	    while(getToken(1).kind==COMMA) {
+ 	      getNextToken();
+ 	      skipType();
+ 	    }
+ 	  }
+ 	}
+}
+PARSER_END(JSParser)
+
+
+TOKEN_MGR_DECLS : {
+    // Nested template and blocks
+    private Template template;
+
+ 	private static class Template {
+ 	  Template prev;
+ 	  int nestedBlocks;
+ 	  Template(Template prev) {
+ 	    this.prev = prev;
+ 	  }
+	}
+
+	// Approximate IdentifierPart check (letters/digits/connector-punctuation
+	// per Character.isUnicodeIdentifierPart, plus "_"/"$") - used by the
+	// "*in"/"*instanceof" broadcast-operator tokens' own actions below to
+	// tell an ordinary multiplication whose right operand merely STARTS
+	// WITH "in"/"instanceof" (e.g. "a*index", "n*instantiate") apart from
+	// the real broadcast operator. Deliberately not the grammar's own exact
+	// IDENTIFIER_PART production (astral ID_Continue, ZWNJ/ZWJ, combining
+	// marks) - this only needs to be right for the ordinary ASCII
+	// identifiers such a collision can realistically involve.
+	private static boolean isBroadcastOpIdentifierPart(char c) {
+		return c=='_' || c=='$' || Character.isUnicodeIdentifierPart(c);
+	}
+}
+
+
+/*****************************************
+ * LEXICAL & REGEXP GRAMMARS STARTS HERE *
+ *****************************************/ 
+
+/* Section 7.2 : White Space */
+
+<DEFAULT, NO_REGEX>
+SPECIAL_TOKEN: { 
+   <WHITE_SPACE: <TAB> | <VT> | <FAKEVT> | <FF> | <SP> | <NBSP> | <BOM> | <USP>>
+ | < #TAB: "\u0009" | "\t" > /* TAB */
+ | < #VT: "\u000B" > /* Vertical Tab */
+   /* In JavaCC, you cannot use the escape sequence \v directly because JavaCC is based on Java, and Java itself does not recognize \v
+      as a valid escape sequence for a vertical tab.
+      #VT catches the actual vertical tab character, while #FAKE_VTAB matches the string \v. Note the double backslashes (\\v),
+      which are necessary because in Java strings, the backslash itself must be escaped. */
+ | < #FAKEVT: "\\v" > /* Fake Vertical Tab */
+ | < #FF: "\u000C" | "\f"> /* Form Feed */
+ | < #SP: "\u0020" | " " > /* Space */
+ | < #NBSP: "\u00A0" > /* No-break space */
+ | < #BOM: "\uFEFF" > /* BOM signature */
+ | < #USP: /* Other Unicode space separator */
+		["\u1680"] 
+	|	["\u2000"] 
+	|	["\u2001"] 
+	|	["\u2002"] 
+	|	["\u2003"] 
+	|	["\u2004"] 
+	|	["\u2005"] 
+	|	["\u2006"] 
+	|	["\u2007"]
+	|	["\u2008"] 
+	|	["\u2009"] 
+	|	["\u200A"] 
+	|	["\u202F"] 
+	|	["\u205F"] 
+	|	["\u3000"]
+   >
+}
+
+
+/* Section 7.3 : Line Terminators */
+
+<DEFAULT, NO_REGEX>
+SPECIAL_TOKEN: {
+   <LINE_TERMINATOR: <LF> | <CR> (<LF>)? | <LS> | <PS> >
+ | < #LF: "\n" > /* Line Feed */
+ | < #CR: "\r" > /* Carriage Return */
+ | < #LS: "\u2028" > /* Line separator */
+ | < #PS: "\u2029" > /* Paragraph separator */
+   /* Annex B.1.3 SingleLineHTMLCloseComment: "-->" only starts a comment
+      when it is the first non-whitespace thing since a real LineTerminator
+      (e.g. test262 annexB/built-ins/Function/createdynfn-html-close-comment-*).
+      Matched here as one SPECIAL_TOKEN alternative - starting with the same
+      LineTerminator chars as the plain LINE_TERMINATOR rule above - so
+      JavaCC's maximal munch naturally prefers this longer match only when
+      "-->" actually follows, and otherwise falls back to LINE_TERMINATOR/
+      WHITE_SPACE as usual. The trailing LineTerminator is deliberately left
+      unconsumed so ASI (checkSemiColon()) still sees a normal LINE_TERMINATOR
+      special token right after the comment.
+    */
+ | <HTML_CLOSE_COMMENT: (<LF> | <CR> (<LF>)? | <LS> | <PS>) (<WHITE_SPACE>)* "-->" (~["\n","\r","\u2028","\u2029"])* >
+}
+
+
+/* Comments */
+/*
+  Note: there is a weird issue with single line comment when there are on the last line
+  and without any content (just empty) and no cr/lr. In short, // are the last 2 characters
+  in the script. This leads to an error as it at least need one character so we push
+  it with input_stream.backup(1)
+*/
+<DEFAULT, NO_REGEX>
+MORE: {
+   "//" { input_stream.backup(1); } : IN_SINGLE_LINE_COMMENT
+ | "/*" : IN_MULTI_LINE_COMMENT
+   /* Annex B.1.3 SingleLineHTMLOpenComment: "<!--" always starts a comment
+      to end-of-line, unconditionally (no preceding LineTerminator needed) -
+      test262 annexB/built-ins/Function/createdynfn-html-open-comment-*. */
+ | "<!--" : IN_SINGLE_LINE_COMMENT
+}
+
+<IN_SINGLE_LINE_COMMENT>
+SPECIAL_TOKEN: {
+   <SINGLE_LINE_COMMENT: (~["\n","\r","\u2028","\u2029"])* ("\n"|"\r"|"\r\n")? > : DEFAULT
+}
+
+/*
+<DEFAULT, NO_REGEX>
+MORE: {
+   "/*" : IN_MULTI_LINE_COMMENT
+}
+
+SPECIAL_TOKEN: {
+   <SINGLE_LINE_COMMENT: (~["\n","\r"])* ("\n"|"\r")? > : DEFAULT
+}
+*/
+
+<IN_MULTI_LINE_COMMENT>
+SPECIAL_TOKEN: {
+   <MULTI_LINE_COMMENT: "*/" > : DEFAULT
+}
+
+<IN_SINGLE_LINE_COMMENT,IN_MULTI_LINE_COMMENT>
+MORE: {
+   < ~[] >
+}
+
+
+/* Section 7.5.1: Reserved Words */
+<DEFAULT, NO_REGEX>
+TOKEN: {
+  /*  < AS: "as" > : DEFAULT  */
+    < BREAK: "break" > : DEFAULT
+  | < CASE: "case" > : DEFAULT
+  | < CATCH: "catch" > : DEFAULT
+  | < CONST: "const" > : DEFAULT
+  | < CONTINUE: "continue" > : DEFAULT
+  | < DEBUGGER: "debugger"> : DEFAULT
+  | < DELETE: "delete"> : DEFAULT
+  | < _DEFAULT: "default" > : DEFAULT
+  | < DO: "do" > : DEFAULT
+  | < ELSE: "else" > : DEFAULT
+  | < EXPORT: "export" > : DEFAULT
+  | < FINALLY: "finally" > : DEFAULT
+  | < FOR: "for" > : DEFAULT
+  /*| < FROM: "from" > : DEFAULT*/
+  | < FUNCTION: "function" > : DEFAULT
+  | < GET: "get" > : DEFAULT
+  | < IF: "if" > : DEFAULT
+  | < IMPORT: "import" > : DEFAULT
+  | < IN: "in" > : DEFAULT
+  | < INSTANCE_OF: "instanceof" > : DEFAULT
+  | < INSTANCE_OFALL: "*instanceof" > {
+	  // GaltaJS's broadcast "instanceof" operator (sequence extension) is
+	  // written with NO space between "*" and "instanceof" - which makes it
+	  // lexically ambiguous with an ordinary multiplication whose right
+	  // operand identifier merely STARTS WITH "instanceof" (no space
+	  // either). JavaCC's maximal munch always prefers this longer literal
+	  // token over the 1-char STAR token regardless of what identifier
+	  // characters follow, silently truncating e.g. "n*instanceofFoo" into
+	  // "*instanceof" + a mangled "Foo" identifier. If an identifier-part
+	  // character immediately follows, this is ordinary multiplication -
+	  // back up past "instanceof" (and the peeked char) and re-report just
+	  // "*" (STAR); see INALL below for the identical, more commonly hit
+	  // case (test262 language/statements/for/S12.6.3_A11*/A12* etc., via
+	  // identifiers like "index_n").
+	  try {
+		  char c = input_stream.readChar();
+		  if (isBroadcastOpIdentifierPart(c)) {
+			  input_stream.backup("instanceof".length()+1);
+			  matchedToken.kind = STAR;
+			  matchedToken.image = "*";
+			  matchedToken.endLine = matchedToken.beginLine;
+			  matchedToken.endColumn = matchedToken.beginColumn;
+		  } else {
+			  input_stream.backup(1);
+		  }
+	  } catch (java.io.IOException e) {
+		  // EOF right after "*instanceof" - nothing more to check.
+	  }
+  } : DEFAULT
+  | < LET: "let" > : DEFAULT
+  | < NEW: "new" > : DEFAULT
+  | < RETURN: "return" > : DEFAULT
+  | < SET: "set" > : DEFAULT
+  | < SWITCH: "switch" > : DEFAULT
+  | < SYNCHRONIZED: "synchronized" > : DEFAULT
+  | < THIS: "this" > : NO_REGEX
+  | < THROW: "throw" > : DEFAULT
+  | < TRY: "try" > : DEFAULT
+  | < TYPEOF: "typeof"> : DEFAULT
+  | < VAR: "var"> : DEFAULT
+  | < VOID: "void"> : DEFAULT
+  | < WHILE: "while" > : DEFAULT
+  | < WITH: "with" > : DEFAULT
+  /* extra keyword */
+  | < ASYNC: "async" > : DEFAULT
+  | < AWAIT: "await" > : DEFAULT
+  | < CLASS: "class" > : DEFAULT
+  | < EXTENDS: "extends" > : DEFAULT
+  | < ENUM: "enum" > : DEFAULT
+  | < SUPER: "super" > : DEFAULT
+  | < STATIC: "static" > : DEFAULT
+  | < YIELD: "yield" > : DEFAULT
+  | < USING: "using" > : DEFAULT
+ }
+
+
+/* Section 7.6: Identifiers */
+/* Moved down to come after the literals so literals have the priority */
+/* Ex: null, true, false, ... */
+
+
+/* Section 7.7: Punctuators */
+<DEFAULT, NO_REGEX>
+TOKEN :
+{
+/*  
+	< LBRACE: "{" > : DEFAULT
+|	< RBRACE: "}" > : NO_REGEX 
+*/
+	< LBRACE: "{" > {
+	  	if(template!=null) {
+	  	    template.nestedBlocks++;
+	 	}
+	  } : DEFAULT
+|   < RBRACE: "}" > { 
+        if (template!=null) {
+            if(template.nestedBlocks >0) { 
+                template.nestedBlocks--;
+                SwitchTo(NO_REGEX);
+            } else {
+               SwitchTo(IN_TEMPLATE);
+          	}
+        } else {
+            SwitchTo(NO_REGEX);
+        }
+    }   
+|   < LPAREN: "(" > : DEFAULT
+|	< RPAREN: ")" > : NO_REGEX
+|	< LBRACKET: "[" > : DEFAULT
+|	< RBRACKET: "]" > : NO_REGEX
+|	< DOT: "." > : DEFAULT
+|	< HASH: "#" > : DEFAULT
+|	< AT: "@" > : DEFAULT
+|	< SEMICOLON: ";" > : DEFAULT
+|	< COMMA: "," > : DEFAULT
+|	< LT: "<" > : DEFAULT
+|	< GT: ">" > : DEFAULT
+|	< LE: "<=" > : DEFAULT
+|	< GE: ">=" > : DEFAULT
+|	< EQ: "==" > : DEFAULT
+|	< NE: "!=" > : DEFAULT
+|	< SEQ: "===" >  : DEFAULT /* Strict Equals Operator */
+|	< SNEQ: "!==" >	 : DEFAULT /* Strict Does-not-equal Operator */
+|	< PLUS: "+" > : DEFAULT
+|	< MINUS: "-" > : DEFAULT
+|	< STAR: "*" > : DEFAULT
+|	< POWER: "**" > : DEFAULT
+|	< REM: "%" > : DEFAULT
+|	< INCR: "++" > : NO_REGEX
+|	< DECR: "--" > : NO_REGEX
+|	< LSHIFT: "<<" > : DEFAULT
+|	< RSHIFT: ">>" > : DEFAULT
+|	< RUNSHIFT: ">>>" >  : DEFAULT /* Unsigned Right Shift Operator */
+|	< BIT_AND: "&" > : DEFAULT
+|	< BIT_OR: "|" > : DEFAULT
+|	< XOR: "^" > : DEFAULT
+|	< BANG: "!" > : DEFAULT
+|	< TILDE: "~" > : NO_REGEX
+|	< SC_AND: "&&" > : DEFAULT
+|	< SC_OR: "||" > : DEFAULT
+|	< HOOK: "?" > : DEFAULT
+|	< COLON: ":" > : DEFAULT
+|	< ASSIGN: "=" > : DEFAULT
+|	< PLUSASSIGN: "+=" > : DEFAULT
+|	< MINUSASSIGN: "-=" > : DEFAULT
+|	< STARASSIGN: "*=" > : DEFAULT
+|	< POWERASSIGN: "**=" > : DEFAULT
+|	< REMASSIGN: "%=" > : DEFAULT
+|	< BITANDASSIGN: "&=" > : DEFAULT
+|	< BITORASSIGN: "|=" > : DEFAULT
+|	< XORASSIGN: "^=" > : DEFAULT
+|	< ANDASSIGN: "&&=" > : DEFAULT
+|	< ORASSIGN: "||=" > : DEFAULT
+|	< LSHIFTASSIGN: "<<=" > : DEFAULT
+|	< RSHIFTASSIGN: ">>=" > : DEFAULT
+|	< RUNSHIFTASSIGN: ">>>=" > : DEFAULT
+|	< NULLCOALESCINGASSIGN: "??=" > : DEFAULT
+
+	/* Extended List comparison operators */
+|	< LTALL: "*<" > : DEFAULT
+|	< GTALL: "*>" > : DEFAULT
+|	< LEALL: "*<=" > : DEFAULT
+|	< GEALL: "*>=" > : DEFAULT
+|	< EQALL: "*==" > : DEFAULT
+|	< NEALL: "*!=" > : DEFAULT
+|	< SEQALL: "*===" >  : DEFAULT /* Strict Equals Operator */
+|	< SNEQALL: "*!==" >	 : DEFAULT /* Strict Does-not-equal Operator */
+|	< INALL: "*in" > {
+	  // "*in" is GaltaJS's broadcast "in" operator (sequence extension),
+	  // written with NO space between "*" and "in" - but that's lexically
+	  // ambiguous with an ordinary multiplication whose right operand
+	  // identifier simply STARTS WITH "in" (e.g. "a*index", "n*insert"),
+	  // also with no space. JavaCC's maximal munch always prefers this
+	  // 3-char literal token over the 1-char STAR token, regardless of what
+	  // identifier characters follow, silently splitting e.g. "a*index_n"
+	  // into "*in" + a truncated "dex_n" identifier - confirmed via test262
+	  // language/statements/for/S12.6.3_A11.1_T2.js and siblings (embedded
+	  // "index"/"index_n" loop variables). If an identifier-part character
+	  // immediately follows, this is ordinary multiplication instead - back
+	  // up past "in" (and the peeked char) and re-report just "*" (STAR).
+	  try {
+		  char c = input_stream.readChar();
+		  if (isBroadcastOpIdentifierPart(c)) {
+			  input_stream.backup(3);
+			  matchedToken.kind = STAR;
+			  matchedToken.image = "*";
+			  matchedToken.endLine = matchedToken.beginLine;
+			  matchedToken.endColumn = matchedToken.beginColumn;
+		  } else {
+			  input_stream.backup(1);
+		  }
+	  } catch (java.io.IOException e) {
+		  // EOF right after "*in" - nothing more to check.
+	  }
+  } : DEFAULT
+	
+	/* JSON Path Extensions */
+| 	< DDOT: ".." > : DEFAULT
+|	< FILTEROPEN: "[?" > : DEFAULT
+|	< MAPEXPR: ".(" > : DEFAULT
+
+	/* ES6, Typescript and beyond, Extensions */
+| 	< SPREAD: "..." > : DEFAULT
+| 	< FATARROW: "=>" > : DEFAULT
+|	< NULLDOT: "?." > {
+	  // "?." (optional chaining) must NOT match when immediately followed by
+	  // a decimal digit (spec's OptionalChainingPunctuator lookahead
+	  // exclusion) - that's ambiguous with a ternary's "?" followed by a
+	  // ".NNN" decimal literal (e.g. "true ?.30 : false" must lex as "true"
+	  // "?" ".30" ":" "false", not "true" "?." "30" ":" "false"). If a digit
+	  // immediately follows, back up past both "?." and the peeked digit and
+	  // re-report just "?" (HOOK) instead - mirrors the identical INALL/STAR
+	  // backup pattern above (test262 language/expressions/optional-chaining/
+	  // punctuator-decimal-lookahead.js).
+	  try {
+		  char c = input_stream.readChar();
+		  if (c >= '0' && c <= '9') {
+			  input_stream.backup(2);
+			  matchedToken.kind = HOOK;
+			  matchedToken.image = "?";
+			  matchedToken.endLine = matchedToken.beginLine;
+			  matchedToken.endColumn = matchedToken.beginColumn;
+		  } else {
+			  input_stream.backup(1);
+		  }
+	  } catch (java.io.IOException e) {
+		  // EOF right after "?." - nothing more to check.
+	  }
+  } : DEFAULT
+|	< NULLCOALESCING: "??" > : DEFAULT
+| 	< PIPELINE: "|>" > : DEFAULT
+
+	/* ECMA 2023 */
+/* Done outside of the grammar
+|   < SHEBANG: "#!" (~["\n","\r"])* ("\n"|"\r"|"\r\n")? > : DEFAULT
+*/ 
+	/* GaltaJS Extension */
+| 	< ELVIS: "?:" > : DEFAULT
+}
+
+/* Very strange: if we use the literal "/=" in the grammar it fails */
+/* we should use the label declared here - maybe because the lexical state is limited?*/
+<NO_REGEX>
+TOKEN: {
+	<SLASHASSIGN: "/="> : DEFAULT
+|	<SLASH:	"/"> : DEFAULT
+}
+
+
+
+/* Section 7.8: Literals */
+
+
+/* Section 7.8.3: Numeric Literals */
+<DEFAULT, NO_REGEX>
+TOKEN: {
+  	< DEC_INTEGER_LITERAL: <DECIMAL_DIGITS_SEP> (<INTEGER_SUFFIX>)?> : NO_REGEX
+|   < HEX_INTEGER_LITERAL: ("0x"|"0X") (["0"-"9","a"-"f","A"-"F","_"])+ (<INTEGER_SUFFIX>)?> : NO_REGEX
+|   < OCT_INTEGER_LITERAL: ("0o"|"0O") (["0"-"7","_"])+ (<INTEGER_SUFFIX>)?> : NO_REGEX
+|   < BIN_INTEGER_LITERAL: ("0b"|"0B") (["0"-"1","_"])+ (<INTEGER_SUFFIX>)?> : NO_REGEX
+/*|     < OCT_INTEGER_LITERAL: "0" (["0"-"7"])* (<INTEGER_SUFFIX>)?> : NO_REGEX*/
+|  	< #INTEGER_SUFFIX: ["I","i","L","l","N","n"]>
+
+| 	< DECIMAL_LITERAL :
+		<DECIMAL_DIGITS_SEP> "." (<DECIMAL_DIGITS_SEP>)? (<EXPONENT_PART>)? (<DECIMAL_SUFFIX>)?
+	|	"." <DECIMAL_DIGITS_SEP> (<EXPONENT_PART>)? (<DECIMAL_SUFFIX>)?
+	|		<DECIMAL_DIGITS_SEP> (<EXPONENT_PART>)? (<DECIMAL_SUFFIX>)?
+	> : NO_REGEX
+|	< #EXPONENT_PART: ("e" | "E") (["+","-"])? <DECIMAL_DIGITS_SEP> >
+|  	< #DECIMAL_SUFFIX: ["F","f","d","D","m","M"]> /* M is inspired by C# */
+|  	< #DECIMAL_DIGITS_SEP: (<DECIMAL_DIGIT>) (<DECIMAL_DIGIT_SEP>)* >
+|	< #DECIMAL_DIGIT: ["0"-"9"] >
+|	< #DECIMAL_DIGIT_SEP: ["0"-"9","_"] >
+}
+
+
+
+/* Section 7.8.1: NULL Literals */
+<DEFAULT, NO_REGEX>
+TOKEN: { 
+	< NULL_LITERAL: "null" > : NO_REGEX
+}
+
+/* Section 7.8.2: Boolean Literals */
+<DEFAULT, NO_REGEX>
+TOKEN: { 
+	< BOOLEAN_LITERAL: "true" | "false" > : NO_REGEX
+}
+
+
+/* Section 7.8.4: String Literals */
+<DEFAULT, NO_REGEX>
+TOKEN: {
+	< STRING_LITERAL:
+		  "\"" (<DOUBLE_STRING_CHARACTER>)* "\""
+		| "'" (<SINGLE_STRING_CHARACTER>)* "'"
+	> : NO_REGEX
+|	< #DOUBLE_STRING_CHARACTER:
+		  <LINE_CONTINUATION> 
+		| <ESCAPE_SEQUENCE>
+		| (~["\"","\\","\n","\r"])* 
+	>
+|   < TEMPLATE_START: "`" > { this.template=new Template(template); } : IN_TEMPLATE
+|	< #SINGLE_STRING_CHARACTER:
+		  <LINE_CONTINUATION> 
+		| <ESCAPE_SEQUENCE>
+		| (~["'","\\","\n","\r"])
+	> 
+|	< #LINE_CONTINUATION:
+		"\\" ( "\r\n" | "\n\r" | "\r" | "\n" | "\u2028" |"\u2029")
+	>
+|	< #ESCAPE_SEQUENCE: "\\" 
+	  (	    
+		  <CHARACTER_ESCAPE_SEQUENCE>
+		| "0" 
+		| <HEX_ESCAPE_SEQUENCE>
+		| <UNICODE_ESCAPE_SEQUENCE>
+	 )
+	>
+|	< #CHARACTER_ESCAPE_SEQUENCE:
+		<SINGLE_ESCAPE_CHARACTER> | <NON_ESCAPE_CHARACTER>
+	>
+| 	< #HEX_ESCAPE_SEQUENCE: "x" <HEX_DIGIT> <HEX_DIGIT> >
+| 	< #HEX_DIGIT: ["0"-"9","a"-"f","A"-"F"] >
+| 	< #UNICODE_ESCAPE_SEQUENCE: "u" ( <HEX_DIGIT> <HEX_DIGIT> <HEX_DIGIT> <HEX_DIGIT> | "{" (<HEX_DIGIT>)+ "}" ) >
+|	< #SINGLE_ESCAPE_CHARACTER: ["'" , "\"", "`" , "\\" , "b" , "f" , "n" , "r" , "t" , "v"] >
+|	< #NON_ESCAPE_CHARACTER: 
+		~["\n","\r","\u2028","\u2029"]
+	| 
+		~["'" , "\"" , "`" , "\\" , "b" , "f" , "n" , "r" , "t" , "v", "x", "u"]
+	| 
+		~["0"-"9"]
+	>
+}
+
+<IN_TEMPLATE>
+TOKEN: {
+    < TEMPLATE_END: "`" > { this.template=template.prev; } : DEFAULT
+|   < TEMPLATE_EXPR_START: "${" >  { this.template.nestedBlocks=0; } : DEFAULT
+|   < TEMPLATE_DOLLAR_NOT_LBRACE: "$" >
+|   < TEMPLATE_CHARS: ( ~["`", "$", "\\"] | <TEMPLATE_ESCAPE> )+ >
+/* We could factor this with strings */
+|	< #TEMPLATE_ESCAPE: "\\" 
+	  (	    
+		  <TEMPLATE_CHARACTER_ESCAPE_SEQUENCE>
+		| "0" 
+		| <TEMPLATE_HEX_ESCAPE_SEQUENCE>
+		| <TEMPLATE_UNICODE_ESCAPE_SEQUENCE>
+	 )
+	>
+|	< #TEMPLATE_CHARACTER_ESCAPE_SEQUENCE:
+		<TEMPLATE_SINGLE_ESCAPE_CHARACTER> | <TEMPLATE_NON_ESCAPE_CHARACTER>
+	>
+| 	< #TEMPLATE_HEX_ESCAPE_SEQUENCE: "x" <TEMPLATE_HEX_DIGIT> <TEMPLATE_HEX_DIGIT> >
+| 	< #TEMPLATE_HEX_DIGIT: ["0"-"9","a"-"f","A"-"F"] >
+| 	< #TEMPLATE_UNICODE_ESCAPE_SEQUENCE: "u" <HEX_DIGIT> <HEX_DIGIT> <HEX_DIGIT> <HEX_DIGIT> >
+|	< #TEMPLATE_SINGLE_ESCAPE_CHARACTER: ["'" , "\"", "`" , "\\" , "b" , "f" , "n" , "r" , "t" , "v"] >
+|	< #TEMPLATE_NON_ESCAPE_CHARACTER: 
+		~["\n","\r","\u2028","\u2029"]
+	| 
+		~["'" , "\"" , "`" , "\\" , "b" , "f" , "n" , "r" , "t" , "v", "x", "u"]
+	| 
+		~["0"-"9"]
+	>
+
+}
+
+
+/* Section 7.8.5: Regular Expression Literals */
+
+<DEFAULT>
+TOKEN: {
+	<REGULAR_EXPRESSION_LITERAL: "/" <REGULAR_EXPRESSION_BODY> "/" ( <IDENTIFIER_PART> ) *> : NO_REGEX
+|	<#REGULAR_EXPRESSION_BODY: <REGULAR_EXPRESSION_FIRST_CHAR> ( <REGULAR_EXPRESSION_CHAR> ) *>
+|	<#REGULAR_EXPRESSION_CHAR:
+    	~[ "\r" , "\n" , "\u2028" , "\u2029", "\\", "/", "[" ]
+	|	<REGULAR_EXPRESSION_BACKSLASH_SEQUENCE>
+	|	<REGULAR_EXPRESSION_CLASS>
+	>
+|	<#REGULAR_EXPRESSION_FIRST_CHAR: 
+		~[ "\r" , "\n" , "\u2028" , "\u2029", "*", "\\", "/", "[" ]
+	|	<REGULAR_EXPRESSION_BACKSLASH_SEQUENCE>
+	|	<REGULAR_EXPRESSION_CLASS>
+	>
+|	<#REGULAR_EXPRESSION_BACKSLASH_SEQUENCE:
+		"\\" ~[ "\r" , "\n" , "\u2028" , "\u2029" ]
+	>
+|	<#REGULAR_EXPRESSION_CLASS:
+		"["
+		(
+			<REGULAR_EXPRESSION_CLASS_CHAR>
+		) *
+		"]"
+	>
+|	<#REGULAR_EXPRESSION_CLASS_CHAR:
+		~[ "\r" , "\n" , "\u2028" , "\u2029", "\\", "]" ]
+	|	<REGULAR_EXPRESSION_BACKSLASH_SEQUENCE>
+	>
+}
+
+/* Section 7.6: Identifiers */
+/* Moved here after the literals */
+<DEFAULT, NO_REGEX>
+TOKEN:
+{
+	< IDENTIFIER_NAME: <IDENTIFIER_START> (<IDENTIFIER_PART>)* > : NO_REGEX
+|	< #IDENTIFIER_START:
+	  <UNICODE_LETTER>
+	| "\\" <UNICODE_ESCAPE_SEQUENCE>
+	| <DOLLAR_SIGN>
+	| <UNDER_SCORE>
+	| <SUPPLEMENTARY_IDENTIFIER_CHAR>
+	>
+| 	< #IDENTIFIER_PART:
+	  <IDENTIFIER_START>
+	| <UNICODE_DIGIT>
+	| <UNICODE_COMBINING_MARK>
+	| <UNICODE_CONNECTOR_PUNCTUATION>
+	| <UNICODE_ID_CONTINUE_ONLY>
+	| <ZWNJ>
+	| <ZWJ>
+	>
+	// Astral-plane (beyond U+FFFF) ID_Start/ID_Continue characters are
+	// surrogate pairs in UTF-16; not validated per-codepoint (unlike the
+	// BMP ranges below, which are generated from
+	// Character.isUnicodeIdentifierStart/Part), so this is permissive:
+	// any well-formed surrogate pair is accepted as an identifier
+	// character. Real code only uses assigned, letter-like astral
+	// characters here, so this trades a small amount of over-acceptance
+	// for avoiding an enormous per-codepoint surrogate-pair table.
+|	< #SUPPLEMENTARY_IDENTIFIER_CHAR: ["\uD800"-"\uDBFF"] ["\uDC00"-"\uDFFF"] >
+|	< #DOLLAR_SIGN: "$" > /* GaltaJS extension */
+|  	< #UNDER_SCORE: "_" >
+|	< #UNICODE_LETTER: 
+		  ["\u0041"-"\u005A"]
+		| ["\u0061"-"\u007A"]
+		| ["\u00AA"]
+		| ["\u00B5"]
+		| ["\u00BA"]
+		| ["\u00C0"-"\u00D6"]
+		| ["\u00D8"-"\u00F6"]
+		| ["\u00F8"-"\u02C1"]
+		| ["\u02C6"-"\u02D1"]
+		| ["\u02E0"-"\u02E4"]
+		| ["\u02EC"]
+		| ["\u02EE"]
+		| ["\u0370"-"\u0374"]
+		| ["\u0376"-"\u0377"]
+		| ["\u037A"-"\u037D"]
+		| ["\u037F"]
+		| ["\u0386"]
+		| ["\u0388"-"\u038A"]
+		| ["\u038C"]
+		| ["\u038E"-"\u03A1"]
+		| ["\u03A3"-"\u03F5"]
+		| ["\u03F7"-"\u0481"]
+		| ["\u048A"-"\u052F"]
+		| ["\u0531"-"\u0556"]
+		| ["\u0559"]
+		| ["\u0560"-"\u0588"]
+		| ["\u05D0"-"\u05EA"]
+		| ["\u05EF"-"\u05F2"]
+		| ["\u0620"-"\u064A"]
+		| ["\u066E"-"\u066F"]
+		| ["\u0671"-"\u06D3"]
+		| ["\u06D5"]
+		| ["\u06E5"-"\u06E6"]
+		| ["\u06EE"-"\u06EF"]
+		| ["\u06FA"-"\u06FC"]
+		| ["\u06FF"]
+		| ["\u0710"]
+		| ["\u0712"-"\u072F"]
+		| ["\u074D"-"\u07A5"]
+		| ["\u07B1"]
+		| ["\u07CA"-"\u07EA"]
+		| ["\u07F4"-"\u07F5"]
+		| ["\u07FA"]
+		| ["\u0800"-"\u0815"]
+		| ["\u081A"]
+		| ["\u0824"]
+		| ["\u0828"]
+		| ["\u0840"-"\u0858"]
+		| ["\u0860"-"\u086A"]
+		| ["\u0870"-"\u0887"]
+		| ["\u0889"-"\u088F"]
+		| ["\u08A0"-"\u08C9"]
+		| ["\u0904"-"\u0939"]
+		| ["\u093D"]
+		| ["\u0950"]
+		| ["\u0958"-"\u0961"]
+		| ["\u0971"-"\u0980"]
+		| ["\u0985"-"\u098C"]
+		| ["\u098F"-"\u0990"]
+		| ["\u0993"-"\u09A8"]
+		| ["\u09AA"-"\u09B0"]
+		| ["\u09B2"]
+		| ["\u09B6"-"\u09B9"]
+		| ["\u09BD"]
+		| ["\u09CE"]
+		| ["\u09DC"-"\u09DD"]
+		| ["\u09DF"-"\u09E1"]
+		| ["\u09F0"-"\u09F1"]
+		| ["\u09FC"]
+		| ["\u0A05"-"\u0A0A"]
+		| ["\u0A0F"-"\u0A10"]
+		| ["\u0A13"-"\u0A28"]
+		| ["\u0A2A"-"\u0A30"]
+		| ["\u0A32"-"\u0A33"]
+		| ["\u0A35"-"\u0A36"]
+		| ["\u0A38"-"\u0A39"]
+		| ["\u0A59"-"\u0A5C"]
+		| ["\u0A5E"]
+		| ["\u0A72"-"\u0A74"]
+		| ["\u0A85"-"\u0A8D"]
+		| ["\u0A8F"-"\u0A91"]
+		| ["\u0A93"-"\u0AA8"]
+		| ["\u0AAA"-"\u0AB0"]
+		| ["\u0AB2"-"\u0AB3"]
+		| ["\u0AB5"-"\u0AB9"]
+		| ["\u0ABD"]
+		| ["\u0AD0"]
+		| ["\u0AE0"-"\u0AE1"]
+		| ["\u0AF9"]
+		| ["\u0B05"-"\u0B0C"]
+		| ["\u0B0F"-"\u0B10"]
+		| ["\u0B13"-"\u0B28"]
+		| ["\u0B2A"-"\u0B30"]
+		| ["\u0B32"-"\u0B33"]
+		| ["\u0B35"-"\u0B39"]
+		| ["\u0B3D"]
+		| ["\u0B5C"-"\u0B5D"]
+		| ["\u0B5F"-"\u0B61"]
+		| ["\u0B71"]
+		| ["\u0B83"]
+		| ["\u0B85"-"\u0B8A"]
+		| ["\u0B8E"-"\u0B90"]
+		| ["\u0B92"-"\u0B95"]
+		| ["\u0B99"-"\u0B9A"]
+		| ["\u0B9C"]
+		| ["\u0B9E"-"\u0B9F"]
+		| ["\u0BA3"-"\u0BA4"]
+		| ["\u0BA8"-"\u0BAA"]
+		| ["\u0BAE"-"\u0BB9"]
+		| ["\u0BD0"]
+		| ["\u0C05"-"\u0C0C"]
+		| ["\u0C0E"-"\u0C10"]
+		| ["\u0C12"-"\u0C28"]
+		| ["\u0C2A"-"\u0C39"]
+		| ["\u0C3D"]
+		| ["\u0C58"-"\u0C5A"]
+		| ["\u0C5C"-"\u0C5D"]
+		| ["\u0C60"-"\u0C61"]
+		| ["\u0C80"]
+		| ["\u0C85"-"\u0C8C"]
+		| ["\u0C8E"-"\u0C90"]
+		| ["\u0C92"-"\u0CA8"]
+		| ["\u0CAA"-"\u0CB3"]
+		| ["\u0CB5"-"\u0CB9"]
+		| ["\u0CBD"]
+		| ["\u0CDC"-"\u0CDE"]
+		| ["\u0CE0"-"\u0CE1"]
+		| ["\u0CF1"-"\u0CF2"]
+		| ["\u0D04"-"\u0D0C"]
+		| ["\u0D0E"-"\u0D10"]
+		| ["\u0D12"-"\u0D3A"]
+		| ["\u0D3D"]
+		| ["\u0D4E"]
+		| ["\u0D54"-"\u0D56"]
+		| ["\u0D5F"-"\u0D61"]
+		| ["\u0D7A"-"\u0D7F"]
+		| ["\u0D85"-"\u0D96"]
+		| ["\u0D9A"-"\u0DB1"]
+		| ["\u0DB3"-"\u0DBB"]
+		| ["\u0DBD"]
+		| ["\u0DC0"-"\u0DC6"]
+		| ["\u0E01"-"\u0E30"]
+		| ["\u0E32"-"\u0E33"]
+		| ["\u0E40"-"\u0E46"]
+		| ["\u0E81"-"\u0E82"]
+		| ["\u0E84"]
+		| ["\u0E86"-"\u0E8A"]
+		| ["\u0E8C"-"\u0EA3"]
+		| ["\u0EA5"]
+		| ["\u0EA7"-"\u0EB0"]
+		| ["\u0EB2"-"\u0EB3"]
+		| ["\u0EBD"]
+		| ["\u0EC0"-"\u0EC4"]
+		| ["\u0EC6"]
+		| ["\u0EDC"-"\u0EDF"]
+		| ["\u0F00"]
+		| ["\u0F40"-"\u0F47"]
+		| ["\u0F49"-"\u0F6C"]
+		| ["\u0F88"-"\u0F8C"]
+		| ["\u1000"-"\u102A"]
+		| ["\u103F"]
+		| ["\u1050"-"\u1055"]
+		| ["\u105A"-"\u105D"]
+		| ["\u1061"]
+		| ["\u1065"-"\u1066"]
+		| ["\u106E"-"\u1070"]
+		| ["\u1075"-"\u1081"]
+		| ["\u108E"]
+		| ["\u10A0"-"\u10C5"]
+		| ["\u10C7"]
+		| ["\u10CD"]
+		| ["\u10D0"-"\u10FA"]
+		| ["\u10FC"-"\u1248"]
+		| ["\u124A"-"\u124D"]
+		| ["\u1250"-"\u1256"]
+		| ["\u1258"]
+		| ["\u125A"-"\u125D"]
+		| ["\u1260"-"\u1288"]
+		| ["\u128A"-"\u128D"]
+		| ["\u1290"-"\u12B0"]
+		| ["\u12B2"-"\u12B5"]
+		| ["\u12B8"-"\u12BE"]
+		| ["\u12C0"]
+		| ["\u12C2"-"\u12C5"]
+		| ["\u12C8"-"\u12D6"]
+		| ["\u12D8"-"\u1310"]
+		| ["\u1312"-"\u1315"]
+		| ["\u1318"-"\u135A"]
+		| ["\u1380"-"\u138F"]
+		| ["\u13A0"-"\u13F5"]
+		| ["\u13F8"-"\u13FD"]
+		| ["\u1401"-"\u166C"]
+		| ["\u166F"-"\u167F"]
+		| ["\u1681"-"\u169A"]
+		| ["\u16A0"-"\u16EA"]
+		| ["\u16EE"-"\u16F8"]
+		| ["\u1700"-"\u1711"]
+		| ["\u171F"-"\u1731"]
+		| ["\u1740"-"\u1751"]
+		| ["\u1760"-"\u176C"]
+		| ["\u176E"-"\u1770"]
+		| ["\u1780"-"\u17B3"]
+		| ["\u17D7"]
+		| ["\u17DC"]
+		| ["\u1820"-"\u1878"]
+		| ["\u1880"-"\u18A8"]
+		| ["\u18AA"]
+		| ["\u18B0"-"\u18F5"]
+		| ["\u1900"-"\u191E"]
+		| ["\u1950"-"\u196D"]
+		| ["\u1970"-"\u1974"]
+		| ["\u1980"-"\u19AB"]
+		| ["\u19B0"-"\u19C9"]
+		| ["\u1A00"-"\u1A16"]
+		| ["\u1A20"-"\u1A54"]
+		| ["\u1AA7"]
+		| ["\u1B05"-"\u1B33"]
+		| ["\u1B45"-"\u1B4C"]
+		| ["\u1B83"-"\u1BA0"]
+		| ["\u1BAE"-"\u1BAF"]
+		| ["\u1BBA"-"\u1BE5"]
+		| ["\u1C00"-"\u1C23"]
+		| ["\u1C4D"-"\u1C4F"]
+		| ["\u1C5A"-"\u1C7D"]
+		| ["\u1C80"-"\u1C8A"]
+		| ["\u1C90"-"\u1CBA"]
+		| ["\u1CBD"-"\u1CBF"]
+		| ["\u1CE9"-"\u1CEC"]
+		| ["\u1CEE"-"\u1CF3"]
+		| ["\u1CF5"-"\u1CF6"]
+		| ["\u1CFA"]
+		| ["\u1D00"-"\u1DBF"]
+		| ["\u1E00"-"\u1F15"]
+		| ["\u1F18"-"\u1F1D"]
+		| ["\u1F20"-"\u1F45"]
+		| ["\u1F48"-"\u1F4D"]
+		| ["\u1F50"-"\u1F57"]
+		| ["\u1F59"]
+		| ["\u1F5B"]
+		| ["\u1F5D"]
+		| ["\u1F5F"-"\u1F7D"]
+		| ["\u1F80"-"\u1FB4"]
+		| ["\u1FB6"-"\u1FBC"]
+		| ["\u1FBE"]
+		| ["\u1FC2"-"\u1FC4"]
+		| ["\u1FC6"-"\u1FCC"]
+		| ["\u1FD0"-"\u1FD3"]
+		| ["\u1FD6"-"\u1FDB"]
+		| ["\u1FE0"-"\u1FEC"]
+		| ["\u1FF2"-"\u1FF4"]
+		| ["\u1FF6"-"\u1FFC"]
+		| ["\u2071"]
+		| ["\u207F"]
+		| ["\u2090"-"\u209C"]
+		| ["\u2102"]
+		| ["\u2107"]
+		| ["\u210A"-"\u2113"]
+		| ["\u2115"]
+		| ["\u2118"-"\u211D"]
+		| ["\u2124"]
+		| ["\u2126"]
+		| ["\u2128"]
+		| ["\u212A"-"\u2139"]
+		| ["\u213C"-"\u213F"]
+		| ["\u2145"-"\u2149"]
+		| ["\u214E"]
+		| ["\u2160"-"\u2188"]
+		| ["\u2C00"-"\u2CE4"]
+		| ["\u2CEB"-"\u2CEE"]
+		| ["\u2CF2"-"\u2CF3"]
+		| ["\u2D00"-"\u2D25"]
+		| ["\u2D27"]
+		| ["\u2D2D"]
+		| ["\u2D30"-"\u2D67"]
+		| ["\u2D6F"]
+		| ["\u2D80"-"\u2D96"]
+		| ["\u2DA0"-"\u2DA6"]
+		| ["\u2DA8"-"\u2DAE"]
+		| ["\u2DB0"-"\u2DB6"]
+		| ["\u2DB8"-"\u2DBE"]
+		| ["\u2DC0"-"\u2DC6"]
+		| ["\u2DC8"-"\u2DCE"]
+		| ["\u2DD0"-"\u2DD6"]
+		| ["\u2DD8"-"\u2DDE"]
+		| ["\u2E2F"]
+		| ["\u3005"-"\u3007"]
+		| ["\u3021"-"\u3029"]
+		| ["\u3031"-"\u3035"]
+		| ["\u3038"-"\u303C"]
+		| ["\u3041"-"\u3096"]
+		| ["\u309B"-"\u309F"]
+		| ["\u30A1"-"\u30FA"]
+		| ["\u30FC"-"\u30FF"]
+		| ["\u3105"-"\u312F"]
+		| ["\u3131"-"\u318E"]
+		| ["\u31A0"-"\u31BF"]
+		| ["\u31F0"-"\u31FF"]
+		| ["\u3400"-"\u4DBF"]
+		| ["\u4E00"-"\uA48C"]
+		| ["\uA4D0"-"\uA4FD"]
+		| ["\uA500"-"\uA60C"]
+		| ["\uA610"-"\uA61F"]
+		| ["\uA62A"-"\uA62B"]
+		| ["\uA640"-"\uA66E"]
+		| ["\uA67F"-"\uA69D"]
+		| ["\uA6A0"-"\uA6EF"]
+		| ["\uA717"-"\uA71F"]
+		| ["\uA722"-"\uA788"]
+		| ["\uA78B"-"\uA7DC"]
+		| ["\uA7F1"-"\uA801"]
+		| ["\uA803"-"\uA805"]
+		| ["\uA807"-"\uA80A"]
+		| ["\uA80C"-"\uA822"]
+		| ["\uA840"-"\uA873"]
+		| ["\uA882"-"\uA8B3"]
+		| ["\uA8F2"-"\uA8F7"]
+		| ["\uA8FB"]
+		| ["\uA8FD"-"\uA8FE"]
+		| ["\uA90A"-"\uA925"]
+		| ["\uA930"-"\uA946"]
+		| ["\uA960"-"\uA97C"]
+		| ["\uA984"-"\uA9B2"]
+		| ["\uA9CF"]
+		| ["\uA9E0"-"\uA9E4"]
+		| ["\uA9E6"-"\uA9EF"]
+		| ["\uA9FA"-"\uA9FE"]
+		| ["\uAA00"-"\uAA28"]
+		| ["\uAA40"-"\uAA42"]
+		| ["\uAA44"-"\uAA4B"]
+		| ["\uAA60"-"\uAA76"]
+		| ["\uAA7A"]
+		| ["\uAA7E"-"\uAAAF"]
+		| ["\uAAB1"]
+		| ["\uAAB5"-"\uAAB6"]
+		| ["\uAAB9"-"\uAABD"]
+		| ["\uAAC0"]
+		| ["\uAAC2"]
+		| ["\uAADB"-"\uAADD"]
+		| ["\uAAE0"-"\uAAEA"]
+		| ["\uAAF2"-"\uAAF4"]
+		| ["\uAB01"-"\uAB06"]
+		| ["\uAB09"-"\uAB0E"]
+		| ["\uAB11"-"\uAB16"]
+		| ["\uAB20"-"\uAB26"]
+		| ["\uAB28"-"\uAB2E"]
+		| ["\uAB30"-"\uAB5A"]
+		| ["\uAB5C"-"\uAB69"]
+		| ["\uAB70"-"\uABE2"]
+		| ["\uAC00"-"\uD7A3"]
+		| ["\uD7B0"-"\uD7C6"]
+		| ["\uD7CB"-"\uD7FB"]
+		| ["\uF900"-"\uFA6D"]
+		| ["\uFA70"-"\uFAD9"]
+		| ["\uFB00"-"\uFB06"]
+		| ["\uFB13"-"\uFB17"]
+		| ["\uFB1D"]
+		| ["\uFB1F"-"\uFB28"]
+		| ["\uFB2A"-"\uFB36"]
+		| ["\uFB38"-"\uFB3C"]
+		| ["\uFB3E"]
+		| ["\uFB40"-"\uFB41"]
+		| ["\uFB43"-"\uFB44"]
+		| ["\uFB46"-"\uFBB1"]
+		| ["\uFBD3"-"\uFD3D"]
+		| ["\uFD50"-"\uFD8F"]
+		| ["\uFD92"-"\uFDC7"]
+		| ["\uFDF0"-"\uFDFB"]
+		| ["\uFE70"-"\uFE74"]
+		| ["\uFE76"-"\uFEFC"]
+		| ["\uFF21"-"\uFF3A"]
+		| ["\uFF41"-"\uFF5A"]
+		| ["\uFF66"-"\uFFBE"]
+		| ["\uFFC2"-"\uFFC7"]
+		| ["\uFFCA"-"\uFFCF"]
+		| ["\uFFD2"-"\uFFD7"]
+		| ["\uFFDA"-"\uFFDC"]
+	>
+|	< #UNICODE_ID_CONTINUE_ONLY: 
+		  ["\u0030"-"\u0039"]
+		| ["\u005F"]
+		| ["\u00B7"]
+		| ["\u0300"-"\u036F"]
+		| ["\u0387"]
+		| ["\u0483"-"\u0487"]
+		| ["\u0591"-"\u05BD"]
+		| ["\u05BF"]
+		| ["\u05C1"-"\u05C2"]
+		| ["\u05C4"-"\u05C5"]
+		| ["\u05C7"]
+		| ["\u0610"-"\u061A"]
+		| ["\u064B"-"\u0669"]
+		| ["\u0670"]
+		| ["\u06D6"-"\u06DC"]
+		| ["\u06DF"-"\u06E4"]
+		| ["\u06E7"-"\u06E8"]
+		| ["\u06EA"-"\u06ED"]
+		| ["\u06F0"-"\u06F9"]
+		| ["\u0711"]
+		| ["\u0730"-"\u074A"]
+		| ["\u07A6"-"\u07B0"]
+		| ["\u07C0"-"\u07C9"]
+		| ["\u07EB"-"\u07F3"]
+		| ["\u07FD"]
+		| ["\u0816"-"\u0819"]
+		| ["\u081B"-"\u0823"]
+		| ["\u0825"-"\u0827"]
+		| ["\u0829"-"\u082D"]
+		| ["\u0859"-"\u085B"]
+		| ["\u0897"-"\u089F"]
+		| ["\u08CA"-"\u08E1"]
+		| ["\u08E3"-"\u0903"]
+		| ["\u093A"-"\u093C"]
+		| ["\u093E"-"\u094F"]
+		| ["\u0951"-"\u0957"]
+		| ["\u0962"-"\u0963"]
+		| ["\u0966"-"\u096F"]
+		| ["\u0981"-"\u0983"]
+		| ["\u09BC"]
+		| ["\u09BE"-"\u09C4"]
+		| ["\u09C7"-"\u09C8"]
+		| ["\u09CB"-"\u09CD"]
+		| ["\u09D7"]
+		| ["\u09E2"-"\u09E3"]
+		| ["\u09E6"-"\u09EF"]
+		| ["\u09FE"]
+		| ["\u0A01"-"\u0A03"]
+		| ["\u0A3C"]
+		| ["\u0A3E"-"\u0A42"]
+		| ["\u0A47"-"\u0A48"]
+		| ["\u0A4B"-"\u0A4D"]
+		| ["\u0A51"]
+		| ["\u0A66"-"\u0A71"]
+		| ["\u0A75"]
+		| ["\u0A81"-"\u0A83"]
+		| ["\u0ABC"]
+		| ["\u0ABE"-"\u0AC5"]
+		| ["\u0AC7"-"\u0AC9"]
+		| ["\u0ACB"-"\u0ACD"]
+		| ["\u0AE2"-"\u0AE3"]
+		| ["\u0AE6"-"\u0AEF"]
+		| ["\u0AFA"-"\u0AFF"]
+		| ["\u0B01"-"\u0B03"]
+		| ["\u0B3C"]
+		| ["\u0B3E"-"\u0B44"]
+		| ["\u0B47"-"\u0B48"]
+		| ["\u0B4B"-"\u0B4D"]
+		| ["\u0B55"-"\u0B57"]
+		| ["\u0B62"-"\u0B63"]
+		| ["\u0B66"-"\u0B6F"]
+		| ["\u0B82"]
+		| ["\u0BBE"-"\u0BC2"]
+		| ["\u0BC6"-"\u0BC8"]
+		| ["\u0BCA"-"\u0BCD"]
+		| ["\u0BD7"]
+		| ["\u0BE6"-"\u0BEF"]
+		| ["\u0C00"-"\u0C04"]
+		| ["\u0C3C"]
+		| ["\u0C3E"-"\u0C44"]
+		| ["\u0C46"-"\u0C48"]
+		| ["\u0C4A"-"\u0C4D"]
+		| ["\u0C55"-"\u0C56"]
+		| ["\u0C62"-"\u0C63"]
+		| ["\u0C66"-"\u0C6F"]
+		| ["\u0C81"-"\u0C83"]
+		| ["\u0CBC"]
+		| ["\u0CBE"-"\u0CC4"]
+		| ["\u0CC6"-"\u0CC8"]
+		| ["\u0CCA"-"\u0CCD"]
+		| ["\u0CD5"-"\u0CD6"]
+		| ["\u0CE2"-"\u0CE3"]
+		| ["\u0CE6"-"\u0CEF"]
+		| ["\u0CF3"]
+		| ["\u0D00"-"\u0D03"]
+		| ["\u0D3B"-"\u0D3C"]
+		| ["\u0D3E"-"\u0D44"]
+		| ["\u0D46"-"\u0D48"]
+		| ["\u0D4A"-"\u0D4D"]
+		| ["\u0D57"]
+		| ["\u0D62"-"\u0D63"]
+		| ["\u0D66"-"\u0D6F"]
+		| ["\u0D81"-"\u0D83"]
+		| ["\u0DCA"]
+		| ["\u0DCF"-"\u0DD4"]
+		| ["\u0DD6"]
+		| ["\u0DD8"-"\u0DDF"]
+		| ["\u0DE6"-"\u0DEF"]
+		| ["\u0DF2"-"\u0DF3"]
+		| ["\u0E31"]
+		| ["\u0E34"-"\u0E3A"]
+		| ["\u0E47"-"\u0E4E"]
+		| ["\u0E50"-"\u0E59"]
+		| ["\u0EB1"]
+		| ["\u0EB4"-"\u0EBC"]
+		| ["\u0EC8"-"\u0ECE"]
+		| ["\u0ED0"-"\u0ED9"]
+		| ["\u0F18"-"\u0F19"]
+		| ["\u0F20"-"\u0F29"]
+		| ["\u0F35"]
+		| ["\u0F37"]
+		| ["\u0F39"]
+		| ["\u0F3E"-"\u0F3F"]
+		| ["\u0F71"-"\u0F84"]
+		| ["\u0F86"-"\u0F87"]
+		| ["\u0F8D"-"\u0F97"]
+		| ["\u0F99"-"\u0FBC"]
+		| ["\u0FC6"]
+		| ["\u102B"-"\u103E"]
+		| ["\u1040"-"\u1049"]
+		| ["\u1056"-"\u1059"]
+		| ["\u105E"-"\u1060"]
+		| ["\u1062"-"\u1064"]
+		| ["\u1067"-"\u106D"]
+		| ["\u1071"-"\u1074"]
+		| ["\u1082"-"\u108D"]
+		| ["\u108F"-"\u109D"]
+		| ["\u135D"-"\u135F"]
+		| ["\u1369"-"\u1371"]
+		| ["\u1712"-"\u1715"]
+		| ["\u1732"-"\u1734"]
+		| ["\u1752"-"\u1753"]
+		| ["\u1772"-"\u1773"]
+		| ["\u17B4"-"\u17D3"]
+		| ["\u17DD"]
+		| ["\u17E0"-"\u17E9"]
+		| ["\u180B"-"\u180D"]
+		| ["\u180F"-"\u1819"]
+		| ["\u18A9"]
+		| ["\u1920"-"\u192B"]
+		| ["\u1930"-"\u193B"]
+		| ["\u1946"-"\u194F"]
+		| ["\u19D0"-"\u19DA"]
+		| ["\u1A17"-"\u1A1B"]
+		| ["\u1A55"-"\u1A5E"]
+		| ["\u1A60"-"\u1A7C"]
+		| ["\u1A7F"-"\u1A89"]
+		| ["\u1A90"-"\u1A99"]
+		| ["\u1AB0"-"\u1ABD"]
+		| ["\u1ABF"-"\u1ADD"]
+		| ["\u1AE0"-"\u1AEB"]
+		| ["\u1B00"-"\u1B04"]
+		| ["\u1B34"-"\u1B44"]
+		| ["\u1B50"-"\u1B59"]
+		| ["\u1B6B"-"\u1B73"]
+		| ["\u1B80"-"\u1B82"]
+		| ["\u1BA1"-"\u1BAD"]
+		| ["\u1BB0"-"\u1BB9"]
+		| ["\u1BE6"-"\u1BF3"]
+		| ["\u1C24"-"\u1C37"]
+		| ["\u1C40"-"\u1C49"]
+		| ["\u1C50"-"\u1C59"]
+		| ["\u1CD0"-"\u1CD2"]
+		| ["\u1CD4"-"\u1CE8"]
+		| ["\u1CED"]
+		| ["\u1CF4"]
+		| ["\u1CF7"-"\u1CF9"]
+		| ["\u1DC0"-"\u1DFF"]
+		| ["\u203F"-"\u2040"]
+		| ["\u2054"]
+		| ["\u20D0"-"\u20DC"]
+		| ["\u20E1"]
+		| ["\u20E5"-"\u20F0"]
+		| ["\u2CEF"-"\u2CF1"]
+		| ["\u2D7F"]
+		| ["\u2DE0"-"\u2DFF"]
+		| ["\u302A"-"\u302F"]
+		| ["\u3099"-"\u309A"]
+		| ["\uA620"-"\uA629"]
+		| ["\uA66F"]
+		| ["\uA674"-"\uA67D"]
+		| ["\uA69E"-"\uA69F"]
+		| ["\uA6F0"-"\uA6F1"]
+		| ["\uA802"]
+		| ["\uA806"]
+		| ["\uA80B"]
+		| ["\uA823"-"\uA827"]
+		| ["\uA82C"]
+		| ["\uA880"-"\uA881"]
+		| ["\uA8B4"-"\uA8C5"]
+		| ["\uA8D0"-"\uA8D9"]
+		| ["\uA8E0"-"\uA8F1"]
+		| ["\uA8FF"-"\uA909"]
+		| ["\uA926"-"\uA92D"]
+		| ["\uA947"-"\uA953"]
+		| ["\uA980"-"\uA983"]
+		| ["\uA9B3"-"\uA9C0"]
+		| ["\uA9D0"-"\uA9D9"]
+		| ["\uA9E5"]
+		| ["\uA9F0"-"\uA9F9"]
+		| ["\uAA29"-"\uAA36"]
+		| ["\uAA43"]
+		| ["\uAA4C"-"\uAA4D"]
+		| ["\uAA50"-"\uAA59"]
+		| ["\uAA7B"-"\uAA7D"]
+		| ["\uAAB0"]
+		| ["\uAAB2"-"\uAAB4"]
+		| ["\uAAB7"-"\uAAB8"]
+		| ["\uAABE"-"\uAABF"]
+		| ["\uAAC1"]
+		| ["\uAAEB"-"\uAAEF"]
+		| ["\uAAF5"-"\uAAF6"]
+		| ["\uABE3"-"\uABEA"]
+		| ["\uABEC"-"\uABED"]
+		| ["\uABF0"-"\uABF9"]
+		| ["\uFB1E"]
+		| ["\uFE00"-"\uFE0F"]
+		| ["\uFE20"-"\uFE2F"]
+		| ["\uFE33"-"\uFE34"]
+		| ["\uFE4D"-"\uFE4F"]
+		| ["\uFF10"-"\uFF19"]
+		| ["\uFF3F"]
+	>
+|	<#UNICODE_COMBINING_MARK:
+		["\u0300"-"\u034E"] 
+	|	["\u0360"-"\u0362"] 
+	|	["\u0483"-"\u0486"] 
+	|	["\u0591"-"\u05A1"]
+	|	["\u05A3"-"\u05B9"] 
+	|	["\u05BB"-"\u05BD"] 
+	|	["\u05BF"]
+	|	["\u05C1"-"\u05C2"]
+	|	["\u05C4"]
+	|	["\u064B"-"\u0655"] 
+	|	["\u0670"]
+	|	["\u06D6"-"\u06DC"]
+	|	["\u06DF"-"\u06E4"] 
+	|	["\u06E7"-"\u06E8"] 
+	|	["\u06EA"-"\u06ED"] 
+	|	["\u0711"]
+	|	["\u0730"-"\u074A"] 
+	|	["\u07A6"-"\u07B0"] 
+	|	["\u0901"-"\u0903"] 
+	|	["\u093C"]
+	|	["\u093E"-"\u094D"] 
+	|	["\u0951"-"\u0954"] 
+	|	["\u0962"-"\u0963"] 
+	|	["\u0981"-"\u0983"]
+	|	["\u09BC"-"\u09C4"] 
+	|	["\u09C7"-"\u09C8"] 
+	|	["\u09CB"-"\u09CD"] 
+	|	["\u09D7"]
+	|	["\u09E2"-"\u09E3"] 
+	|	["\u0A02"]
+	|	["\u0A3C"]
+	|	["\u0A3E"-"\u0A42"]
+	|	["\u0A47"-"\u0A48"] 
+	|	["\u0A4B"-"\u0A4D"] 
+	|	["\u0A70"-"\u0A71"] 
+	|	["\u0A81"-"\u0A83"]
+	|	["\u0ABC"]
+	|	["\u0ABE"-"\u0AC5"] 
+	|	["\u0AC7"-"\u0AC9"] 
+	|	["\u0ACB"-"\u0ACD"]
+	|	["\u0B01"-"\u0B03"] 
+	|	["\u0B3C"]
+	|	["\u0B3E"-"\u0B43"] 
+	|	["\u0B47"-"\u0B48"]
+	|	["\u0B4B"-"\u0B4D"] 
+	|	["\u0B56"-"\u0B57"] 
+	|	["\u0B82"-"\u0B83"] 
+	|	["\u0BBE"-"\u0BC2"]
+	|	["\u0BC6"-"\u0BC8"] 
+	|	["\u0BCA"-"\u0BCD"] 
+	|	["\u0BD7"]
+	|	["\u0C01"-"\u0C03"]
+	|	["\u0C3E"-"\u0C44"] 
+	|	["\u0C46"-"\u0C48"] 
+	|	["\u0C4A"-"\u0C4D"] 
+	|	["\u0C55"-"\u0C56"]
+	|	["\u0C82"-"\u0C83"] 
+	|	["\u0CBE"-"\u0CC4"] 
+	|	["\u0CC6"-"\u0CC8"] 
+	|	["\u0CCA"-"\u0CCD"]
+	|	["\u0CD5"-"\u0CD6"] 
+	|	["\u0D02"-"\u0D03"] 
+	|	["\u0D3E"-"\u0D43"] 
+	|	["\u0D46"-"\u0D48"]
+	|	["\u0D4A"-"\u0D4D"] 
+	|	["\u0D57"]
+	|	["\u0D82"-"\u0D83"] 
+	|	["\u0DCA"]
+	|	["\u0DCF"-"\u0DD4"] 
+	|	["\u0DD6"]
+	|	["\u0DD8"-"\u0DDF"] 
+	|	["\u0DF2"-"\u0DF3"]
+	|	["\u0E31"]
+	|	["\u0E34"-"\u0E3A"] 
+	|	["\u0E47"-"\u0E4E"] 
+	|	["\u0EB1"]
+	|	["\u0EB4"-"\u0EB9"] 
+	|	["\u0EBB"-"\u0EBC"] 
+	|	["\u0EC8"-"\u0ECD"] 
+	|	["\u0F18"-"\u0F19"]
+	|	["\u0F35"]
+	|	["\u0F37"]
+	|	["\u0F39"]
+	|	["\u0F3E"-"\u0F3F"]
+	|	["\u0F71"-"\u0F84"] 
+	|	["\u0F86"-"\u0F87"] 
+	|	["\u0F90"-"\u0F97"] 
+	|	["\u0F99"-"\u0FBC"]
+	|	["\u0FC6"]
+	|	["\u102C"-"\u1032"] 
+	|	["\u1036"-"\u1039"] 
+	|	["\u1056"-"\u1059"]
+	|	["\u17B4"-"\u17D3"] 
+	|	["\u18A9"]
+	|	["\u20D0"-"\u20DC"] 
+	|	["\u20E1"]
+	|	["\u302A"-"\u302F"] 
+	|	["\u3099"-"\u309A"] 
+	|	["\uFB1E"]
+	|	["\uFE20"-"\uFE23"]
+/* TODO */
+	|	["\u0903"]
+	|	["\u093E"]
+	|	["\u093F"]
+	|	["\u0940"]
+	|	["\u0949"]
+	|	["\u094A"]
+	|	["\u094B"]
+	|	["\u094C"]
+	|	["\u0982"]
+	|	["\u0983"]
+	|	["\u09BE"]
+	|	["\u09BF"]
+	|	["\u09C0"]
+	|	["\u09C7"]
+	|	["\u09C8"]
+	|	["\u09CB"]
+	|	["\u09CC"]
+	|	["\u09D7"]
+	|	["\u0A03"]
+	|	["\u0A3E"]
+	|	["\u0A3F"]
+	|	["\u0A40"]
+	|	["\u0A83"]
+	|	["\u0ABE"]
+	|	["\u0ABF"]
+	|	["\u0AC0"]
+	|	["\u0AC9"]
+	|	["\u0ACB"]
+	|	["\u0ACC"]
+	|	["\u0B02"]
+	|	["\u0B03"]
+	|	["\u0B3E"]
+	|	["\u0B40"]
+	|	["\u0B47"]
+	|	["\u0B48"]
+	|	["\u0B4B"]
+	|	["\u0B4C"]
+	|	["\u0B57"]
+	|	["\u0BBE"]
+	|	["\u0BBF"]
+	|	["\u0BC1"]
+	|	["\u0BC2"]
+	|	["\u0BC6"]
+	|	["\u0BC7"]
+	|	["\u0BC8"]
+	|	["\u0BCA"]
+	|	["\u0BCB"]
+	|	["\u0BCC"]
+	|	["\u0BD7"]
+	|	["\u0C01"]
+	|	["\u0C02"]
+	|	["\u0C03"]
+	|	["\u0C41"]
+	|	["\u0C42"]
+	|	["\u0C43"]
+	|	["\u0C44"]
+	|	["\u0C82"]
+	|	["\u0C83"]
+	|	["\u0CBE"]
+	|	["\u0CC0"]
+	|	["\u0CC1"]
+	|	["\u0CC2"]
+	|	["\u0CC3"]
+	|	["\u0CC4"]
+	|	["\u0CC7"]
+	|	["\u0CC8"]
+	|	["\u0CCA"]
+	|	["\u0CCB"]
+	|	["\u0CD5"]
+	|	["\u0CD6"]
+	|	["\u0D02"]
+	|	["\u0D03"]
+	|	["\u0D3E"]
+	|	["\u0D3F"]
+	|	["\u0D40"]
+	|	["\u0D46"]
+	|	["\u0D47"]
+	|	["\u0D48"]
+	|	["\u0D4A"]
+	|	["\u0D4B"]
+	|	["\u0D4C"]
+	|	["\u0D57"]
+	|	["\u0D82"]
+	|	["\u0D83"]
+	|	["\u0DCF"]
+	|	["\u0DD0"]
+	|	["\u0DD1"]
+	|	["\u0DD8"]
+	|	["\u0DD9"]
+	|	["\u0DDA"]
+	|	["\u0DDB"]
+	|	["\u0DDC"]
+	|	["\u0DDD"]
+	|	["\u0DDE"]
+	|	["\u0DDF"]
+	|	["\u0DF2"]
+	|	["\u0DF3"]
+	|	["\u0F3E"]
+	|	["\u0F3F"]
+	|	["\u0F7F"]
+	|	["\u102C"]
+	|	["\u1031"]
+	|	["\u1038"]
+	|	["\u1056"]
+	|	["\u1057"]
+	|	["\u17B6"]
+	|	["\u17BE"]
+	|	["\u17BF"]
+	|	["\u17C0"]
+	|	["\u17C1"]
+	|	["\u17C2"]
+	|	["\u17C3"]
+	|	["\u17C4"]
+	|	["\u17C5"]
+	|	["\u17C7"]
+	|	["\u17C8"]
+	|	["\u1923"]
+	|	["\u1924"]
+	|	["\u1925"]
+	|	["\u1926"]
+	|	["\u1929"]
+	|	["\u192A"]
+	|	["\u192B"]
+	|	["\u1930"]
+	|	["\u1931"]
+	|	["\u1933"]
+	|	["\u1934"]
+	|	["\u1935"]
+	|	["\u1936"]
+	|	["\u1937"]
+	|	["\u1938"]
+	|	["\u19B0"]
+	|	["\u19B1"]
+	|	["\u19B2"]
+	|	["\u19B3"]
+	|	["\u19B4"]
+	|	["\u19B5"]
+	|	["\u19B6"]
+	|	["\u19B7"]
+	|	["\u19B8"]
+	|	["\u19B9"]
+	|	["\u19BA"]
+	|	["\u19BB"]
+	|	["\u19BC"]
+	|	["\u19BD"]
+	|	["\u19BE"]
+	|	["\u19BF"]
+	|	["\u19C0"]
+	|	["\u19C8"]
+	|	["\u19C9"]
+	|	["\u1A19"]
+	|	["\u1A1A"]
+	|	["\u1A1B"]
+	|	["\uA802"]
+	|	["\uA823"]
+	|	["\uA824"]
+	|	["\uA827"]
+	|	["\u1D16"]
+	|	["\u1D16"]
+	|	["\u1D16"]
+	|	["\u1D16"]
+	|	["\u1D16"]
+	|	["\u1D17"]
+	|	["\u1D17"]
+	|	["\u1D17"] 
+	>	
+|
+	/* Digits are limited compared to JS */
+	< #UNICODE_DIGIT: 
+		["\u0030"-"\u0039"] 
+		| ["\u0660"-"\u0669"] 
+		| ["\u06F0"-"\u06F9"] 
+		| ["\u0966"-"\u096F"]
+		| ["\u09E6"-"\u09EF"] 
+		| ["\u0A66"-"\u0A6F"] 
+		| ["\u0AE6"-"\u0AEF"] 
+		| ["\u0B66"-"\u0B6F"]
+		| ["\u0BE7"-"\u0BEF"] 
+		| ["\u0C66"-"\u0C6F"] 
+		| ["\u0CE6"-"\u0CEF"] 
+		| ["\u0D66"-"\u0D6F"]
+		| ["\u0E50"-"\u0E59"] 
+		| ["\u0ED0"-"\u0ED9"] 
+		| ["\u0F20"-"\u0F29"] 
+		| ["\u1040"-"\u1049"]
+		| ["\u1369"-"\u1371"] 
+		| ["\u17E0"-"\u17E9"] 
+		| ["\u1810"-"\u1819"] 
+		| ["\uFF10"-"\uFF19"] 
+  >
+|	<#UNICODE_CONNECTOR_PUNCTUATION: 
+			["\u005F"] 
+		|	["\u203F"-"\u2040"]
+		|	["\u30FB"] 
+		|	["\uFE33"-"\uFE34"]
+		|	["\uFE4D"-"\uFE4F"]
+		|	["\uFF3F"]
+		|	["\uFF65"]
+		>	 	
+	|	<#ZWNJ:	"\u200D"> 
+	|	<#ZWJ:	"\u200C">
+}
+
+
+
+/*****************************************
+ * ECMA SYNTACTIC GRAMMARS  STARTS HERE  *
+ *****************************************/   
+
+/* Section 11.1: Primary Expressions */
+
+ASTNode PrimaryExpression():
+{
+	Token t;
+ 	ASTNode node;
+}
+{
+      t="this"
+      	{
+      		return nodeFactory.createThis(t);
+      	}
+    | LOOKAHEAD(2) node=LiteralValue() 
+    	{
+    		return node;
+      	}
+    // A hand-written semantic LOOKAHEAD, not the production-reference
+    // LOOKAHEAD(FunctionArrowHead()) this used to be: FunctionArrowHead()
+    // was only ever a syntactic-trial mirror of these same two predicates,
+    // and once the arrow's own return-type-tolerant scan inside
+    // isArrowFunctionWithParens() needed to skip a "type" (a JAVACODE
+    // production, per skipType()'s own doc comment), a production-reference
+    // trial can no longer represent it - see insertSemiColon()'s identical,
+    // already-documented gap. Removing the indirection sidesteps that
+    // entirely: FunctionArrowHead() is now unused and deleted.
+    |  LOOKAHEAD({isArrowFunctionWithIdentifier() || isArrowFunctionWithParens()}) node=FunctionArrowDeclaration()
+     	{
+     	  return node;
+     	}
+    // "async [no LineTerminator here] function" restriction (spec's
+    // AsyncFunctionExpression production): with a LineTerminator between
+    // "async" and "function", "async" must parse as a plain identifier
+    // (Identifier() below) instead of the start of an
+    // AsyncFunctionExpression - this is THE actual choice point where
+    // "async function"/"async\nfunction" gets disambiguated (reached via
+    // ExpressionStatement()->...->PrimaryExpression() for a bare
+    // ExpressionStatement starting with "async": ExpressionStatement()'s
+    // own default per-token dispatch always tries first whenever the
+    // current token is ASYNC, since ASYNC legitimately starts some
+    // expression either way, so a guard on the Statement()-level
+    // FunctionDeclaration() alternative alone is never reached and can't
+    // fix this - it must live here). Reuses the existing
+    // noLineTerminatorAfterAsync() helper already used for the
+    // async-arrow-function forms above.
+    | LOOKAHEAD(("async")? "function", {getToken(1).kind!=ASYNC || noLineTerminatorAfterAsync()}) node=FunctionDeclaration()
+    	{
+    	  return node;
+    	}
+    | node=ArrayLiteral()
+    	{
+    		return node;
+      	}
+    | node=ObjectLiteral()
+    	{
+    		return node;
+      	}
+    | t="(" node=Expression() ")"
+    	{
+   	      	return nodeFactory.createParen(t,node);
+      	}
+    | node=TemplateLiteral(null)
+        {
+            return node;
+        }
+    // Both this alternative and Identifier() below can start with "@" - a
+    // decorated class expression ("@decorator class {}") vs. the bare "@"
+    // filter-context identifier (which - per its own established usage - is
+    // always immediately followed by "." for a member access, never able to
+    // syntactically continue as a DecoratorList()). Syntactic lookahead
+    // resolves this: try DecoratorList() followed by "class" first: it fails
+    // fast for bare "@." (LeftHandSideExpression can't start with "."),
+    // correctly falling through to plain Identifier() for the filter-context
+    // case, and succeeds for an actual decorated class expression - this
+    // alternative must come BEFORE Identifier() so its more specific lookahead
+    // gets first refusal (JavaCC otherwise takes the first alternative whose
+    // default single-token check matches, without trying later ones).
+    | LOOKAHEAD(DecoratorList() "class") node=ClassDeclaration()
+        {
+            return node;
+        }
+    | node=Identifier()
+    	{
+    		return node;
+      	}
+}
+
+
+/* Section 7.8: Literals */
+
+ASTNode LiteralValue(): {
+    ASTNode node=null;
+ 	Token t;
+}
+{
+   t=<DECIMAL_LITERAL> 
+    	{
+    	  	try { 
+    			return nodeFactory.createLiteral(t,ASTLiteral.parseDecimal(env,t.image));
+    		} catch(JSException e) {
+    		  throw generateParseException(e);
+    		} 
+    	}
+  |  (t=<DEC_INTEGER_LITERAL>
+  	 |t=<HEX_INTEGER_LITERAL>
+  	 |t=<OCT_INTEGER_LITERAL>
+     |t=<BIN_INTEGER_LITERAL>)
+    	{
+    	  	try {
+    			boolean[] legacyOctal = new boolean[1];
+    			ASTLiteral lit = nodeFactory.createLiteral(t,ASTLiteral.parseInteger(env,t.image,legacyOctal));
+    			lit.setLegacyOctalLiteral(legacyOctal[0]);
+    			return lit;
+    		} catch(JSException e) {
+    		  throw generateParseException(e);
+    		}
+    	}
+  |	t=<STRING_LITERAL>
+  		{
+    		return nodeFactory.createLiteral(t,ASTLiteral.parseString(t.image));
+		}
+  | t=<BOOLEAN_LITERAL> 
+    	{ 
+      		return nodeFactory.createLiteral(t,ASTLiteral.parseBoolean(t.image)); 
+      	}
+  | t=<NULL_LITERAL>
+		{ 
+    		return nodeFactory.createLiteral(t,null); 
+    	}
+  | t=<REGULAR_EXPRESSION_LITERAL>
+		{
+    		return nodeFactory.createRegExpLiteral(t,t.image); 
+		}
+}
+
+
+ASTStringTemplate TemplateLiteral(ASTNode tagFunction): {
+    Token t,t1,t2;
+    ASTNode node;
+    List<Object> parts = new ArrayList<>();
+}
+{
+    t1=<TEMPLATE_START>
+    (
+          t=<TEMPLATE_CHARS> {
+            if(parts.isEmpty() || !(parts.get(parts.size()-1) instanceof String)) {
+              parts.add(t.image);
+            } else {
+              String last = (String) parts.get(parts.size()-1);
+              parts.set(parts.size()-1, last + t.image);
+            }
+          }
+        | t=<TEMPLATE_DOLLAR_NOT_LBRACE> {
+            if(parts.isEmpty() || !(parts.get(parts.size()-1) instanceof String)) {
+              parts.add(t.image);
+            } else {
+              String last = (String) parts.get(parts.size()-1);
+              parts.set(parts.size()-1, last + t.image);
+            }
+          }
+        | <TEMPLATE_EXPR_START> node=Expression() <RBRACE> { parts.add(node); }
+    )*
+    t2=<TEMPLATE_END>
+    {
+        return nodeFactory.createStringTemplate(t1,t2,tagFunction,parts);
+    }
+}
+
+ASTNode Identifier(): {
+  Token t;
+}
+{
+  	// A bare "@" (the GaltaJS "current filter context" reference, e.g.
+  	// `@.xxx` inside a `?[]` filter expression) used to be lexed as a
+  	// one-character IDENTIFIER_NAME - now that "@" is its own token (needed
+  	// so `@decorator` can be recognized as decorator syntax rather than a
+  	// single identifier), it's matched directly here instead.
+  	t=<AT>
+  		{
+      		return nodeFactory.createIdentifierFilter(t);
+  		}
+  | 	t=Identifier_Name()
+  		{
+        	return nodeFactory.createIdentifier(t,ASTLiteral.parseIdentifier(t.image));
+		}
+}
+
+
+/* Section 11.1.4: Array Initializer */
+
+ASTArrayLiteral ArrayLiteral(): {
+	ASTArrayLiteral node;
+ 	Token t,t2;
+}
+{
+    t="[" {node = nodeFactory.createArrayLiteral(t);} 
+		(
+		   LOOKAHEAD("]") t2="]" { return node.endToken(t2); }
+		 | ElementList(node) t2="]" { return node.endToken(t2); }
+		)
+}
+
+void ElementList(ASTArrayLiteral node): {
+}
+{
+    ElementEntry(node) ("," ElementEntry(node) )* 
+}
+
+void ElementEntry(ASTArrayLiteral node): {
+    Token t=null;
+ 	ASTNode n, n2=null;
+}
+{
+     LOOKAHEAD({getToken(1).kind==YIELD && yieldReserved}) n=YieldOnlyExpression()
+     	{
+      		node.addExpression(n);
+    	}
+   | n=ConditionalExpression() ( LOOKAHEAD("=") t="=" n2=AssignmentExpression() )?
+     	{
+     	    if(n2!=null) {
+     	       n=nodeFactory.createAssign(t,n,n2);
+     	    }
+      		node.addExpression(n);
+    	}
+   | "..." n=AssignmentExpression()
+   		{
+      		node.addSpread(n);
+   		}
+   |
+  		{
+   		  	// Only add empty slot for array holes [1,,3], not trailing commas [1,2,] or (a,b,)
+			Token inputToken = getToken(1);
+   		  	if(inputToken!=null && inputToken.kind==COMMA) {
+      			node.addEmptySlot();
+	 		}
+  		}
+}
+
+// A formal-parameter list: structurally identical to ElementList/
+// ElementEntry above (same shared node representation for a parameter
+// list), except it also tolerates TypeScript's "?" optional-parameter
+// marker and ": Type" annotations. Deliberately NOT folded into
+// ElementList/ElementEntry itself (which ArrayLiteral() still uses,
+// unchanged) - see FormalParameter()'s own doc comment for why.
+void FormalParameterList(ASTArrayLiteral node): {
+}
+{
+    FormalParameter(node) ("," FormalParameter(node) )*
+}
+
+void FormalParameter(ASTArrayLiteral node): {
+    Token t=null;
+ 	ASTNode n, n2=null;
+}
+{
+     LOOKAHEAD({getToken(1).kind==YIELD && yieldReserved}) n=YieldOnlyExpression()
+     	{
+      		node.addExpression(n);
+    	}
+   // TypeScript's optional-parameter marker ("a?"/"a?:") only ever legally
+   // follows a PLAIN identifier - matched and consumed here, BEFORE
+   // ConditionalExpression() ever runs. ConditionalExpression() would
+   // otherwise misparse "a?:T" as GaltaJS's own "?:" ELVIS operator the
+   // instant it sees a bare "?"/"?:" immediately following any operand -
+   // true for every ConditionalExpression() call site, not just this one
+   // (a?:T's "?:" lexes as ONE token, ELVIS, by maximal munch - not "?"
+   // then ":" - whenever there's no space between them, which is the
+   // idiomatic TypeScript style). A "?" directly after a destructuring
+   // pattern ("{a,b}?: T") isn't recognized this way - a narrow, documented
+   // gap; "?"-free destructured parameters ("{a,b}: T") still work via the
+   // plain ConditionalExpression() alternative below, which has no such
+   // ambiguity (a bare ":" with no preceding "?" is never part of
+   // ConditionalExpression()'s own grammar).
+   | LOOKAHEAD({env.supportTypeHints() && looksLikeBindingIdentifier(1) && (getToken(2).kind==HOOK || getToken(2).kind==ELVIS)})
+     t=Identifier_Name()
+     {
+       n = nodeFactory.createIdentifier(t,ASTLiteral.parseIdentifier(t.image));
+     }
+     { skipOptionalMarkerAndTypeIfAny(); }
+     ( LOOKAHEAD("=") t="=" n2=AssignmentExpression() )?
+     	{
+     	    if(n2!=null) {
+     	       n=nodeFactory.createAssign(t,n,n2);
+     	    }
+      		node.addExpression(n);
+    	}
+   | n=ConditionalExpression()
+     { skipTypeAnnotationIfAny(); }
+     ( LOOKAHEAD("=") t="=" n2=AssignmentExpression() )?
+     	{
+     	    if(n2!=null) {
+     	       n=nodeFactory.createAssign(t,n,n2);
+     	    }
+      		node.addExpression(n);
+    	}
+   | "..." n=AssignmentExpression() { skipTypeAnnotationIfAny(); }
+   		{
+      		node.addSpread(n);
+   		}
+   |
+  		{
+   		  	// Only add empty slot for array holes [1,,3], not trailing commas [1,2,] or (a,b,)
+			Token inputToken = getToken(1);
+   		  	if(inputToken!=null && inputToken.kind==COMMA) {
+      			node.addEmptySlot();
+	 		}
+  		}
+}
+
+/*
+    leftNode=ConditionalExpression() ( LOOKAHEAD(1)
+      (  (t="=" rightNode=AssignmentExpression()
+*/
+
+/* Section 11.1.5: Object Initializer */
+
+ASTObjectLiteral ObjectLiteral(): {
+	ASTObjectLiteral node;
+	Token t,t2;
+}
+{
+    t="{" {node = nodeFactory.createObjectLiteral(t);} PropertyNameAndValueList(node) t2="}"
+   		{ 
+   			return node.endToken(t2); 
+   		}
+}
+
+
+void PropertyNameAndValueList(ASTObjectLiteral node): {
+}	
+{
+	PropertyEntry(node) ("," PropertyEntry(node) )*
+}
+
+
+// < expr >
+// a: < expr >
+void PropertyEntry(ASTObjectLiteral node): {
+	Object name;
+	ASTNode f;
+	ASTNode n=null;
+ 	ASTArrayLiteral parameters=null;
+  	Token t=null;
+  	Token tgen=null;
+  	Token tasync=null;
+  	Token tget=null;
+  	Token tset=null;
+  	Token tname=null;
+  	List<ASTNode> body=null;
+  	boolean savedYieldReserved;
+  	boolean savedAwaitReserved;
+}
+{
+     LOOKAHEAD(PropertyName() ":") name=PropertyName() ":" n=AssignmentExpression()
+		{
+      		node.addExpression(name, n);
+		}
+   | LOOKAHEAD({isMethodEntry()}) [LOOKAHEAD(2) tasync="async"] [tgen="*"]
+     {tname=getToken(1);} name=PropertyName()
+     {
+       // A ComputedPropertyName is evaluated in the SURROUNDING context, not
+       // the method's own [[GeneratorKind]] scope (see the analogous runtime
+       // fix in RuntimeUtil.nearestYielderContext()) - so PropertyName()
+       // above must run under the OUTER yieldReserved/awaitReserved value;
+       // only the method's own FormalParameters/FunctionBody (from here on)
+       // are yield/await-reserved per its own generator-ness/async-ness,
+       // same as FunctionDeclaration().
+       savedYieldReserved = yieldReserved;
+       yieldReserved = (tgen!=null);
+       savedAwaitReserved = awaitReserved;
+       awaitReserved = (tasync!=null);
+     }
+     { skipTypeParametersIfAny(); }
+     t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")"
+     { skipTypeAnnotationIfAny(); }
+     "{" body = FunctionBody() "}"
+     { yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved; }
+		{
+		  	// Use the leftmost token of the whole method definition (not just
+		  	// "(") as the node's begin position, so toString()/source
+		  	// extraction includes "async"/"*"/the property name instead of
+		  	// starting mid-way at the parameter list (test262
+		  	// built-ins/Function toString cluster).
+		  	Token tbegin = tasync!=null ? tasync : (tgen!=null ? tgen : tname);
+		  	ASTFunctionMethod decl = nodeFactory.createFunctionMethod(tbegin,name,parameters,body);
+		  	decl.setGenerator(tgen!=null);
+		  	decl.setAsync(tasync!=null);
+      		node.addFunction(name,decl);
+		}
+   | LOOKAHEAD(3) tget="get" name=PropertyName() { savedYieldReserved = yieldReserved; yieldReserved = false; savedAwaitReserved = awaitReserved; awaitReserved = false; } t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")" { skipTypeAnnotationIfAny(); } "{" body = FunctionBody() "}" { yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved; }
+		{
+		  	ASTFunctionMethod decl = nodeFactory.createFunctionMethod(tget,name,parameters,body);
+      		node.addGetter(name,decl);
+		}
+   | LOOKAHEAD(3) tset="set" name=PropertyName() { savedYieldReserved = yieldReserved; yieldReserved = false; savedAwaitReserved = awaitReserved; awaitReserved = false; } t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")" { skipTypeAnnotationIfAny(); } "{" body = FunctionBody() "}" { yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved; }
+		{
+		  	ASTFunctionMethod decl = nodeFactory.createFunctionMethod(tset,name,parameters,body);
+      		node.addSetter(name,decl);
+		}
+   | n=AssignmentExpression() 
+   		{
+      		node.addExpression(n);
+   		}
+   | "..." n=AssignmentExpression()
+   		{
+      		node.addSpread(n);
+   		}
+   |
+   		{
+   		  	// Make sure that a single "," is the last one (not after a empty expression)
+			Token inputToken = getToken(1);
+   		  	if(inputToken==null || inputToken.kind==COMMA) {
+	 			throw generateParseException();
+	 		}
+   		} 
+}
+
+
+Object PropertyName(): {
+	Token t;
+	Object f;
+}
+{
+	  t=Property_Name()
+		{
+			// A property name is an IdentifierName (or a reserved word spelled as
+			// one); unicode escapes within it must be decoded the same way a plain
+			// identifier's are (see Identifier(), ASTLiteral.parseIdentifier()).
+			return ASTLiteral.parseIdentifier(t.image);
+		}
+	| "[" f=AssignmentExpression() "]"
+		{
+			return f;			
+		}
+	| t=<STRING_LITERAL>
+		{
+			return ASTLiteral.parseString(t.image);			
+		}
+	| (t=<DEC_INTEGER_LITERAL>|t=<HEX_INTEGER_LITERAL>|t=<OCT_INTEGER_LITERAL>|t=<BIN_INTEGER_LITERAL>)
+		{
+		    /* 3.0 should be formatted like 3 */
+			return NumberFormatting.numberToString(ASTLiteral.parseInteger(env,t.image));			
+		}
+	| t=<DECIMAL_LITERAL>
+		{
+		    /* 3.0 should be formatted like 3 */
+			return NumberFormatting.numberToString(ASTLiteral.parseDecimal(env,t.image));
+		}
+}
+
+   
+/* Section 11.2: Left-Hand-Side Expressions */
+
+ASTNode LeftHandSideExpression(): {
+    ASTNode node;
+}
+{
+	  LOOKAHEAD(1) node=MemberExpression() { 
+			return node;
+		}
+    | node=CallExpression(null) {
+    		return node; 
+      	}
+}
+/*
+ASTNode NewExpression(): {
+    ASTNode mode;
+}
+{
+	node=MemberExpression() { 
+			return head;
+		}
+}
+*/
+ASTNode MemberExpression(): {
+    ASTNode head;
+}
+{
+	head=MemberExpressionHead()
+		[
+      		LOOKAHEAD(1)
+    		head=CallExpression(head)
+		]
+		{
+			return head;
+		}
+}
+
+ASTNode MemberExpressionHead(): {
+	ASTNode node;
+	ASTNode attrNode=null;
+    Token t,t2,tmode,tmeta;
+	List<ASTNode> nodes=null;
+}
+{
+  	  LOOKAHEAD("super" "(") t="super"  "(" [nodes=ArgumentList()]  ")"
+  		{
+  		  	return nodeFactory.createSuperCtor(t,nodes);
+  		}
+  	| LOOKAHEAD("super" ("." | "[")) t="super" { return nodeFactory.createSuperMember(t); }
+    // import.defer(specifier) / import.source(specifier) (deferred/
+    // source-phase dynamic import proposals) - same "kept OUT of
+    // PrimaryExpression()" rationale as plain ImportCall below (so
+    // "new import.defer(x)" stays a SyntaxError, while
+    // "import.defer(x).then(...)" works via CallExpressionPart()
+    // chaining). "defer"/"source" are contextual, not reserved - any other
+    // identifier after "import." falls through to a parse error, same
+    // pattern as ForOf's "of" check below. Explicitly excludes "meta" (via
+    // the added semantic condition) so "import.meta(" (calling the meta
+    // object - e.g. test262's own "import.meta is not callable" check)
+    // doesn't get swallowed by this alternative's purely-syntactic "import
+    // '.' Identifier_Name() '(' " shape, which "import.meta(" also
+    // matches - falls through to the import.meta alternative below
+    // instead, same as bare "import.meta" (no trailing "(") already does.
+    | LOOKAHEAD("import" "." Identifier_Name() "(", {getToken(1).kind==IMPORT && !getToken(3).image.equals("meta")}) t="import" "." tmode=Identifier_Name() "(" node=AssignmentExpression() [ "," ] ")"
+        {
+        	if("defer".equals(tmode.image)) {
+        		return nodeFactory.createImportCall(t,node,null,org.monflabs.galtajs.node.ASTImportCall.ImportCallMode.DEFER);
+        	} else if("source".equals(tmode.image)) {
+        		return nodeFactory.createImportCall(t,node,null,org.monflabs.galtajs.node.ASTImportCall.ImportCallMode.SOURCE);
+        	} else {
+        		throw generateParseException();
+        	}
+        }
+    // import.meta (ImportMeta) - bare, no trailing "(", OR calling/member-
+    // accessing the meta object itself (e.g. "import.meta()", "import.meta.url") -
+    // reaches this alternative once the "("-requiring one above (import.
+    // defer(...)/import.source(...), now explicitly excluding "meta") has
+    // already failed its own LOOKAHEAD. "meta" is contextual, same
+    // treatment as "defer"/"source" above - validated after the fact, any
+    // other identifier falls through to a parse error.
+    | LOOKAHEAD("import" "." Identifier_Name()) t="import" "." tmeta=Identifier_Name()
+        {
+        	if("meta".equals(tmeta.image)) {
+        		return nodeFactory.createImportMeta(t);
+        	} else {
+        		throw generateParseException();
+        	}
+        }
+    // Dynamic import() (spec 13.3.10, ImportCall) - kept OUT of
+    // PrimaryExpression()/AllocationExpression() deliberately, so that
+    // "new import(x)" correctly stays a SyntaxError (AllocationClass() -
+    // reached only via "new" above - never routes through this
+    // alternative) while "import(x).then(...)"/"await import(x)" work,
+    // since MemberExpression()'s own CallExpressionPart() suffix chaining
+    // still applies to whatever this alternative returns. The optional 2nd
+    // AssignmentExpression is the import-attributes proposal's options
+    // argument ("import(specifier, {with: {...}})"), itself optionally
+    // followed by its own trailing comma.
+    | LOOKAHEAD("import" "(") t="import" "(" node=AssignmentExpression() [ "," [ attrNode=AssignmentExpression() [ "," ] ] ] ")"
+        {
+        	return nodeFactory.createImportCall(t,node,attrNode,org.monflabs.galtajs.node.ASTImportCall.ImportCallMode.NORMAL);
+        }
+    | node=PrimaryExpression() {return node;}
+    | LOOKAHEAD(2) t="new" "." t2=Identifier_Name()
+        {
+          	return nodeFactory.createNewMember(t,t2.image).endToken(t2);
+        }
+    | t="new" node=AllocationExpression(t)
+    	{
+    		return node; 
+      	}
+}
+
+ASTNode AllocationExpression(Token newTk): {
+	ASTNode id;
+	ASTNode node; 
+	int dim=0;
+	List<ASTNode> args=null;
+}
+{
+	id=AllocationClass()
+		(
+			 ( LOOKAHEAD("[" "]") "[" "]" {dim++;} )* "[" node=Expression() "]" 
+			 	{
+			 		return nodeFactory.createNewArray(newTk,id,dim,node);
+			 	}
+			|  "(" [args=ArgumentList()] ")"
+				{
+					return nodeFactory.createNewObject(newTk,id,args);
+				}
+			|  
+				{
+					return nodeFactory.createNewObject(newTk,id,Collections.emptyList());
+				}
+		)
+}
+
+/* can this be simplified? Does it cover all use cases? */
+ASTNode AllocationClass() : {
+	Token t,t2;
+	ASTNode n;
+}
+{
+  LOOKAHEAD("(") n=PrimaryExpression()
+        {
+            return n;
+        }
+|  t="new" n=AllocationExpression(t)
+  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
+  	| LOOKAHEAD(1) n=TemplateLiteral(n)
+  	)*
+  		{
+  			return n;
+  		}
+|  t="this" { n=nodeFactory.createThis(t); }
+  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
+  	| LOOKAHEAD(1) n=TemplateLiteral(n)
+  	)*
+  		{
+  			return n;
+  		}
+   // import.meta ("new import.meta()"/"new import.meta.foo()" - unlike
+   // ImportCall (import(x), import.defer(x)/import.source(x)), ImportMeta
+   // IS a genuine PrimaryExpression per spec (13.3.12 MetaProperty), so
+   // "new import.meta()" must parse (and, per test262's own "import.meta
+   // is not a constructor" check, throw TypeError at RUNTIME, not a
+   // SyntaxError here) - mirrors the "this"/Identifier_Name() alternatives
+   // immediately above/below, not routed through PrimaryExpression()
+   // itself since ImportMeta is parsed in MemberExpressionHead() instead
+   // (this AllocationClass() production doesn't reach that).
+|  LOOKAHEAD("import" ".") t="import" "." t2=Identifier_Name()
+  		{
+  			if(!"meta".equals(t2.image)) {
+  				throw generateParseException();
+  			}
+  			n=nodeFactory.createImportMeta(t);
+  		}
+  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
+  	| LOOKAHEAD(1) n=TemplateLiteral(n)
+  	)*
+  		{
+  			return n;
+  		}
+|  t=Identifier_Name() { n=nodeFactory.createIdentifier(t,t.image); }
+  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
+  	| LOOKAHEAD(1) n=TemplateLiteral(n)
+  	)*
+  		{
+  			return n;
+  		}
+   // Any other PrimaryExpression form: literals, function/class expressions,
+   // array/object literals, etc. Evaluation throws TypeError if not constructible.
+|  LOOKAHEAD(1) n=PrimaryExpression()
+  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
+  	| LOOKAHEAD(1) n=TemplateLiteral(n)
+  	)*
+  		{
+  			return n;
+  		}
+}
+
+
+ASTNode CallExpression(ASTNode leftNode): {
+	ASTNode node;
+}
+{
+    node=CallExpressionPart(leftNode)
+    [
+        LOOKAHEAD(1)
+        node=CallExpression(node)
+        {
+        	return node;
+        }
+    ]
+    	{
+    		return node;
+    	}
+}
+ASTNode CallExpressionPart(ASTNode leftMember): {
+	Token t=null,t2=null,o=null,s=null;
+	ASTNode n;
+	ASTArrayMember indexes;
+	List<ASTNode> nodes=null;
+	ASTStringTemplate template;
+}
+{
+     // Tagged templates chain like any other MemberExpression/CallExpression suffix
+     // (e.g. tag`a``b`, obj.tag`a``b`), so this loops back through CallExpression.
+     LOOKAHEAD(1) template=TemplateLiteral(leftMember)
+        {
+            return template;
+        }
+   | LOOKAHEAD(2) t="[" t2="]"
+        {
+            return nodeFactory.createArrayMemberArray(t,leftMember).endToken(t2);
+        }
+   | LOOKAHEAD(3) [s=".."] t="[" "*" t2="]"
+        {
+            return nodeFactory.createArrayMemberFlatten(t,leftMember,s!=null).endToken(t2);
+        }
+   | LOOKAHEAD(2) [s=".."|o="?."] t="["
+   			{indexes = nodeFactory.createArrayMember(t!=null?t:o,leftMember,s!=null,o!=null);}
+   		ArrayIndexList(indexes) t2="]"
+        	{
+				return indexes.endToken(t2);
+        	}
+   | t="[?" "(" n=Expression() ")" t2="]"
+        {
+            return nodeFactory.createMemberFilter(t,leftMember,n).endToken(t2);
+        }
+   | t=".(" n=Expression() t2=")"
+        {
+            return nodeFactory.createMemberMap(t,leftMember,n).endToken(t2);
+        }
+   | LOOKAHEAD(2) [o="?."] t="(" [nodes=ArgumentList()] t2=")"
+        {
+            return nodeFactory.createFunctionCall(t,leftMember,nodes,o!=null).endToken(t2);
+        }
+   | LOOKAHEAD(2) ".." (t="*" | t="[" "*" t2="]" )
+        {
+            return nodeFactory.createArrayMemberFlatten(t,leftMember,true).endToken(t2);
+        }
+   | LOOKAHEAD(2) t=".." t2=Property_Name()
+        {
+           	return nodeFactory.createMember(t2,leftMember,t2.image,true,false);
+        }
+   | LOOKAHEAD(2) t=".." t2=<DEC_INTEGER_LITERAL>
+        {
+           	return nodeFactory.createMember(t2,leftMember,t2.image,true,false);
+        }
+   | LOOKAHEAD(2) ".."
+        {
+            return nodeFactory.createArrayMemberDeepScan(t,leftMember);
+        }
+   | LOOKAHEAD(3) (o="?." | s=".") "#" t=Property_Name()
+        {
+          	return nodeFactory.createMember(o,leftMember,"#"+ASTLiteral.parseIdentifier(t.image),false,o!=null).endToken(t);
+        }
+   | LOOKAHEAD(2) (o="?." | s=".") t=Property_Name()
+        {
+          	return nodeFactory.createMember(o,leftMember,ASTLiteral.parseIdentifier(t.image),false,o!=null).endToken(t);
+        }
+   | LOOKAHEAD(2) t=<DECIMAL_LITERAL>
+        {
+            // .0 is actually a decimal literal token
+            String decLiteral = t.image;
+            if(ASTMember.isMemberIntegerIndex(env, decLiteral)) { 
+            	ASTLiteral ma = nodeFactory.createLiteral(t,ASTLiteral.parseInteger(env,decLiteral.substring(1))); 
+          		ASTArrayMember m = nodeFactory.createArrayMember(t, leftMember, false, false);
+          		m.addIndex(t,ma);
+          		return m;
+         	}
+	 		throw generateParseException();         	
+        }
+   | LOOKAHEAD(2) t="." t2="*"
+        {
+          	return nodeFactory.createArrayMemberFlatten(t,leftMember,false).endToken(t2);
+        }
+
+}
+
+void ArrayIndexList(ASTArrayMember node): {
+}
+{
+	ArrayIndex(node) ("," ArrayIndex(node) )*  	  
+}
+
+void ArrayIndex(ASTArrayMember node): {
+    Token t=null;
+ 	ASTNode start=null, end=null, step=null;
+}
+{
+     t=":" [end=AssignmentExpression()] [":" [step=AssignmentExpression()]]
+     	{
+           node.addIndex(t,start,end,step);
+    	}
+  |  start=AssignmentExpression() [t=":" [end=AssignmentExpression()] [":" [step=AssignmentExpression()]]]
+     	{
+            if(t!=null) {
+              node.addIndex(t,start,end,step);
+          	} else { 
+              node.addIndex(t,start);
+            }
+    	}
+}
+
+
+// Hum, can we make the trailing ',' easier to handle here?
+// Maybe when refactoring the object literal as well
+List<ASTNode> ArgumentList(): {
+ 	ASTNode node=null;
+ 	List<ASTNode> nodes=null;
+ 	Token t=null;
+}
+{
+    (t="...")? node=AssignmentExpression()   
+    	{
+ 			nodes = new ArrayList<ASTNode>();
+    	    if(debug) {
+    	      node = nodeFactory.createDebugHook(node);
+    	    }
+ 			if(t!=null) {
+ 			  node = nodeFactory.createFunctionCallSpread(t,node);
+ 			}
+    		nodes.add(node); 
+	   		node = null; t = null; // Next loop...
+    	}
+    (
+
+      "," (t="...")? (node=AssignmentExpression())? 
+    	{
+    	  	if(node==null) {
+	   		  	// Make sure that a single "," is the last one (not after a empty expression)
+				Token inputToken = getToken(1);
+	   		  	if(inputToken==null || inputToken.kind==COMMA) {
+		 			throw generateParseException();
+		 		}
+    	 	} else { 
+	    	    if(debug) {
+	    	      node = nodeFactory.createDebugHook(node);
+	    	    }
+	 			if(t!=null) {
+	 			  node = nodeFactory.createFunctionCallSpread(t,node);
+	 			}
+	    		nodes.add(node);
+	   		}
+	   		node = null; t = null; // Next loop...
+    	} 
+    )*
+    	{
+			return nodes;
+	}    	  
+}
+
+/* Section 11.3 Postfix Expressions */
+/* Condensed the 2 original productions into one */
+
+ASTNode PostfixExpression(): {
+	Token t;
+    ASTNode leftNode;
+}
+{
+    // Tagged template chaining (tag`a``b`, obj.tag`a`) is handled inside
+    // MemberExpression/CallExpressionPart, since it can chain arbitrarily like any
+    // other member/call suffix.
+    leftNode=MemberExpression()
+    	[LOOKAHEAD( {noLineTerminatorBeforeNextToken() && (getToken(1).kind == INCR || getToken(1).kind == DECR)} ) (t="++" | t="--")
+     		{
+     			if(t.image.equals("++")) {
+     				return nodeFactory.createPostInc(t,leftNode);
+     			} else {
+     				return nodeFactory.createPostDec(t,leftNode);
+     			}
+     		}
+    	]
+    	{
+     		return leftNode;
+    	}
+}
+
+ 
+/* Section 11.4 Unary Operators */
+/* Condensed the 2 original productions into one */
+
+
+ASTNode UnaryExpression(): {
+ 	ASTNode node;
+ 	Token t;
+}
+{
+    LOOKAHEAD("await" UnaryExpression(), {awaitReserved}) t="await" node=UnaryExpression()
+    	{
+    		return nodeFactory.createAwait(t,node);
+    	}
+    |node=PostfixExpression()
+      	{ 
+      		return node;
+      	}
+    |t="delete" node=UnaryExpression()
+    	{
+    		return nodeFactory.createDelete(t,node);
+    	}
+    |t="void" node=UnaryExpression()
+    	{
+    		return nodeFactory.createVoid(t,node);
+    	}
+    |t="typeof" node=UnaryExpression()
+    	{
+    		return nodeFactory.createTypeof(t,node);
+    	}
+    |t="++" node=UnaryExpression()     
+    	{
+    		return nodeFactory.createPreInc(t,node);
+    	}
+    |t="--" node=UnaryExpression()
+        {
+    		return nodeFactory.createPreDec(t,node);
+    	}
+    |t="+" node=UnaryExpression()
+    	{
+    	  	// Not sure how to disambiguate, in the grammar, the unary operator from the number literal
+    	  	// Note that we need to distinguish +0
+    	    if(node instanceof ASTLiteral) {
+    	      ASTLiteral lit = (ASTLiteral)node;
+    	      if(lit.astPlus()) { 
+    	      	return lit;
+    	      }
+    	  	}
+    		return nodeFactory.createPlus(t,node);
+    	}
+    |t="-" node=UnaryExpression()
+    	{
+    	  	// Not sure how to disambiguate, in the grammar, the unary operator from the number literal
+    	  	// Note that we need to distinguish -0
+    	    if(node instanceof ASTLiteral) {
+    	      ASTLiteral lit = (ASTLiteral)node;
+    	      if(lit.astMinus()) { 
+    	      	return lit;
+    	      }
+    	  	}
+    		return nodeFactory.createMinus(t,node);
+    	}
+    |t="~" node=UnaryExpression()
+    	{
+    		return nodeFactory.createBitNot(t,node);
+    	}
+    |t="!" node=UnaryExpression()
+    	{
+    		return nodeFactory.createNot(t,node);
+    	}
+}
+
+
+ASTNode PowerExpression(): {
+	Token t;
+ 	ASTNode leftNode;
+ 	ASTNode rightNode;
+}
+{
+    // Right-associative: 2 ** 3 ** 2 === 2 ** (3 ** 2), unlike every other binary operator.
+    leftNode=UnaryExpression() [ LOOKAHEAD(1) t="**" rightNode=PowerExpression()
+        {
+            leftNode=nodeFactory.createPower(t,leftNode,rightNode);
+        }
+    ]
+    	{
+    		return leftNode;
+    	}
+}
+
+
+
+/* Section 11.5: Multiplicative Operators */
+/* Condensed the 2 original productions into one */
+
+ASTNode MultiplicativeExpression(): {
+	Token t;
+ 	ASTNode leftNode;
+ 	ASTNode rightNode;
+}
+{
+    leftNode=PowerExpression() ( LOOKAHEAD(1)
+      (  (t="*" rightNode=PowerExpression()
+           {
+               leftNode=nodeFactory.createMul(t,leftNode,rightNode);
+           })
+      |  (t=<SLASH> rightNode=PowerExpression()
+           {
+                leftNode=nodeFactory.createDiv(t,leftNode,rightNode);
+           })
+      |  (t="%" rightNode=PowerExpression()
+           {
+                leftNode=nodeFactory.createMod(t,leftNode,rightNode);
+           })
+    ))*
+    	{
+    		return leftNode;
+    	}
+}
+
+
+/* Section 11.6: Additive Operators */
+/* Condensed the 2 original productions into one */
+
+ASTNode AdditiveExpression(): {
+	Token t;
+    ASTNode leftNode;
+    ASTNode rightNode;
+}
+{
+    leftNode=MultiplicativeExpression() ( LOOKAHEAD(1)
+      (  (t="+" rightNode=MultiplicativeExpression()
+           {
+               leftNode=nodeFactory.createAdd(t,leftNode,rightNode);
+           })
+      |  (t="-" rightNode=MultiplicativeExpression()
+           {
+                leftNode=nodeFactory.createSub(t,leftNode,rightNode);
+           })
+    ))*
+    	{
+    		return leftNode;
+    	}
+}
+
+
+/* Section 11.7: Bitwise Shift Operators */
+/* Condensed the 2 original productions into one */
+
+ASTNode ShiftExpression(): {
+	Token t;
+	ASTNode leftNode,rightNode;
+}
+{
+	    leftNode=AdditiveExpression() ( LOOKAHEAD(1)
+      (  (t="<<" rightNode=AdditiveExpression()
+           {
+               leftNode=nodeFactory.createLShift(t,leftNode,rightNode);
+           })
+      |  (t=">>" rightNode=AdditiveExpression()
+           {
+               leftNode=nodeFactory.createRShift(t,leftNode,rightNode);
+           })
+      |  (t=">>>" rightNode=AdditiveExpression()
+           {
+               leftNode=nodeFactory.createRunShift(t,leftNode,rightNode);
+           })
+    ))*
+    	{
+    		return leftNode;
+    	}
+}
+
+
+/* Section 11.4: Relational Operators */
+/* Condensed the 2 original productions into one */
+
+ASTNode RelationalExpression(): {
+	Token t, tpriv, tname;
+ 	ASTNode leftNode,rightNode;
+}
+{
+	    LOOKAHEAD(2) tpriv="#" tname=Property_Name() t="in" rightNode=ShiftExpression()
+	    	{
+	    		// Ergonomic brand check (#name in obj): the private name is a fixed,
+	    		// lexically-known key, not a general expression - reuse the plain "in"
+	    		// runtime check (including its RHS-must-be-object TypeError) against the
+	    		// same "#"+name convention already used for private member access.
+	    		// ASTPrivateNameLiteral (not a plain ASTLiteral) marks this as a genuine
+	    		// private-name reference, distinct from a coincidental ordinary string
+	    		// literal like "#name" that happens to start with "#" - ASTIn needs to
+	    		// tell the two apart.
+	    		leftNode = nodeFactory.createPrivateNameLiteral(tpriv, "#"+tname.image);
+	    		return nodeFactory.createIn(t,MODE.ONE,leftNode,rightNode);
+	    	}
+	  | leftNode=ShiftExpression() ( LOOKAHEAD(1)
+      (  (t="<" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createLt(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t=">" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createGt(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t="<=" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createLe(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t=">=" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createGe(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t="*<" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createLt(t,MODE.ALL,leftNode,rightNode);
+           })
+      |  (t="*>" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createGt(t,MODE.ALL,leftNode,rightNode);
+           })
+      |  (t="*<=" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createLe(t,MODE.ALL,leftNode,rightNode);
+           })
+      |  (t="*>=" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createGe(t,MODE.ALL,leftNode,rightNode);
+           })
+      |  (t="instanceof" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createInstanceOf(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t="*instanceof" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createInstanceOf(t,MODE.ALL,leftNode,rightNode);
+           })
+      |  (t="in" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createIn(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t="*in" rightNode=ShiftExpression()
+           {
+               leftNode=nodeFactory.createIn(t,MODE.ALL,leftNode,rightNode);
+           })
+           
+    ))*
+    	{
+    		return leftNode;
+    	}
+}
+
+
+/* Section 11.9: Equality Operators */
+/* Condensed the 2 original productions into one */
+
+ASTNode EqualityExpression(): {
+	Token t;
+ 	ASTNode leftNode,rightNode;
+}
+{
+			    leftNode=RelationalExpression() ( LOOKAHEAD(1)
+      (  (t="==" rightNode=RelationalExpression()
+           {
+               leftNode=nodeFactory.createEq(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t="!=" rightNode=RelationalExpression()
+           {
+               leftNode=nodeFactory.createNe(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t="===" rightNode=RelationalExpression()
+           {
+               leftNode=nodeFactory.createEqStrict(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t="!==" rightNode=RelationalExpression()
+           {
+               leftNode=nodeFactory.createNeStrict(t,MODE.ONE,leftNode,rightNode);
+           })
+      |  (t="*==" rightNode=RelationalExpression()
+           {
+               leftNode=nodeFactory.createEq(t,MODE.ALL,leftNode,rightNode);
+           })
+      |  (t="*!=" rightNode=RelationalExpression()
+           {
+               leftNode=nodeFactory.createNe(t,MODE.ALL,leftNode,rightNode);
+           })
+      |  (t="*===" rightNode=RelationalExpression()
+           {
+               leftNode=nodeFactory.createEqStrict(t,MODE.ALL,leftNode,rightNode);
+           })
+      |  (t="*!==" rightNode=RelationalExpression()
+           {
+               leftNode=nodeFactory.createNeStrict(t,MODE.ALL,leftNode,rightNode);
+           })
+           
+    ))*
+    	{
+    		return leftNode;
+    	}
+}
+
+
+/* Section 11.10: Binary Bitwise Operators */
+/* Condensed the 2 original productions into one */
+
+ASTNode BitwiseANDExpression(): {
+	Token t;
+    ASTNode leftNode,rightNode;
+}
+{
+    leftNode=EqualityExpression() (LOOKAHEAD(1) t="&" rightNode=EqualityExpression()
+       {
+            leftNode=nodeFactory.createBitAnd(t,leftNode,rightNode);
+       }
+
+    )*
+    	{
+    		return leftNode;
+    	}
+}
+
+ASTNode BitwiseXORExpression(): {
+	Token t;
+    ASTNode leftNode,rightNode;
+}
+{
+    leftNode=BitwiseANDExpression() (LOOKAHEAD(1) t="^" rightNode=BitwiseANDExpression()
+       {
+            leftNode=nodeFactory.createBitXor(t,leftNode,rightNode);
+       }
+
+    )*
+    	{
+    		return leftNode;
+    	}
+}
+
+ASTNode BitwiseORExpression(): {
+	Token t;
+    ASTNode leftNode,rightNode;
+}
+{
+    leftNode=BitwiseXORExpression() (LOOKAHEAD(1) t="|" rightNode=BitwiseXORExpression()
+       {
+            leftNode=nodeFactory.createBitOr(t,leftNode,rightNode);
+       }
+
+    )*
+    	{
+    		return leftNode;
+    	}
+}
+
+
+/* Section 11.11: Binary Logical Operators */
+/* Condensed the 2 original productions into one */
+
+ASTNode LogicalANDExpression():
+{
+	Token t;
+    ASTNode leftNode,rightNode;
+}
+{
+	leftNode=BitwiseORExpression() ( LOOKAHEAD(1)
+      (  (t="&&" rightNode=BitwiseORExpression()
+           {
+               leftNode=nodeFactory.createAnd(t,leftNode,rightNode);
+           })
+    ))*
+    	{
+    		return leftNode;
+    	}
+}
+
+ASTNode LogicalORExpression():
+{Token t;
+    ASTNode leftNode,rightNode;
+}
+{
+	leftNode=LogicalANDExpression() ( LOOKAHEAD(1)
+      (  (t="||" rightNode=LogicalANDExpression()
+           {
+               leftNode=nodeFactory.createOr(t,leftNode,rightNode);
+           })
+       | (t="??" rightNode=LogicalANDExpression()
+           {
+               leftNode=nodeFactory.createNullCoalescing(t,leftNode,rightNode);
+           })
+     ))*
+    	{
+    		return leftNode;
+    	}
+}
+
+
+/* Section 11.12: Conditional Operator */
+/* Condensed the 2 original productions into one */
+/* Added Elvis support */
+
+ASTNode ConditionalExpression(): {
+      ASTNode trueNode=null;
+      ASTNode falseNode;
+      ASTNode conditionNode;
+      Token t;
+}
+{
+    conditionNode=LogicalORExpression()
+      [ LOOKAHEAD(1)
+         ((t="?" trueNode=AssignmentExpression() ":") | (t="?:")) falseNode=AssignmentExpression()
+    	{
+    		return nodeFactory.createTernaryTest(t,conditionNode,trueNode,falseNode);
+    	}
+      ]
+    	{
+     		return conditionNode;
+    	}
+}
+
+
+/* Section 11.13: Assignment Operators */
+
+ASTNode AssignmentExpression(): {
+	Token t;
+ 	ASTNode leftNode=null;
+ 	ASTNode rightNode;
+}
+{
+    // When the next token is "yield" and we're directly inside a generator's
+    // own body (yieldReserved), it must be the YieldExpression keyword, not
+    // an identifier-starting ConditionalExpression - see yieldReserved's
+    // declaration above for why this can't just be Identifier_Name()'s
+    // ordinary (per-token) LOOKAHEAD like the other contextual keywords.
+    LOOKAHEAD({!(getToken(1).kind==YIELD && yieldReserved)})
+    leftNode=ConditionalExpression() ( LOOKAHEAD(1)
+      (  (t="=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssign(t,leftNode,rightNode);
+           })
+      |  (t="*=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignMul(t,leftNode,rightNode);
+           })
+      |  (t="**=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignPower(t,leftNode,rightNode);
+           })
+      |  (t=<SLASHASSIGN> rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignDiv(t,leftNode,rightNode);
+           })
+      |  (t="%=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignMod(t,leftNode,rightNode);
+           })
+      |  (t="+=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignAdd(t,leftNode,rightNode);
+           })
+      |  (t="-=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignSub(t,leftNode,rightNode);
+           })
+      |  (t="&=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignBitAnd(t,leftNode,rightNode);
+           })
+      |  (t="^=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignBitXor(t,leftNode,rightNode);
+           })
+      |  (t="|=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignBitOr(t,leftNode,rightNode);
+           })
+      |  (t="||=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignOr(t,leftNode,rightNode);
+           })
+      |  (t="&&=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignAnd(t,leftNode,rightNode);
+           })
+      |  (t="<<=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignLShift(t,leftNode,rightNode);
+           })
+      |  (t=">>=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignRShift(t,leftNode,rightNode);
+           })
+      |  (t=">>>=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignRunShift(t,leftNode,rightNode);
+           })
+      |  (t="??=" rightNode=AssignmentExpression()
+           {
+               leftNode=nodeFactory.createAssignNullCoalescing(t,leftNode,rightNode);
+           })
+      |  (t="|>" rightNode=ConditionalExpression() 
+           {
+               // ^^^ we use a condition expression here as the associativity is left->right
+               leftNode=nodeFactory.createPipelineCall(t,leftNode,rightNode);
+           })
+    ))*
+    	{
+    		return leftNode;
+    	}
+    |  leftNode=YieldOnlyExpression()
+       {
+           return leftNode;
+       }
+
+}
+
+// Factored out of AssignmentExpression() so ElementEntry() (array literal elements)
+// can also accept a bare "yield"/"yield*" - it's an AssignmentExpression alternative,
+// but ElementEntry() otherwise only descends to ConditionalExpression() precedence
+// (to leave "=" available for destructuring defaults).
+ASTNode YieldOnlyExpression(): {
+  Token t;
+  ASTNode leftNode = null;
+}
+{
+    t="yield"
+      ( LOOKAHEAD({isYieldStar()}) "*" leftNode=AssignmentExpression()
+          {
+              return nodeFactory.createYieldStar(t,leftNode);
+          }
+      // "yield [no LineTerminator here] AssignmentExpression": same
+      // LineTerminator restriction as the yield* form above.
+      | [ LOOKAHEAD({noLineTerminatorBeforeYieldOperand()}) leftNode=AssignmentExpression() ]
+          {
+              return nodeFactory.createYield(t,leftNode);
+          }
+      )
+}
+
+
+/* Section 11.14: Comma Operator */
+
+ASTNode Expression(): {
+	List<ASTNode> nodes=null;
+ 	ASTNode n1;
+ 	Token t=null;
+}
+{(
+    n1=AssignmentExpression()
+     ( LOOKAHEAD(",") t=","
+      	{
+       		// don't create  the list unless ',' exist
+        	if (nodes==null){
+        	  	nodes = new ArrayList<ASTNode>();
+          		nodes.add(n1);
+        	}
+      	}
+      n1=AssignmentExpression()
+      	{
+     	  	if(debug) { // the expresion node carries it for the first expression
+     	  	    n1 = nodeFactory.createDebugHook(n1);
+     		}
+        	nodes.add(n1);
+       	}
+     )*)
+     	{
+         	if(nodes!=null) {
+         		return nodeFactory.createExpression(nodes);
+         	}
+         	return n1;
+     	}
+}
+
+
+/* Section 12: STATEMENTS */
+
+ASTNode Statement(): {
+	ASTNode node;
+}
+{
+try {
+     (
+         LOOKAHEAD("{") node=Block()
+        |node=VariableStatement()
+        |node=EmptyStatement()
+        |LOOKAHEAD(Identifier_Name() ":")node=LabeledStatement()
+        // "synchronized" is also a valid plain identifier (see
+        // Identifier_Name()'s own <SYNCHRONIZED> alternative), so
+        // "synchronized(x)" alone is ambiguous with a call expression on a
+        // variable/function named "synchronized". The synchronized-block
+        // form is only ever followed by "{" - the syntactic lookahead below
+        // is the only thing that distinguishes the two; without it,
+        // ExpressionStatement() below always wins first and a genuine
+        // synchronized(x) { ... } block fails to parse ("Encountered {").
+        |LOOKAHEAD("synchronized" "(" Expression() ")" "{") node=Synchronized()
+        // TypeScript-style type hints (JSConfiguration.supportTypeHints()):
+        // parsed for syntax only, then discarded entirely - all three
+        // return createEmpty(), which StatementList() above already drops
+        // from the resulting statement list, same as a stray ";". Must be
+        // tried before ExpressionStatement() below, which would otherwise
+        // happily parse "type"/"interface"/"declare" as plain identifiers.
+        |LOOKAHEAD({isDeclareStart()}) node=DeclareStatement()
+        |LOOKAHEAD({isTypeAliasStart()}) node=TypeAliasStatement()
+        |LOOKAHEAD({isInterfaceStart()}) node=InterfaceStatement()
+        |node=ExpressionStatement()
+        |node=IfStatement()
+        |node=IterationStatement()
+        |node=ContinueStatement()
+        |node=BreakStatement()
+        |node=ReturnStatement()
+		|node=WithStatement()
+        |node=SwitchStatement()
+        |node=ThrowStatement()
+        |node=TryStatement()
+        |node=Debugger()
+        |node=FunctionDeclaration()
+        |node=ClassDeclaration()
+     )
+     	{
+     		if(node instanceof ASTFunctionDecl) { // Is there a better way?
+     		  ((ASTFunctionDecl)node).setStatement(true);
+     		  // FunctionDeclaration() is shared with the expression-position
+     		  // FunctionExpression alternative (PrimaryExpression), whose
+     		  // RBRACE correctly leaves the lexer in NO_REGEX (a following
+     		  // "/" is division). Only override here, once we know this
+     		  // parse was reached via Statement() - i.e. the "}" ends a
+     		  // Declaration and a following "/" starts a new
+     		  // StatementListItem (test262
+     		  // language/statementList/fn-regexp-literal.js: "function fn() {}/1/;").
+     		  token_source.SwitchTo(DEFAULT);
+     		}
+     		if(node instanceof ASTClassDecl) { // Is there a better way?
+     		  ((ASTClassDecl)node).setStatement(true);
+     		  // Same reasoning as the FunctionDeclaration case above (test262
+     		  // language/statementList/class-regexp-literal.js: "class C {}/1/;").
+     		  token_source.SwitchTo(DEFAULT);
+     		}
+     	  	if(debug) {
+     	  	  node = nodeFactory.createDebugHookStatement(node);
+     		}
+       		return node;
+     	}
+ } catch( ParseException ex ) {
+     if(errorList!=null) {
+     	errorList.addError(new ScriptError(ScriptError.ERROR,-1,ex.getMessage(),ex.currentToken.next.beginLine,ex.currentToken.next.beginColumn));
+     	recoverFromError(true);
+     	return null;
+     }
+     throw ex;
+ }
+}
+
+
+/* 12.1 Block Statement */
+
+ASTBlock Block(): {
+	List<ASTNode> statements=null;
+ 	Token t,t2;
+}
+{
+    t="{"
+     [ statements=StatementList() ] t2="}"
+     	{
+      		// Block() is only ever reached in statement position (see its call
+      		// sites: Statement(), TryStatement(), Synchronized()), never as
+      		// part of an expression. Its RBRACE's TOKEN action defaults the
+      		// lexer to NO_REGEX (correct for the far more common case of a
+      		// "}" closing an ObjectLiteral, where a following "/" must be
+      		// division), but here a following "/" starts a new
+      		// StatementListItem and must be read as a RegularExpressionLiteral
+      		// instead (test262 language/statementList/block-regexp-literal.js:
+      		// "{}/1/;", block-with-statment-regexp-literal.js: "{length: 3000}/1/;").
+      		token_source.SwitchTo(DEFAULT);
+      		return nodeFactory.createBlock(t,statements).endToken(t2);
+     	}
+}
+
+List<ASTNode> StatementList(): {
+	ASTNode node;
+	List<ASTNode> nodes=null;
+}
+{
+    (
+      node=Statement()
+      	{
+      	  	if(!(node instanceof ASTEmpty))
+      	  	{
+      	  		if(nodes==null) {
+					nodes = new ArrayList<ASTNode>();
+				}
+        		nodes.add(node);
+			}
+      	}
+    )+
+    	{
+    	  return nodes;
+   		}
+}
+
+
+/* Section 12.2: Variable statement */
+
+ASTNode VariableStatement(): {
+	ASTVariableDecl vnode;
+	Token t;
+}
+{
+      t="var" {vnode=nodeFactory.createVariableDeclLocal(t);} VariableDeclarationList(vnode) insertSemiColon()
+    	{
+    		return vnode;
+    	}
+  	| LOOKAHEAD({isLetDeclaration()}) t="let" {vnode=nodeFactory.createVariableDeclScoped(t);} VariableDeclarationList(vnode) insertSemiColon()
+    	{
+    		return vnode;
+    	}
+  	| t="const" {vnode=nodeFactory.createVariableDeclConst(t);} VariableDeclarationList(vnode) insertSemiColon()
+    	{
+    		return vnode;
+    	}
+  	| LOOKAHEAD({isAwaitUsingDeclaration()}) "await" t="using" {vnode=nodeFactory.createVariableDeclUsing(t,true);} VariableDeclarationList(vnode) insertSemiColon()
+    	{
+    		return vnode;
+    	}
+  	| LOOKAHEAD({isUsingDeclaration()}) t="using" {vnode=nodeFactory.createVariableDeclUsing(t,false);} VariableDeclarationList(vnode) insertSemiColon()
+    	{
+    		return vnode;
+    	}
+}
+
+ASTVariableDecl VariableDeclarationList(ASTVariableDecl vnode): {
+}
+{
+    VariableDeclaration(vnode)
+    	[ "," VariableDeclarationList(vnode) ]
+    	{
+    		return vnode;
+    	}
+}
+
+ASTNode VariableDeclaration(ASTVariableDecl vnode): {
+	ASTNode varDecl; 
+ 	ASTNode initnode=null;
+}
+{
+    varDecl=VariableDeclarationNames() { skipTypeAnnotationIfAny(); } [initnode=Initialiser()]
+    	{
+     		vnode.add(varDecl,initnode);
+     		return vnode;
+    	}
+}
+
+ASTNode VariableDeclarationNames(): {
+  Token t;
+  ASTNode varDecl; 
+}
+{
+    t=Identifier_Name()
+    	{
+    	  return nodeFactory.createIdentifier(t,ASTLiteral.parseIdentifier(t.image));
+   		}
+  | LOOKAHEAD("[") varDecl=ArrayLiteral()
+  		{
+  		  return varDecl;
+  		}
+  | LOOKAHEAD("{") varDecl=ObjectLiteral()
+  		{
+  		  return varDecl;
+  		}
+}
+
+ASTNode Initialiser(): {
+	ASTNode node;
+}
+{
+    "=" node=AssignmentExpression()
+    	{
+    		return node;
+    	}
+}
+
+
+/* Section 12.3: Empty Statement */
+
+ASTNode EmptyStatement():
+{
+ 	Token t;
+}
+{
+    t=";"
+    	{
+    		return nodeFactory.createEmpty(t);
+   		}
+}
+
+
+/* TypeScript-style type hints (JSConfiguration.supportTypeHints()) - see
+   isTypeAliasStart()/isInterfaceStart()/isDeclareStart() above for the
+   guarding predicates, and skipType()/skipTypeParameters()/
+   skipInterfaceBody()/skipDeclareSignature() for the token-skipping they
+   share. All three return createEmpty(): parsed for syntax only, nothing
+   here ever becomes a real AST node. */
+
+ASTNode TypeAliasStatement(): {
+	Token t;
+}
+{
+    t=Identifier_Name() Identifier_Name()
+    { skipTypeParametersIfAny(); }
+    "=" { skipType(); } insertSemiColon()
+    	{
+    		return nodeFactory.createEmpty(t);
+   		}
+}
+
+ASTNode InterfaceStatement(): {
+	Token t;
+}
+{
+    t=Identifier_Name() Identifier_Name()
+    { skipTypeParametersIfAny(); skipInterfaceExtendsIfAny(); }
+    "{" { skipInterfaceBody(); } "}"
+    	{
+    		return nodeFactory.createEmpty(t);
+   		}
+}
+
+// "declare" ambient declarations are compile-time-only shape assertions in
+// real TypeScript - they have NO runtime effect whatsoever (the thing being
+// "declared" is assumed to already exist via some other means). Since
+// GaltaJS never type-checks anything here either, the whole statement
+// (whatever it declares - function/class/var/let/const/type/interface) is
+// simply parsed for syntax and discarded, exactly like a bare type/interface
+// statement - never delegated to the real FunctionDeclaration()/
+// ClassDeclaration()/VariableStatement() productions, which (unlike this)
+// require a real body/would create a real, executable declaration.
+ASTNode DeclareStatement(): {
+	Token t;
+}
+{
+    t=Identifier_Name() { skipDeclareSignature(); }
+    	{
+    		return nodeFactory.createEmpty(t);
+   		}
+}
+
+
+/* Section 12.4: Expression Statement */
+
+ASTNode ExpressionStatement(): {
+	ASTNode node;
+}
+{
+    // cannot start with "{", "function", "class", or an unambiguous
+    // "async [no LineTerminator here] function" - those are handled by
+    // Block()/FunctionDeclaration()/ClassDeclaration() as their own
+    // Statement() alternatives, which don't require (or want) ASI. A
+    // LineTerminator between "async" and "function" (or no "function" at
+    // all, e.g. bare "async;") breaks the AsyncFunctionDeclaration shape,
+    // so "async" alone is still a valid ExpressionStatement start in that
+    // case - noLineTerminatorAfterAsync() alone only checks for the
+    // ABSENCE of a LineTerminator, not that token2 is actually "function"
+    // (safe in its other, pre-existing call sites, which already
+    // confirmed the "function" shape via a syntactic LOOKAHEAD first), so
+    // token2's kind must be checked explicitly here too.
+    LOOKAHEAD({getToken(1).kind!=LBRACE && getToken(1).kind!=FUNCTION && getToken(1).kind!=CLASS
+               && !(getToken(1).kind==ASYNC && getToken(2).kind==FUNCTION && noLineTerminatorAfterAsync())})
+    node=Expression() insertSemiColon()
+    	{
+    		return node;
+    	}
+}
+
+
+/* Section 12.5: The if Statement */
+
+ASTNode IfStatement(): {
+ 	ASTNode n1;
+ 	ASTNode n2;
+ 	ASTNode n3=null;
+ 	Token t;
+}
+{
+    t="if" "(" n1=Expression() ")" n2=Statement()
+    [ LOOKAHEAD("else") "else" n3=Statement() ]
+    	{
+    	    if(debug) {
+    	      n1 = nodeFactory.createDebugHook(n1);
+    	    }
+    		return nodeFactory.createIf(t,n1,n2,n3);
+    	}
+}
+
+
+/* Section 12.6: Iteration Statements */
+
+ASTNode IterationStatement():
+{
+ 	ASTNode n1=null;
+ 	ASTNode n2=null;
+ 	ASTNode n3=null;
+ 	ASTNode body=null;
+ 	Token t, t2, tv;
+}
+{
+    t="do" body=Statement() "while" "(" n1=Expression() ")" insertSemiColonDoWhile()
+    	{
+    	    if(debug) {
+    	      n1 = nodeFactory.createDebugHook(n1);
+    	    }
+     		return nodeFactory.createDoWhile(t,n1,body);
+    	}
+
+    | t="while" "(" n1=Expression()")" body=Statement()
+    	{
+    	    if(debug) {
+    	      n1 = nodeFactory.createDebugHook(n1);
+    	    }
+     		return nodeFactory.createWhile(t,n1,body);
+    	}
+    // for await ( ForDeclaration/LeftHandSideExpression of AssignmentExpression ) Statement
+    // (13.7.5's [+Await] alternative) - "await" as the token immediately
+    // after "for" (no "(" yet) is unambiguous with every other
+    // IterationStatement() alternative below (all of which require "(" to
+    // come right after "for"), so no further lookahead is needed to
+    // distinguish this shape once "await" is seen there - only whether
+    // "await" is CURRENTLY the reserved keyword (awaitReserved, the exact
+    // same flag UnaryExpression()'s own "await" alternative is gated on)
+    // matters: GaltaJS allows top-level await (and so top-level `for await`)
+    // everywhere by design (see awaitReserved's own doc), but a `for await`
+    // inside a genuinely non-async function/generator - where awaitReserved
+    // is explicitly false - has no matching alternative at all here, so it
+    // falls through to a plain ParseException, same as the spec's own
+    // [+Await]-gated grammar rejects it (a SyntaxError either way, just not
+    // one with this construct's own dedicated message).
+    | LOOKAHEAD("for" "await", {awaitReserved})
+      t="for" "await" "(" n1=LoopVariable() tv=Identifier_Name() n2=Expression() t2=")" body=Statement()
+      	{
+      	    if(!"of".equals(tv.image)) {
+	 			throw generateParseException();
+      	    }
+    	    if(debug) {
+    	      n2 = nodeFactory.createDebugHook(n2);
+    	    }
+      		return nodeFactory.createForOf(t,n1,n2,body,true).endToken(t2);
+      	}
+
+    | LOOKAHEAD("for" "(", {isForInitializationSemicolonNext()})
+	  t="for" "(" [n1=ForInitialization()] ";" [n2=Expression()] ";" [n3=Expression()] t2=")" body=Statement()
+    	{ 
+    	    if(debug) {
+    	      // n1 (the init clause) is deliberately NOT wrapped here -
+    	      // ASTFor's interpreter/transpiler both
+    	      // check `initNode instanceof ASTVariableDecl` (per-iteration
+    	      // `let` rebinding, hoisting) at multiple points; wrapping it
+    	      // would hide that type and break `for(let i=0;...)` scoping
+    	      // entirely (confirmed: reproduces as a ReferenceError on the
+    	      // loop counter). A breakpoint on the init clause itself isn't a
+    	      // capability worth that cost - the loop's test/update/body are
+    	      // still fully instrumented below.
+    	      n2 = nodeFactory.createDebugHook(n2);
+    	      n3 = nodeFactory.createDebugHook(n3);
+    	    }
+    		return nodeFactory.createFor(t,n1,n2,n3,body).endToken(t2);
+    	}
+    | LOOKAHEAD("for" "(" LoopVariable() "in")
+    	t="for" "(" n1=LoopVariable() "in" n2=Expression() t2=")" body=Statement()
+          	{
+	    	    if(debug) {
+	    	      n2 = nodeFactory.createDebugHook(n2);
+	    	    }
+          		return nodeFactory.createForIn(t,n1,n2,body).endToken(t2);
+          	}
+    // "of" is not a reserved word but an identifier
+    | LOOKAHEAD("for" "(" LoopVariable() Identifier_Name() )
+     	t="for" "(" n1=LoopVariable() tv=Identifier_Name() n2=Expression() t2=")" body=Statement()
+          	{
+          	    // Is there a different way to handle that with JavaCC?
+          	    if(!"of".equals(tv.image)) {
+	 				throw generateParseException();
+          	    }          	      
+	    	    if(debug) {
+	    	      n2 = nodeFactory.createDebugHook(n2);
+	    	    }
+          		return nodeFactory.createForOf(t,n1,n2,body).endToken(t2);
+          	}
+}
+
+ASTNode LoopVariable(): {
+	ASTNode vnode;
+	Token t;
+	ASTNode varDecl;
+	ASTNode initnode=null;
+}
+{
+    LOOKAHEAD({isLetDeclaration()}) t="let" {vnode=nodeFactory.createVariableDeclScoped(t);} VariableDeclaration((ASTVariableDecl)vnode)
+  	{
+		return vnode;
+ 	}
+  | LOOKAHEAD("const") t="const" {vnode=nodeFactory.createVariableDeclConst(t);} VariableDeclaration((ASTVariableDecl)vnode)
+  	{
+		return vnode;
+ 	}
+    // Annex B.3.4: "for ( var ForBinding Initializer[~In] in Expression )" -
+    // a legacy, sloppy-mode-only allowance for a "var" for-in head to carry
+    // an initializer (e.g. `for (var a = 1 in obj)`). Unlike the ordinary
+    // VariableDeclaration()/Initialiser() path (shared by plain var
+    // statements and the regular 3-clause for-loop's init clause, both
+    // unrestricted and NOT touched here), this initializer is
+    // Initializer[~In]: it must NOT consume a bare top-level "in" as a
+    // RelationalExpression operator, since that "in" is this statement's
+    // OWN for-in delimiter - GaltaJS has no general NoIn-parameterized
+    // expression grammar (would require duplicating the entire
+    // AssignmentExpression-down-to-RelationalExpression production chain),
+    // so this narrowly caps the initializer at ShiftExpression() (one level
+    // below RelationalExpression, i.e. below where "in"/"instanceof" are
+    // recognized) instead - sufficient for every test262 case exercising
+    // this legacy form; a strict-mode early SyntaxError for this same
+    // pattern (annexB/language/statements/for-in/strict-initializer.js) and
+    // rejecting non-identifier ForBindings (.../var-*bindingpattern-
+    // initializer.js) are separate, narrower spec rules this doesn't
+    // enforce - both are "negative: phase: parse" tests that stay passing
+    // regardless (this harness treats ANY thrown exception, including one
+    // from the test's own leading $DONOTEVALUATE(), as satisfying a
+    // negative test).
+  | LOOKAHEAD("var") t="var" {vnode=nodeFactory.createVariableDeclLocal(t);} varDecl=VariableDeclarationNames() [initnode=LoopVariableInitialiserNoIn()]
+  	{
+  		((ASTVariableDecl)vnode).add(varDecl,initnode);
+		return vnode;
+ 	}
+    // `using`/`await using` as a for-of loop head ForDeclaration - only
+    // valid for for-of (never for-in, and "of" is checked by the caller
+    // after this returns; ASTVariableDeclUsing.init() itself rejects an
+    // Initializer here - the loop variable's value comes from each
+    // iteration, exactly like let/const - and requires one everywhere
+    // else). Reuses VariableDeclaration() (optional Initialiser) rather
+    // than a narrower production, same as the let/const alternatives
+    // above - the initializer-forbidden rule is enforced at the AST level,
+    // not the grammar level, again matching let/const's own precedent here.
+  | LOOKAHEAD({isAwaitUsingDeclaration()}) "await" t="using" {vnode=nodeFactory.createVariableDeclUsing(t,true);} VariableDeclaration((ASTVariableDecl)vnode)
+  	{
+		return vnode;
+ 	}
+  | LOOKAHEAD({isUsingDeclarationForOfHead()}) t="using" {vnode=nodeFactory.createVariableDeclUsing(t,false);} VariableDeclaration((ASTVariableDecl)vnode)
+  	{
+		return vnode;
+ 	}
+  | vnode=MemberExpression() {
+      return vnode;
+  	}
+}
+
+ASTNode LoopVariableInitialiserNoIn(): {
+	ASTNode node;
+}
+{
+    "=" node=ShiftExpression()
+    	{
+    		return node;
+    	}
+}
+
+
+ASTNode ForInitialization(): {
+	Token t;
+  	ASTNode vnode;
+}
+{
+  (
+      t="var" {vnode=nodeFactory.createVariableDeclLocal(t);} VariableDeclarationList((ASTVariableDecl)vnode)
+  	| LOOKAHEAD({isLetDeclaration()}) t="let" {vnode=nodeFactory.createVariableDeclScoped(t);} VariableDeclarationList((ASTVariableDecl)vnode)
+  	| t="const" {vnode=nodeFactory.createVariableDeclConst(t);} VariableDeclarationList((ASTVariableDecl)vnode)
+  	| LOOKAHEAD({isAwaitUsingDeclaration()}) "await" t="using" {vnode=nodeFactory.createVariableDeclUsing(t,true);} VariableDeclarationList((ASTVariableDecl)vnode)
+  	| LOOKAHEAD({isUsingDeclaration()}) t="using" {vnode=nodeFactory.createVariableDeclUsing(t,false);} VariableDeclarationList((ASTVariableDecl)vnode)
+ 	| vnode=Expression()
+  )
+  	{
+		return vnode;
+ 	}
+}
+
+
+/* Section 12.7: The continue Statement */
+
+ASTNode ContinueStatement(): {
+	Token t;
+ 	Token t1=null;
+}
+{
+    // "continue [no LineTerminator here] LabelIdentifier": a LineTerminator
+    // right after "continue" forces ASI, making it an unlabeled continue.
+    t="continue" [LOOKAHEAD({noLineTerminatorBeforeLabel()}) t1=Identifier_Name()] insertSemiColon()
+    	{
+    		return nodeFactory.createContinue(t,t1!=null?ASTLiteral.parseIdentifier(t1.image):null);
+     	}
+}
+
+
+/* Section 12.8: The break Statement */
+
+ASTNode BreakStatement(): {
+ 	Token t;
+ 	Token t1=null;
+}
+{
+    // "break [no LineTerminator here] LabelIdentifier": same rule as continue.
+    t="break" [LOOKAHEAD({noLineTerminatorBeforeLabel()}) t1=Identifier_Name()] insertSemiColon()
+    	{
+    		return nodeFactory.createBreak(t,t1!=null?ASTLiteral.parseIdentifier(t1.image):null);
+     	}
+}
+
+
+/* Section 12.9 The return Statement */
+
+ASTNode ReturnStatement(): {
+	ASTNode exprNode=null;
+	Token t;
+}
+{
+    // "return [no LineTerminator here] Expression": same rule.
+    t="return" [LOOKAHEAD({noLineTerminatorBeforeReturnExpression()}) exprNode=Expression()] insertSemiColon()
+    	{
+    		return nodeFactory.createReturn(t,exprNode);
+    	}
+}
+
+
+/* Section 12.10: The with Statement */
+ASTNode WithStatement(): {
+	ASTNode exprNode;
+	ASTNode node;
+	Token t;
+}
+{
+  
+	t="with" "(" exprNode=Expression() ")" node=Statement()
+		{
+    		return nodeFactory.createWith(t,exprNode,node);
+		}
+}
+
+
+/* 12.11 The switch Statement */
+
+ASTNode SwitchStatement(): {
+  	ASTNode exprNode;
+  	List<ASTNode> cases;
+  	Token t;
+}
+{
+    t="switch" "(" exprNode=Expression() ")" cases=CaseBlock()
+    	{
+        	return nodeFactory.createSwitch(t,exprNode,cases);
+    	}
+}
+
+List<ASTNode> CaseBlock(): {
+	ASTNode node;
+	List<ASTNode> cases=new ArrayList<ASTNode>();
+}
+{
+    "{" CaseClauses(cases)
+    	[Default(cases)]
+    	CaseClauses(cases)
+    "}"
+    	{
+			return cases;
+		}    	  
+}
+
+void CaseClauses(List<ASTNode> cases): {
+	ASTNode node;
+}
+{
+    (LOOKAHEAD("case") node=CaseClause()
+    	{
+    		cases.add(node);
+    	}
+    )*
+}
+
+ASTNode CaseClause(): {
+	ASTCase caseNode;
+ 	ASTNode exprNode;
+	List<ASTNode> statements=null;
+ 	Token t;
+}
+{
+    t="case" exprNode=Expression() ":" 
+      [statements=StatementList()]
+    	{
+        	return nodeFactory.createCase(t,exprNode,statements);
+    	}
+}
+
+void Default(List<ASTNode> cases):
+{
+	ASTCase casenode;
+	List<ASTNode> statements=null;
+ 	Token t;
+}
+{
+    t="default" ":"  
+    	[statements=StatementList()]
+    	{
+        	cases.add(nodeFactory.createCase(t,null,statements));
+    	}
+}
+
+
+/* Section 12.12: Labeled Statements */
+
+ASTNode LabeledStatement():
+{
+	ASTNode node;
+	Token t=null;
+}
+{
+    t=Identifier_Name() ":" node=Statement()
+    	{
+    		if(node instanceof ILabeledNode) {
+    		    // Set the label if possible, ignore if not
+    			((ILabeledNode)node).setLabel(ASTLiteral.parseIdentifier(t.image));
+    		}
+   			return node;
+    	}
+}
+
+ASTThrow ThrowStatement():
+{
+	ASTNode node;
+	Token t;
+}
+{
+    t="throw" node=Expression() insertSemiColon()
+    {
+        return nodeFactory.createThrow(t,node);
+    }
+}
+
+ASTTry TryStatement(): {
+	ASTBlock n1;
+ 	ASTTry tryNode;
+ 	ASTCatch catchNode=null;
+ 	ASTBlock finallyNode=null;
+ 	Token t;
+}
+{
+    t="try" n1=Block()
+    	(  LOOKAHEAD(3) catchNode=Catch() [finallyNode=Finally()]
+    	 | finallyNode=Finally()
+    	)
+    	{
+     		return nodeFactory.createTry(t,n1,catchNode,finallyNode);
+    	}
+}
+
+ASTCatch Catch():
+{
+	Token t;
+	ASTNode bindingNode=null;
+ 	ASTBlock n1;
+}
+{
+    LOOKAHEAD(2) t="catch" "(" bindingNode=CatchParameter() ")" n1=Block()
+		{
+		  return nodeFactory.createCatch(t,bindingNode,n1);
+		}
+  |  t="catch" n1=Block()
+		{
+		  return nodeFactory.createCatch(t,null,n1);
+		}
+}
+
+ASTNode CatchParameter(): {
+  Token t;
+  ASTNode node;
+}
+{
+    t=Identifier_Name()
+    	{
+    	  return nodeFactory.createIdentifier(t,ASTLiteral.parseIdentifier(t.image));
+   		}
+  | LOOKAHEAD("[") node=ArrayLiteral()
+  		{
+  		  return node;
+  		}
+  | LOOKAHEAD("{") node=ObjectLiteral()
+  		{
+  		  return node;
+  		}
+}
+
+ASTBlock Finally():
+{
+ 	ASTBlock n1;
+}
+{
+    "finally" n1=Block()
+    	{
+      		return n1;
+    	}
+}
+
+
+
+ASTNode Debugger():
+{
+    Token t;
+}
+{
+    t="debugger"
+    	{
+    		return nodeFactory.createDebugger(t);
+    	}
+
+}
+
+/* Scriptor extension to support Java synchronized */ 
+
+ASTNode Synchronized():
+{
+    ASTNode exprNode;
+    ASTNode blockNode;
+    Token t;
+}
+{
+    t="synchronized" "(" exprNode=Expression()")" blockNode=Block()
+    	{
+    		return nodeFactory.createSynchronized(t,exprNode,blockNode);
+    	}
+
+}
+
+
+
+/* Section 13: Function Definition */
+
+ASTNode FunctionDeclaration():
+{
+  ASTArrayLiteral parameters=null;
+  List<ASTNode> body;
+  Token t;
+  Token tasync=null,tgen=null,tid=null;
+  boolean savedYieldReserved;
+  boolean savedAwaitReserved;
+}
+{
+    (tasync="async")? t="function" (tgen="*")?
+    {
+      // The function's own name is never yield/await-restricted (matches
+      // spec for FunctionExpression's BindingIdentifier exactly; a small,
+      // deliberate over-approximation for a nested FunctionDeclaration's
+      // own name, which strictly should still inherit the enclosing
+      // restriction - no test262 case exercises that narrow combination,
+      // and the permissive reading costs nothing observable).
+      savedYieldReserved = yieldReserved;
+      yieldReserved = false;
+      savedAwaitReserved = awaitReserved;
+      awaitReserved = false;
+    }
+    [tid=Identifier_Name()]
+    {
+      // FormalParameters/FunctionBody are parameterized only by whether
+      // *this* function is itself a generator/async, never by the enclosing
+      // context - so a nested ordinary function inside a generator's/async
+      // function's body resets the restriction, while a nested generator/
+      // async function re-imposes it.
+      yieldReserved = (tgen!=null);
+      awaitReserved = (tasync!=null);
+    }
+    { skipTypeParametersIfAny(); }
+    "(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")"
+    { skipTypeAnnotationIfAny(); }
+    "{" body = FunctionBody() "}"
+    {
+      yieldReserved = savedYieldReserved;
+      awaitReserved = savedAwaitReserved;
+      ASTFunctionDecl fdecl = nodeFactory.createFunctionDecl(t,tid!=null?ASTLiteral.parseIdentifier(tid.image):null,parameters,body);
+      fdecl.setGenerator(tgen!=null);
+      fdecl.setAsync(tasync!=null);
+      return fdecl;
+    }
+}
+
+
+ASTNode FunctionArrowDeclaration():
+{
+  ASTArrayLiteral parameters;
+  ASTNode node;
+  List<ASTNode> nodes;
+  Token t, tasync=null, tgen=null;
+  boolean savedAwaitReserved;
+}
+{
+  (
+
+    LOOKAHEAD({isArrowFunctionWithIdentifier()}) [LOOKAHEAD({noLineTerminatorAfterAsync()}) tasync="async"] [tgen="*"] t=Identifier_Name() "=>"
+    {
+      parameters = nodeFactory.createArrayLiteral(t);
+      parameters.addExpression(nodeFactory.createIdentifier(t,ASTLiteral.parseIdentifier(t.image)));
+    }
+  |
+    LOOKAHEAD({isArrowFunctionWithParens()}) [LOOKAHEAD({noLineTerminatorAfterAsync()}) tasync="async"] [tgen="*"] t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")" { skipTypeAnnotationIfAny(); } "=>"
+)
+    {
+      // Like FunctionDeclaration()'s identical yieldReserved/awaitReserved
+      // threading - an arrow's own ConciseBody/FunctionBody is
+      // await-reserved only by whether THIS arrow is itself async, never
+      // by the enclosing context (spec's Await parameter is set fresh per
+      // AsyncArrowFunction, not inherited).
+      savedAwaitReserved = awaitReserved;
+      awaitReserved = (tasync!=null);
+    }
+ 		(
+		  	  LOOKAHEAD("{") "{" nodes = FunctionBody() "}"
+		  	  	{
+		  	  	  awaitReserved = savedAwaitReserved;
+		  	  	  ASTFunctionArrow fdecl = nodeFactory.createFunctionArrow(null,parameters,nodes);
+			      fdecl.setGenerator(tgen!=null);
+			      fdecl.setAsync(tasync!=null);
+		  	  	  return fdecl;
+		  	  	}
+
+		  	| node = AssignmentExpression()
+		  		{
+		  		  awaitReserved = savedAwaitReserved;
+		  		  ASTFunctionArrow fdecl = nodeFactory.createFunctionArrow(null,parameters,Collections.singletonList(nodeFactory.createReturn(null,node)));
+			      fdecl.setGenerator(tgen!=null);
+			      fdecl.setAsync(tasync!=null);
+		  	  	  return fdecl;
+		  		}
+		)
+
+}
+
+ASTNode ConciseBody():
+{
+  ASTNode node;
+}
+{
+  	node=AssignmentExpression() // no "," allowed!
+    	{
+        	return node;
+    	}
+}
+
+List<ASTNode> FunctionBody(): {
+	List<ASTNode> nodes;
+}
+{
+  	nodes=SourceElements()
+    	{
+        	return nodes;
+    	}
+}
+
+
+/* Section 14.6: Class Definitions */
+
+// ES Decorators (Stage 3 proposal). Reuses LeftHandSideExpression() for the
+// decorator's own expression rather than writing a new, more restrictive
+// DecoratorMemberExpression/DecoratorCallExpression/DecoratorParenthesizedExpression
+// grammar: LeftHandSideExpression already covers every valid decorator form
+// (bare identifier, `.name`/`.#priv` chains, a trailing call, and a fully
+// parenthesized expression via PrimaryExpression's "(" Expression ")") in one
+// production. This is slightly MORE permissive than spec (e.g. would also
+// accept a computed `@a[b]`), but test262 has no negative/invalid-syntax
+// decorator tests, so the extra permissiveness has no observable effect.
+List<ASTNode> DecoratorList(): {
+    List<ASTNode> decorators = new ArrayList<>();
+    ASTNode d;
+}
+{
+    ( "@" d=LeftHandSideExpression() { decorators.add(d); } )*
+    {
+        return decorators;
+    }
+}
+
+ASTNode ClassDeclaration(): {
+    Token t;
+    Token id = null;
+    ASTNode superClass = null;
+    List<ASTNode> elements;
+    List<ASTNode> decorators;
+}
+{
+    decorators=DecoratorList()
+    t="class" [id=Identifier_Name()]
+    { skipTypeParametersIfAny(); }
+    [LOOKAHEAD("extends") "extends" superClass=LeftHandSideExpression()
+        { skipTypeParametersIfAny(); }]
+    // TypeScript's "implements" clause - "implements" has no dedicated
+    // TOKEN (matched by IMAGE against IDENTIFIER_NAME, same reasoning as
+    // "type"/"interface"/"declare" - see isTypeAliasStart()'s own doc
+    // comment), so it's consumed via Identifier_Name() rather than a
+    // literal "implements" string (which would create a competing token
+    // and risk breaking "implements" used as a plain identifier elsewhere).
+    { skipImplementsClauseIfAny(); }
+    "{" elements=ClassElementList() "}"
+    {
+        return nodeFactory.createClassDecl(t, id!=null?ASTLiteral.parseIdentifier(id.image):null, superClass, elements, decorators);
+    }
+}
+
+List<ASTNode> ClassElementList(): {
+    List<ASTNode> elements = new ArrayList<>();
+    ASTNode element;
+}
+{
+    (element=ClassElement() { elements.add(element); } | ";" )*
+    {
+        return elements;
+    }
+}
+
+ASTNode ClassElement(): {
+    Token t;
+    Object name;
+    Token tstat = null;
+    Token tasync = null;
+    Token tgen = null;
+    Token tpriv = null;
+    Token tget = null;
+    Token tset = null;
+    Token tname = null;
+    Token taccessor = null;
+    ASTArrayLiteral parameters;
+    ASTNode initializer = null;
+    List<ASTNode> statements = null;
+    boolean savedYieldReserved;
+    boolean savedAwaitReserved;
+    List<ASTNode> decorators;
+}
+{
+    // A ClassStaticBlock can never be decorated (no grammar alternative for
+    // it), but decorators must still be consumed before deciding between it
+    // and the other ClassElement forms - not attempting to REJECT decorators
+    // immediately before a static block (no test262 negative-syntax coverage
+    // for this), just not passing them anywhere.
+    decorators=DecoratorList()
+    (
+    LOOKAHEAD(2) t="static" "{" [ statements=StatementList() ] "}" insertSemiColon()
+    {
+        ASTBlock block = nodeFactory.createBlock(t,statements);
+        return nodeFactory.createClassStaticBlock(t, block);
+    }
+	|   // Plain `LOOKAHEAD(2)` here does NOT actually peek 2 tokens ahead -
+	    // it's a numeric limit on the DEFAULT lookahead algorithm, but since
+	    // this optional's own expansion (tstat="static") is only 1 token
+	    // long, the algorithm only ever needs (and only ever checks) 1
+	    // token to decide entry: "is the next token STATIC?". So "static"
+	    // was ALWAYS consumed as the modifier whenever present, even when
+	    // it's actually being used as a field's own NAME (e.g. `class C {
+	    // static; }` / `class C { static = 1; }` - PropertyName() also
+	    // accepts "static" as a plain identifier-like name). Fixed with an
+	    // explicit semantic lookahead: only consume "static" as the
+	    // modifier when it's NOT immediately followed by one of the tokens
+	    // that would mean "static" is itself the ClassElementName (an
+	    // initializer, an explicit field terminator, or the class body's
+	    // own closing brace, which ASI would turn into an implicit
+	    // terminator). See test262 static-as-valid-instance-field(-
+	    // assigned).js.
+	    [LOOKAHEAD({getToken(1).kind==STATIC && getToken(2).kind!=ASSIGN && getToken(2).kind!=SEMICOLON && getToken(2).kind!=RBRACE}) tstat="static"]
+    (
+        LOOKAHEAD({isMethodEntry()}) [LOOKAHEAD(2) tasync="async"] [tgen="*"] [tpriv="#"]
+        {tname=getToken(1);} name=PropertyName()
+        {
+          // A ComputedPropertyName is evaluated in the SURROUNDING context,
+          // not the method's own [[GeneratorKind]] scope (see the analogous
+          // runtime fix in RuntimeUtil.nearestYielderContext()) - so
+          // PropertyName() above must run under the OUTER yieldReserved/
+          // awaitReserved value; only the method's own FormalParameters/
+          // FunctionBody (from here on) are yield/await-reserved per its
+          // own generator-ness/async-ness, same as FunctionDeclaration().
+          savedYieldReserved = yieldReserved;
+          yieldReserved = (tgen!=null);
+          savedAwaitReserved = awaitReserved;
+          awaitReserved = (tasync!=null);
+        }
+        			{ skipTypeParametersIfAny(); }
+        			t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")"
+        			{ skipTypeAnnotationIfAny(); }
+    				"{" statements=FunctionBody() "}"
+        { yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved; }
+        {
+            // A method definition needs no ASI/separator at all in a class body
+            // (ClassElementList is a plain repetition) - unlike the field
+            // alternative below, which is a statement-like production that
+            // genuinely needs insertSemiColon().
+            //
+            // Use the leftmost token of the method definition itself (not
+            // just "(") as the FUNCTION's begin position, so toString()/
+            // source extraction includes "async"/"*"/"#"/the property name
+            // instead of starting mid-way at the parameter list (test262
+            // built-ins/Function toString cluster). Per spec/test262, a
+            // static class method's own [[SourceText]] does NOT include the
+            // "static" keyword - "static" is part of the ClassElement
+            // production, not MethodDefinition - so tfnBegin deliberately
+            // excludes tstat, while tbegin (used for the wrapping
+            // ClassMethod/Getter/Setter node's own position, not observable
+            // via toString) still includes it.
+            Token tfnBegin = tasync!=null ? tasync : (tgen!=null ? tgen : (tpriv!=null ? tpriv : tname));
+            Token tbegin = tstat!=null ? tstat : tfnBegin;
+            // SetFunctionName(closure, key): for a private method, "key" is a
+            // Private Name whose [[Description]] is "#name" - the method's
+            // OWN .name property must include the "#" marker (confirmed via
+            // language/{statements,expressions}/class/elements/private-*-
+            // method-name.js), but createFunctionMethod (and PropertyName()
+            // above, which never sees tpriv at all) only ever received the
+            // bare identifier text.
+            Object fnMethodName = (tpriv!=null && name instanceof CharSequence) ? "#"+name : name;
+            ASTFunctionMethod function = nodeFactory.createFunctionMethod(tfnBegin,fnMethodName,parameters,statements);
+            function.setGenerator(tgen!=null);
+            function.setAsync(tasync!=null);
+            return nodeFactory.createClassMethod(tbegin, name, function, tstat!=null,tpriv!=null,false,decorators);
+        }
+   | LOOKAHEAD("get" ["#"] PropertyName() "(") tget="get" [tpriv="#"] name=PropertyName() { savedYieldReserved = yieldReserved; yieldReserved = false; savedAwaitReserved = awaitReserved; awaitReserved = false; } t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")" { skipTypeAnnotationIfAny(); } "{" statements = FunctionBody() "}" { yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved; }
+		{
+            // See the method-definition branch above: "static" is excluded
+            // from the function's own begin token (tget) but included in
+            // tbegin for the wrapping ClassGetter node.
+            Token tbegin = tstat!=null ? tstat : tget;
+            ASTFunctionMethod function = nodeFactory.createFunctionMethod(tget,name,parameters,statements);
+            return nodeFactory.createClassGetter(tbegin, name, function, tstat!=null,tpriv!=null,decorators);
+		}
+   | LOOKAHEAD("set" ["#"] PropertyName() "(") tset="set" [tpriv="#"] name=PropertyName() { savedYieldReserved = yieldReserved; yieldReserved = false; savedAwaitReserved = awaitReserved; awaitReserved = false; } t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")" { skipTypeAnnotationIfAny(); } "{" statements = FunctionBody() "}" { yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved; }
+		{
+            // See the method-definition branch above: "static" is excluded
+            // from the function's own begin token (tset) but included in
+            // tbegin for the wrapping ClassSetter node.
+            Token tbegin = tstat!=null ? tstat : tset;
+            ASTFunctionMethod function = nodeFactory.createFunctionMethod(tset,name,parameters,statements);
+            return nodeFactory.createClassSetter(tbegin, name, function, tstat!=null,tpriv!=null,decorators);
+		}
+    |   [LOOKAHEAD({isAccessorFieldModifier()}) taccessor=Identifier_Name()] [tpriv="#"] name=PropertyName()
+        // TypeScript's optional-field marker ("x?"/"x?:") - no ternary
+        // ambiguity here (unlike FormalParameter()'s identical-looking
+        // marker): PropertyName() is a dedicated production, not
+        // ConditionalExpression(), so there's nothing that would otherwise
+        // try to consume a bare "?"/"?:" as GaltaJS's own Elvis operator.
+        { skipOptionalMarkerAndTypeIfAny(); }
+        [LOOKAHEAD("=") "=" initializer=AssignmentExpression()] insertSemiColon()
+        {
+        	return nodeFactory.createClassField(null, name, initializer, tstat!=null, tpriv!=null, decorators, taccessor!=null);
+        }
+    )
+    )
+}
+
+/*
+void PropertyEntry(ASTObjectLiteral node): {
+	String name;
+	ASTNode f;
+	ASTNode n=null;
+ 	ASTArrayLiteral parameters=null;
+  	Token t=null;
+  	Token tgen=null;
+  	List<ASTNode> body=null;
+}	
+{
+     LOOKAHEAD(2) name=PropertyName() ":" n=AssignmentExpression() 
+		{
+      		node.addExpression(name, n);
+		}
+   | LOOKAHEAD(3) (tgen="*")? name=PropertyName() t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"
+		{
+		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body);
+		  	if(tgen!=null) {
+		  	  decl.setGenerator(true);
+		 	}
+      		node.addFunction(decl);
+		}
+   | LOOKAHEAD(3) <GET> name=PropertyName() t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"
+		{
+		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); 
+      		node.addGetter(decl);
+		}
+   | LOOKAHEAD(3) <SET> name=PropertyName() t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"
+		{
+		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); 
+      		node.addSetter(decl);
+		} 
+   | LOOKAHEAD(1) "[" f=AssignmentExpression() "]" ((":" n=AssignmentExpression()) | (t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"))
+   		{
+   		    if(n!=null) { 
+      			node.addExpression(f, n);
+      		} else {
+			  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,null,parameters,body);
+			  	if(tgen!=null) {
+			  	  decl.setGenerator(true);
+			 	}
+	      		node.addFunction(decl,f);
+	      	} 
+   		}
+*/
+
+
+/* Section 14: Program */
+
+ASTProgram MainProgram(String text): {
+	List <ASTNode > nodes;
+}
+{
+    /*[<SHEBANG>]*/
+    {
+        // Gated on JSConfiguration.supportTopLevelObjectLiteral() (off by
+        // default, on with enableGaltaJSExtensions()): a standard environment
+        // reads a sole top-level "{...}" as the block/labeled statement
+        // ECMA-262 specifies.
+        isSoleObjectLiteralProgram = env.supportTopLevelObjectLiteral() && computeSoleObjectLiteralProgram(text);
+    }
+    nodes = MainSourceElements()  <EOF>
+    	{
+        	return nodeFactory.createProgram(text, nodes, false);
+     	}
+}
+
+ASTProgram MainExpression(String text): {
+	ASTNode node;
+}
+{
+    node = Expression()  <EOF>
+    	{
+        	return nodeFactory.createProgram(text, Collections.singletonList(node), false);
+     	}
+}
+
+ASTFunctionDecl MainFunction(String text): {
+	ASTNode node;
+}
+{
+    node = FunctionDeclaration()  <EOF>
+    	{
+        	ASTFunctionDecl fct = (ASTFunctionDecl)node;
+        	fct.setSourceCode(text);
+        	return fct;
+     	}
+}
+
+List<ASTNode> MainSourceElements(): {
+	ASTNode node;
+	List<ASTNode> nodes = new ArrayList<ASTNode>();
+}
+{
+  	(
+    /* GaltaJS extension to support inline object definitions */
+    /* We only do that in main statements to avoid ambiguities with labels for() { loop: xxx } */
+    /* Restricted to a SOLE top-level "{...}" (immediately followed by EOF) - see
+       isSoleTopLevelObjectLiteral() - so this doesn't shadow the ECMA-262-correct
+       Block/LabeledStatement interpretation for any "{"-shaped occurrence that
+       ISN'T the entire remaining program/eval'd text. */
+      LOOKAHEAD({isSoleTopLevelObjectLiteral()}) node=ObjectLiteral()
+    	{
+     	  	// isSoleObjectLiteralProgram is a single flag precomputed ONCE for
+     	  	// the whole MainProgram() call (see its own declaration/comment) -
+     	  	// a bare semantic LOOKAHEAD re-evaluates it on EVERY iteration of
+     	  	// this (...)* loop, so leaving it true after taking this branch
+     	  	// once would wrongly re-enter ObjectLiteral() on a LATER
+     	  	// iteration too (e.g. the trailing ";" in the decompiled-and-
+     	  	// reparsed "{ ... };" form this tolerates - see
+     	  	// computeSoleObjectLiteralProgram()'s own comment - has no "{"
+     	  	// to start an object literal with, so ObjectLiteral() would
+     	  	// immediately fail to parse it). Reset once the sole object
+     	  	// literal has actually been consumed, so any leftover content
+     	  	// (just that one tolerated ";", after this loop's FIRST and
+     	  	// ONLY real iteration) falls through to ordinary Statement()
+     	  	// dispatch instead.
+     	  	isSoleObjectLiteralProgram = false;
+     	  	// See ASTObjectLiteral.markBareTopLevelEmptyPromotion()'s own doc -
+     	  	// only ever set for the genuinely EMPTY "{}" case, never a
+     	  	// non-empty promoted object literal (e.g. "{a:1}"), which must
+     	  	// keep evaluating to the object unconditionally, eval or not.
+     	  	if(node instanceof org.monflabs.galtajs.node.literal.ASTObjectLiteral
+     	  	    && ((org.monflabs.galtajs.node.literal.ASTObjectLiteral)node).isEmpty()) {
+     	  	  ((org.monflabs.galtajs.node.literal.ASTObjectLiteral)node).markBareTopLevelEmptyPromotion();
+     	  	}
+     	  	if(debug) {
+     	  	  node = nodeFactory.createDebugHookStatement(node);
+     		}
+        	nodes.add(node);
+    	}
+ 	| LOOKAHEAD(1, {getToken(1).kind!=IMPORT || getToken(2).kind==LPAREN || getToken(2).kind==DOT}) node=Statement()
+    	{
+     	  	if(debug) {
+     	  	  node = nodeFactory.createDebugHookStatement(node);
+     		}
+        	nodes.add(node);
+    	}
+  	| node=ExportStatement()
+  		{
+     	  	if(debug) {
+     	  	  node = nodeFactory.createDebugHookStatement(node);
+     		}
+        	nodes.add(node);
+  		}
+    // Statement()'s own LOOKAHEAD above only claims a bare "import" token
+    // when it's immediately followed by "(" (the dynamic ImportCall
+    // expression) or "." (import.defer(...)/import.source(...), or an
+    // unimplemented "import.meta" - either way, still MemberExpressionHead()
+    // territory, not a static ImportDeclaration) - every other "import ..."
+    // form (the static ImportDeclaration: "import x from", "import * as",
+    // "import {", "import \"specifier\"") falls through to here instead.
+    | node=ImportStatement()
+    	{
+     	  	if(debug) {
+     	  	  node = nodeFactory.createDebugHookStatement(node);
+     		}
+        	nodes.add(node);
+   		}  
+ 	)*
+	 	{
+	 	  return nodes;
+		}
+}
+
+List<ASTNode> SourceElements(): {
+	ASTNode node;
+	List<ASTNode> nodes = new ArrayList<ASTNode>();
+}
+{
+  	( LOOKAHEAD(1, {getToken(1).kind!=IMPORT || getToken(2).kind==LPAREN || getToken(2).kind==DOT}) node=Statement()
+    	{
+     	  	if(debug) {
+     	  	  node = nodeFactory.createDebugHookStatement(node);
+     		}
+        	nodes.add(node);
+    	}
+  	| node=ExportStatement()
+  		{
+     	  	if(debug) {
+     	  	  node = nodeFactory.createDebugHookStatement(node);
+     		}
+        	nodes.add(node);
+  		}
+    // See the identical guard's own comment on MainSourceElements()'s
+    // Statement() alternative above.
+    | node=ImportStatement()
+    	{
+     	  	if(debug) {
+     	  	  node = nodeFactory.createDebugHookStatement(node);
+     		}
+        	nodes.add(node);
+   		}
+ 	)*
+	 	{
+	 	  return nodes;
+		}
+}
+
+ASTNode ImportStatement(): {
+    Token t;
+    ASTImport imp;
+}
+{
+    t="import" {imp=nodeFactory.createImport(t);}
+    // `import source x from '...'` (source-phase-imports proposal) -
+    // "source" is contextual, exactly like "defer" below: `import source
+    // from '...'` is an ordinary default import named "source", and
+    // `import source from from '...'` a source-phase import whose binding
+    // is named "from" (test262 import-source-binding-name*_FIXTURE.js). So
+    // this commits only on the full "source <binding> from <string>"
+    // shape; the binding is stored as the default import.
+    [ LOOKAHEAD({getToken(1).kind==IDENTIFIER_NAME && getToken(1).image.equals("source")
+                 && getToken(2).kind==IDENTIFIER_NAME
+                 && getToken(3).kind==IDENTIFIER_NAME && getToken(3).image.equals("from")
+                 && getToken(4).kind==STRING_LITERAL})
+      Identifier_Name() { imp.setSourcePhase(true); } ]
+    // `import defer * as ns from '...'` (import-defer proposal) - "defer"
+    // is a CONTEXTUAL keyword (like "as"/"from" elsewhere in this same
+    // grammar), not reserved: `import defer from '...'` (no asterisk) is
+    // an ORDINARY default import whose local binding happens to be named
+    // "defer" (test262 own valid-default-binding-named-defer.js) - so
+    // this must commit to the deferred form ONLY when "defer" is
+    // IMMEDIATELY followed by "*", never on "defer" alone. Every other
+    // "defer ..." combination (default, named-list, defer+default,
+    // default+defer) is intentionally left unhandled here - it falls
+    // through to ImportFromBlock() below, which fails to match any of
+    // its own alternatives for those shapes and naturally raises a
+    // SyntaxError (spec: `import defer` only ever combines with a
+    // NameSpaceImport, nothing else).
+    [ LOOKAHEAD({getToken(1).kind==IDENTIFIER_NAME && getToken(1).image.equals("defer") && getToken(2).image.equals("*")})
+      Identifier_Name() { imp.setDeferred(true); } ]
+    ImportFromBlock(imp)
+    	{
+     		return imp;
+    	}
+}
+
+void ImportFromBlock(ASTImport imp): {
+  Token from, def=null;
+}
+{
+	LOOKAHEAD(Identifier_Name() Identifier_From()) def=Identifier_Name() Identifier_From() from=<STRING_LITERAL> [LOOKAHEAD(2) WithClause(imp)]
+		{ imp.setDefaultImport(ASTLiteral.parseIdentifier(def.image)); imp.setFrom(ASTLiteral.parseString(from.image)); }
+|   LOOKAHEAD(Identifier_Name() ",") def=Identifier_Name() "," (ImportNamespace(imp) | ModuleList(imp)) Identifier_From() from=<STRING_LITERAL> [LOOKAHEAD(2) WithClause(imp)]
+		{ imp.setDefaultImport(ASTLiteral.parseIdentifier(def.image)); imp.setFrom(ASTLiteral.parseString(from.image)); }
+|   (ImportNamespace(imp) | ModuleList(imp)) Identifier_From() from=<STRING_LITERAL> [LOOKAHEAD(2) WithClause(imp)]
+		{ imp.setFrom(ASTLiteral.parseString(from.image)); }
+|   from=<STRING_LITERAL> [LOOKAHEAD(2) WithClause(imp)]
+		{ imp.setFrom(ASTLiteral.parseString(from.image)); }
+}
+
+// WithClause (import/export attributes, e.g. `with { type: "json" }`) -
+// AttributesKeyword is "with" (the same token as the with-STATEMENT's
+// own reserved word - no separate lexer state needed, its use here is
+// unambiguous since it can only appear right after a ModuleSpecifier).
+// LOOKAHEAD(2) at each call site: a bare "with" alone is never valid
+// here (always followed by "{"), so 2 tokens is enough to distinguish
+// "this IS a WithClause" from "there is none" without misfiring on
+// nothing (a normal StatementListItem can't immediately follow a module
+// specifier's STRING_LITERAL at this exact grammar position anyway, but
+// LOOKAHEAD keeps this production self-contained/order-independent).
+void WithClause(ASTImpExp imp): {
+}
+{
+	"with" "{" [ WithEntry(imp) ( LOOKAHEAD(2) "," WithEntry(imp) )* [","] ] "}"
+	{
+		// Distinguishes "no WithClause at all" (getAttributes()==null) from
+		// an explicit-but-empty `with {}` (a real, non-null empty map) -
+		// test262 import-attribute-empty.js's own idiom.
+		imp.ensureAttributes();
+	}
+}
+
+void WithEntry(ASTImpExp imp): {
+	Token k=null, ks=null, v;
+}
+{
+	(k=Property_Name()|ks=<STRING_LITERAL>) ":" v=<STRING_LITERAL>
+	{
+		String key = k!=null ? ASTLiteral.parseIdentifier(k.image) : ASTLiteral.parseString(ks.image);
+		// Early error (spec WithClause static semantics): AttributeKeys
+		// must be pairwise distinct.
+		if(imp.getAttributes()!=null && imp.getAttributes().containsKey(key)) {
+			throw generateParseException();
+		}
+		imp.addAttribute(key, ASTLiteral.parseString(v.image));
+	}
+}
+
+void ImportNamespace(ASTImpExp imp): {
+  Token t;
+}
+{
+  	"*" Identifier_As() t=Identifier_Name()
+  	{
+  	  imp.setNamespace(ASTLiteral.parseIdentifier(t.image));
+ 	}
+}
+
+void ModuleList(ASTImpExp imp): {
+}
+{
+  	// NamedImports/NamedExports (spec): the entry list may be EMPTY
+  	// (`import {} from '...'`/`export {}` - a common test262 idiom for "run
+  	// this module for its side effects only") and may carry a trailing
+  	// comma after the last entry (`import { x, } from '...'`) - both
+  	// previously unhandled here, always requiring at least one entry with
+  	// no trailing comma allowed. LOOKAHEAD(2) on the loop's "," is needed
+  	// so a "," immediately followed by "}" (a trailing comma) falls
+  	// through to the `[","]` alternative instead of the bare `(...)* `
+  	// construct trying (and failing, no backtrack) to parse another
+  	// ModuleEntry() right after it - JavaCC flagged this exact ambiguity
+  	// as a choice-conflict warning without it.
+  	"{" [ ModuleEntry(imp) ( LOOKAHEAD(2) "," ModuleEntry(imp) )* [","] ] "}"
+}
+void ModuleEntry(ASTImpExp imp): {
+  Token ni=null, ns=null, a=null,as=null;
+}
+{
+	(ni=Property_Name()|ns=< STRING_LITERAL>) (Identifier_As() (a=Property_Name()|as=< STRING_LITERAL>))?
+	{
+		// ni/a (from Property_Name(), an IdentifierName token) must be
+		// DECODED the same way a plain Identifier() is (ASTLiteral.
+		// parseIdentifier, not the raw .image) - an IdentifierName may
+		// itself contain a Unicode escape sequence (backslash, letter u,
+		// four hex digits) - test262 namespace/internals/own-property-
+		// keys-sort.js's `export { x as ... };` (an escaped Greek mu) was
+		// storing the literal escape-sequence source text as the export
+		// name instead of the single decoded character.
+		imp.addItem(ni!=null? ASTLiteral.parseIdentifier(ni.image)
+							: ASTLiteral.parseString(ns!=null?ns.image:""),
+							a!=null? ASTLiteral.parseIdentifier(a.image)
+								   : (as!=null?ASTLiteral.parseString(as!=null?as.image:""):null)
+					);
+	}
+}
+
+ASTNode ExportStatement(): {
+    Token t;
+    ASTExport exp;
+    ASTNode expr=null;
+}
+{
+   LOOKAHEAD("export" "default") t="export" {exp=nodeFactory.createExport(t);} "default" expr=Expression()
+   	{
+   	  // "export default function fn(){}"/"export default class Foo{}" parse
+   	  // through the SAME PrimaryExpression()->FunctionDeclaration()/
+   	  // ClassDeclaration() production a plain named function/class
+   	  // EXPRESSION does (see PrimaryExpression()'s own "async function"
+   	  // comment) - but per spec (ExportDeclaration : export default
+   	  // HoistableDeclaration / export default ClassDeclaration) a NAMED one
+   	  // here is a genuine DECLARATION, not a self-referencing expression:
+   	  // its name binds an ordinary, MUTABLE module-scope binding (like the
+   	  // plain "export function fn(){}" branch below already gets via this
+   	  // same setStatement(true) call), not the immutable FUNCTION_SELF/
+   	  // class-inner-self-reference binding a real expression form would.
+   	  // Confirmed via test262's own eval-gtbndng-indirect-update-dflt.js
+   	  // family: `export default function fn(){ fn = 2; ... }` must be able
+   	  // to reassign its own name. An ANONYMOUS function/class is unaffected
+   	  // either way (no name means no self-binding is ever created).
+   	  if(expr instanceof ASTFunctionDecl) {
+   	    ((ASTFunctionDecl)expr).setStatement(true);
+   	  } else if(expr instanceof ASTClassDecl) {
+   	    ((ASTClassDecl)expr).setStatement(true);
+   	  }
+   	  exp.setDefaultExport(expr);
+   	  return exp;
+   	}
+  | t="export" {exp=nodeFactory.createExport(t);} (ExportFromBlock(exp) | expr=Declaration())
+  	{
+  	  if(expr!=null) {
+  	    if(expr instanceof ASTFunctionDecl) {
+    	    ((ASTFunctionDecl)expr).setStatement(true);
+  	  	} else if(expr instanceof ASTClassDecl) {
+  	  	    // `export class C {}` (non-default) - same setStatement(true)
+  	  	    // treatment as the plain "export function fn(){}" branch just
+  	  	    // above (and as the "export default class Foo{}" branch two
+  	  	    // productions up): without it, ASTClassDecl.init()'s own
+  	  	    // isStatement()-gated check never registers C's outer,
+  	  	    // ordinary LET binding at all (see that method's own doc
+  	  	    // comment), so C's name never gets a module-hoist-pass TDZ
+  	  	    // placeholder or a live-binding-eligible variable cell -
+  	  	    // confirmed via instn-named-bndng-cls.js, a self-import of a
+  	  	    // named class export.
+  	  	    ((ASTClassDecl)expr).setStatement(true);
+  	  	}
+   	  	exp.setNamedExport(expr);
+   	  }
+   	  return exp;
+ 	}
+}
+
+void ExportFromBlock(ASTImpExp impExp): {
+    Token from=null;
+}
+{
+    ExportNamespace(impExp) Identifier_From() from=<STRING_LITERAL> [LOOKAHEAD(2) WithClause(impExp)]
+    {
+  	  	impExp.setFrom(ASTLiteral.parseString(from.image));
+    }
+  | ModuleList(impExp) (Identifier_From() from=<STRING_LITERAL> [LOOKAHEAD(2) WithClause(impExp)])?
+  	{
+  	  if(from!=null) {
+  	  	impExp.setFrom(ASTLiteral.parseString(from.image));
+  	  }
+  	}
+}
+
+
+void ExportNamespace(ASTImpExp imp): {
+  Token t=null, s=null;
+}
+{
+  	// `export * as ns from '...'`/`export * as "ns" from '...'` - the
+  	// string-literal alias form (arbitrary module namespace names
+  	// proposal) mirrors ModuleEntry()'s own identical two-alternative
+  	// handling for `export {a as "b"}`.
+  	"*" (Identifier_As() (t=Property_Name()|s=<STRING_LITERAL>))?
+  	{
+  	  imp.setNamespace(t!=null ? ASTLiteral.parseIdentifier(t.image) : (s!=null ? ASTLiteral.parseString(s.image) : null));
+ 	}
+}
+
+
+ASTNode Declaration(): {
+    ASTNode n;
+}
+{
+    n=VariableStatement()
+    	{return n; }
+  | n=FunctionDeclaration()
+    	{return n; }
+  | n=ClassDeclaration()
+    	{return n; }
+}
+
+
+/*
+  See: Identifier_From()
+  How do I deal with keywords that aren't reserved?
+*/
+void Identifier_As(): {
+}
+{
+	LOOKAHEAD( {getToken(1).kind == IDENTIFIER_NAME && getToken(1).image.equals("as") } )
+	Identifier_Name()
+}
+void Identifier_From(): {
+}
+{
+	LOOKAHEAD( {getToken(1).kind == IDENTIFIER_NAME && getToken(1).image.equals("from") } )
+	Identifier_Name()
+}
+
+
+Token Identifier_Name(): {
+  Token t;
+}
+{
+  (
+      t=<IDENTIFIER_NAME>
+  	| t=<GET>
+  	| t=<SET>
+  	| t=<ASYNC>
+  	| t=<AWAIT>
+  	| t=<SYNCHRONIZED>
+  	/* "synchronized" was removed from the reserved word list in ES5 and is
+  	   never reserved; unlike "static"/"yield" below it needs no strict-mode
+  	   distinction. */
+  	| t=<LET>
+  	/* "let" is only reserved (a) in strict-mode code (not tracked - separate
+  	   gap, see KnownGaps.md) or (b) where it actually starts a
+  	   LexicalDeclaration - see isLetDeclaration(), which gates the literal
+  	   "let" keyword alternatives in VariableStatement()/ForInitialization()/
+  	   LoopVariable(). Everywhere else (reached here), it's a plain
+  	   Identifier: "var let = 2;", "let: 1;" (label), "for (let in obj)". */
+  	| LOOKAHEAD({!yieldReserved && getToken(1).kind==YIELD}) t=<YIELD>
+  	/* "yield" is usable as an ordinary identifier everywhere except directly
+  	   within a generator's own FormalParameters/FunctionBody (yieldReserved,
+  	   maintained by FunctionDeclaration()). Strict-mode reserved-ness isn't
+  	   enforced (see below).
+  	   The extra "getToken(1).kind==YIELD" conjunct (beyond the semantic
+  	   !yieldReserved check alone) matters because of how javacc compiles a
+  	   LOOKAHEAD({semantic}) guarding a SINGLE-token alternative that's
+  	   followed by further alternatives: it generates a plain
+  	   "if(!yieldReserved) { consume YIELD } else { <try next alternative> }"
+  	   - i.e. once yieldReserved is false it unconditionally commits to
+  	   consuming YIELD without ever checking the actual next token, so any
+  	   OTHER token (e.g. "using") reaching this point outside a generator
+  	   body would fail to parse instead of falling through to the <USING>
+  	   alternative below. Confirmed via test262 language/reserved-words/
+  	   unreserved-words.js's "var using = 1;". */
+  	| t=<USING>
+  	/* "using" is a contextual keyword (explicit resource management) - only
+  	   special right before an identifier with no line terminator, in a
+  	   declaration-statement position (see VariableStatement()'s own
+  	   lookahead); everywhere else, including "using = 1" or "using.foo()",
+  	   it's an ordinary identifier. */
+  	| t=<STATIC>
+  	/* "static" is only reserved as an identifier in STRICT-mode code (Annex C
+  	   FutureReservedWord); in sloppy code it's a plain Identifier ("var
+  	   static = 1;" etc. - test262 language/future-reserved-words/static.js).
+  	   The strict-mode restriction itself is enforced later, semantically, by
+  	   checkStrictBindingName() (ASTNode.java), which already lists "static"
+  	   in its isStrictFutureReservedWord() set and fires against the AST's
+  	   genuine (init-time) strictness - no PARSE-time strict-mode tracking is
+  	   needed here, unlike the still-unhandled "public"/"private"/"protected"/
+  	   "interface"/"package"/"implements" siblings, which aren't reserved
+  	   TOKENS at all (they lex as plain IDENTIFIER_NAME) so never reach this
+  	   alternative in the first place; only the BINDING-name check
+  	   (checkStrictBindingName) applies to them, not a grammar change. Class
+  	   bodies still recognize "static" as the element modifier via
+  	   ClassElement()'s own dedicated getToken().kind==STATIC lookahead
+  	   (unaffected - that rule doesn't go through Identifier_Name() at all). */
+  )
+  { return t; }
+
+}
+
+Token Property_Name(): {
+  Token t;
+}
+{
+  (
+      t=<IDENTIFIER_NAME>
+  	| t=<ASYNC>
+  	| t=<AWAIT>
+  	| t=<BREAK>
+  	| t=<CASE>
+  	| t=<CATCH>
+  	| t=<CLASS>
+  	| t=<CONST>
+  	| t=<CONTINUE>
+  	| t=<DEBUGGER>
+  	| t=<DELETE>
+  	| t=<_DEFAULT>
+  	| t=<DO>
+  	| t=<ELSE>
+  	| t=<ENUM>
+  	| t=<EXPORT>
+  	| t=<EXTENDS>
+  	| t=<FINALLY>
+  	| t=<FOR>
+  	| t=<FUNCTION>
+  	| t=<GET>
+  	| t=<IF>
+  	| t=<IN>
+  	| t=<IMPORT>
+  	| t=<INSTANCE_OF>
+  	| t=<LET>
+  	| t=<NEW>
+  	| t=<RETURN>
+  	| t=<SET>
+  	| t=<STATIC>
+  	| t=<SUPER>
+  	| t=<SWITCH>
+  	| t=<SYNCHRONIZED>
+  	| t=<THIS>
+  	| t=<THROW>
+  	| t=<TRY>
+  	| t=<TYPEOF>
+  	| t=<USING>
+  	| t=<VAR>
+  	| t=<VOID>
+  	| t=<WHILE>
+  	| t=<WITH>
+  	| t=<YIELD>
+  	| t=<BOOLEAN_LITERAL>
+  	| t=<NULL_LITERAL>
+  )
+  { return t; }
+
+}
+
+//
+// Utility to insert a semi colon when needed
+// This is changed to support multiple errors recovery
+//
+JAVACODE
+void recoverFromError(boolean recoverError) {
+  	for(;;) {
+  	    if(checkSemiColon()) {
+  	        return;
+  	    }
+	   	getNextToken();
+	}
+}
+JAVACODE
+void insertSemiColon() {
+	if(!checkSemiColon()) {
+	   	throw generateParseException();
+  	}
+}
+JAVACODE
+// Spec 14.7.2: the semicolon after `do Statement while ( Expression )` is
+// always optional - unlike the generic ASI rule, this doesn't require a
+// following LineTerminator/"}"/EOF; consume a ";" if present, otherwise
+// just leave it for the next production to parse as a separate statement.
+void insertSemiColonDoWhile() {
+	Token inputToken = getToken(1);
+	if(inputToken.kind == SEMICOLON) {
+		getNextToken();
+	}
+}
+
+//
+// TypeScript-style type hints (JSConfiguration.supportTypeHints()): parsed
+// for syntax only, then discarded - no AST node, no transpiler codegen.
+// These four are ONLY ever called from the *IfAny() helpers in the
+// PARSER_BEGIN block (themselves called from action blocks) - never
+// referenced as a grammar expansion; see those helpers' own doc comment for
+// why (javacc's force-success compilation of a JAVACODE reference inside a
+// syntactic lookahead trial). With the flag off (the default) none of them
+// ever consume anything, so parsing is byte-for-byte unchanged from before
+// this feature existed.
+//
+JAVACODE
+// Consumes a single type expression - see scanTypeEnd()'s own doc comment
+// (near isArrowFunctionWithParens() above) for the full depth/continuation
+// rules this implements. Callers always consume the type's own leading ":"
+// themselves immediately before calling this.
+void skipType() {
+	int end = scanTypeEnd(1);
+	Token stopAt = getToken(end);
+	while (getToken(1) != stopAt) {
+		// getToken(end) is a stable Token identity (JavaCC's own lookahead
+		// buffer), so comparing against it (rather than an index that would
+		// drift as getNextToken() shifts the buffer) is what actually stops
+		// this at the right place.
+		getNextToken();
+	}
+}
+JAVACODE
+// Consumes an optional "<...>" type-parameter/argument list - see
+// scanTypeParametersEnd()'s own doc comment. The current token must be the
+// leading "<" (callers gate entry with LOOKAHEAD("<")).
+void skipTypeParameters() {
+	int end = scanTypeParametersEnd(1);
+	Token stopAt = getToken(end);
+	while (getToken(1) != stopAt) {
+		getNextToken();
+	}
+}
+JAVACODE
+// A light skip-loop for an "interface ... { ... }" body: brace-delimited
+// member signatures, not a single type expression, so this is pure bracket
+// balancing (like scanTypeParametersEnd()) rather than scanTypeEnd()'s
+// continuation-operator logic - stops right before the interface's own
+// closing "}", leaving it for the caller's own literal "}" to match.
+void skipInterfaceBody() {
+	int depth = 0;
+	while (true) {
+		Token t = getToken(1);
+		int k = t.kind;
+		if (k == EOF) {
+			return;
+		}
+		if (depth == 0 && k == RBRACE) {
+			return;
+		}
+		switch (k) {
+			case LPAREN: case LBRACKET: case LBRACE: case LT: case TEMPLATE_EXPR_START:
+				depth++; break;
+			case RPAREN: case RBRACKET: case RBRACE: case GT: case GE:
+				depth--; break;
+			case RSHIFT: case RSHIFTASSIGN:
+				depth -= 2; break;
+			case RUNSHIFT: case RUNSHIFTASSIGN:
+				depth -= 3; break;
+		}
+		if (depth < 0) {
+			depth = 0;
+		}
+		getNextToken();
+	}
+}
+JAVACODE
+// Consumes a whole "declare"-wrapped statement (see DeclareStatement()'s
+// own doc comment for why this is a flat skip rather than delegating to
+// the real function/class/var/type/interface productions): stops right
+// after a depth-0 ";" (consuming it, for the semicolon-terminated forms -
+// function/var/let/const/type) or right after a depth-0 "}" (for the
+// brace-bodied forms - class/interface), whichever comes first.
+void skipDeclareSignature() {
+	int depth = 0;
+	while (true) {
+		Token t = getToken(1);
+		int k = t.kind;
+		if (k == EOF) {
+			return;
+		}
+		if (depth == 0 && k == SEMICOLON) {
+			getNextToken();
+			return;
+		}
+		switch (k) {
+			case LPAREN: case LBRACKET: case LBRACE: case LT: case TEMPLATE_EXPR_START:
+				depth++; break;
+			case RPAREN: case RBRACKET: case RBRACE: case GT: case GE:
+				depth--; break;
+			case RSHIFT: case RSHIFTASSIGN:
+				depth -= 2; break;
+			case RUNSHIFT: case RUNSHIFTASSIGN:
+				depth -= 3; break;
+		}
+		if (depth < 0) {
+			depth = 0;
+		}
+		getNextToken();
+		if (depth == 0 && k == RBRACE) {
+			return;
+		}
+	}
+}
+
+JAVACODE
+boolean checkSemiColon(){
+	Token inputToken = getToken(1);
+	if(inputToken.kind == SEMICOLON){
+		inputToken = getNextToken();
+	} else if((inputToken.kind != EOF) && (inputToken.kind != RBRACE) && (inputToken.kind != ELSE)){
+		if(inputToken.specialToken != null){
+			boolean foundLineSeparator = false;
+			Token specialT = inputToken.specialToken;	 
+
+			while((specialT != null) && (! foundLineSeparator)){
+				if((specialT.kind == LINE_TERMINATOR) || (specialT.kind == SINGLE_LINE_COMMENT)){
+					foundLineSeparator = true;
+				} else if(specialT.kind == MULTI_LINE_COMMENT && containsLineTerminator(specialT.image)){
+					// A MultiLineComment containing a line terminator counts as a
+					// LineTerminator for ASI purposes, even though "*/" itself doesn't.
+					foundLineSeparator = true;
+				}
+
+				specialT = specialT.specialToken;
+			}
+
+			if(! foundLineSeparator){
+				return false; 
+			}
+		} else {
+			return false; 
+		}
+	}
+	return true; 
+}

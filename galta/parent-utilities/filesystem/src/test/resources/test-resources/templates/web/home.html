@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Home - ResourceFS Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        header { background: #2196F3; color: white; padding: 20px 0; }
+        nav { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; }
+        nav h1 { font-size: 24px; }
+        nav ul { list-style: none; display: flex; gap: 20px; }
+        nav a { color: white; text-decoration: none; }
+        .hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 80px 20px; text-align: center; }
+        .hero h2 { font-size: 48px; margin-bottom: 20px; }
+        .hero p { font-size: 20px; max-width: 600px; margin: 0 auto; }
+        .features { max-width: 1200px; margin: 60px auto; padding: 0 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
+        .feature { padding: 30px; border: 1px solid #ddd; border-radius: 8px; }
+        .feature h3 { color: #2196F3; margin-bottom: 15px; }
+        footer { background: #333; color: white; text-align: center; padding: 20px; margin-top: 60px; }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <h1>ResourceFS Demo</h1>
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/about">About</a></li>
+                <li><a href="/docs">Docs</a></li>
+            </ul>
+        </nav>
+    </header>
+    
+    <div class="hero">
+        <h2>Welcome to ResourceFS</h2>
+        <p>A powerful filesystem implementation for accessing classpath resources through the standard Java NIO.2 API</p>
+    </div>
+    
+    <div class="features">
+        <div class="feature">
+            <h3>🚀 Standard API</h3>
+            <p>Use the familiar java.nio.file.Files API to work with resources - no special APIs to learn!</p>
+        </div>
+        <div class="feature">
+            <h3>📁 Directory Navigation</h3>
+            <p>Browse and navigate resource directories just like regular filesystems with full support for tree walking.</p>
+        </div>
+        <div class="feature">
+            <h3>🔍 Pattern Matching</h3>
+            <p>Use glob and regex patterns to find resources quickly and efficiently.</p>
+        </div>
+        <div class="feature">
+            <h3>📋 Manifest-Based</h3>
+            <p>Simple manifest file lists all available resources - easy to generate at build time.</p>
+        </div>
+        <div class="feature">
+            <h3>🔒 Read-Only</h3>
+            <p>Resources are immutable and read-only, ensuring safety and consistency.</p>
+        </div>
+        <div class="feature">
+            <h3>⚡ High Performance</h3>
+            <p>Efficient resource loading with minimal overhead using standard ClassLoader APIs.</p>
+        </div>
+    </div>
+    
+    <footer>
+        <p>&copy; 2024 ResourceFS Demo. All rights reserved.</p>
+    </footer>
+</body>
+</html>

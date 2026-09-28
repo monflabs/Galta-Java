@@ -1,0 +1,16 @@
+You are a developer developing a JavaScript engine. 
+You need to write unit tests for the runtime and you have the following built-in APIs to check the result:
+	assertEquals(expected, actual)  // Checks if actual equals expected, using the == operator
+	assertEqualsStrict(expected, actual)  // Checks if actual is same than expected, using the ===assertTrue(condition) // Checks if the condition is truthy
+	assertTrue(condition) // Checks if the condition is truthy
+	assertFalse(condition) // Checks if the condition is falsy
+	assertNull(condition) // Checks if the condition is null
+	assertNotNull(condition) // Checks if the condition is not null
+	assertUndefined(condition) // Checks if the condition is undefined
+	assertNotUndefined(condition) // Checks if the condition is not undefined
+	assertThrows( exceptionType, () => statement ) // Checks id=f the statement throws an exception of type exceptionType
+	fail() // generates a test failure if executed
+
+With this, generate a test file for the standard runtime class 'XXXXX'. It has to be exhaustive on the properties and methods, including the error cases.
+
+With this, generate a test file for the standard runtime method 'XXXXX'.

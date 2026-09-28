@@ -1,0 +1,28 @@
+/* Theme Configuration */
+
+/* Light Theme (default) */
+.theme-light {
+    --primary-color: #2196F3;
+    --secondary-color: #FFC107;
+    --text-color: #333;
+    --background-color: #fff;
+    --border-color: #ddd;
+}
+
+/* Dark Theme */
+.theme-dark {
+    --primary-color: #64B5F6;
+    --secondary-color: #FFD54F;
+    --text-color: #fff;
+    --background-color: #303030;
+    --border-color: #555;
+}
+
+/* High Contrast Theme */
+.theme-high-contrast {
+    --primary-color: #000;
+    --secondary-color: #FFFF00;
+    --text-color: #000;
+    --background-color: #fff;
+    --border-color: #000;
+}

@@ -1,0 +1,33 @@
+/*
+ * Copyright (c) 2019-2026 Philippe Riand
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package tests.javascript.control;
+
+import tests.javascript.JavaScriptStrictTestCase;
+
+/**
+ * Multiple generator functions sharing a transpiler dispatcher class (>50
+ * sibling functions in one container) must each get their own eager
+ * parameter-binding helper instead of colliding on a single fixed method
+ * name.
+ *
+ * @author Philippe Riand
+ */
+public class GeneratorDispatcherSplitTest extends JavaScriptStrictTestCase {
+
+	public void testScript() throws Exception {
+		execute();
+	}
+}

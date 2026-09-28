@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>JS Playground</title>
+    <script src="https://cjrtnc.leaningtech.com/4.2/loader.js"></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+        }
+        #cheerpj {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+  </head>
+  <body>
+    <div id="cheerpj"></div>
+<!--    
+    <scriptss>
+      (async function () {
+        await cheerpjInit({version: 17});
+        cheerpjCreateDisplay(1600, 1200);
+        await cheerpjRunJar("/app/jsplayground.jar");
+      })();
+    </scriptss>
+-->    
+    <script>
+      (async function () {
+        await cheerpjInit({
+          version: 17
+        });
+        cheerpjCreateDisplay(-1, -1, document.getElementById("cheerpj"));
+        await cheerpjRunMain(
+          "playground.GaltaJSPlaygroundCheerpJ",
+          "/app/jsplayground.jar"
+        );
+      })();
+    </script>
+  </body>
+</html>

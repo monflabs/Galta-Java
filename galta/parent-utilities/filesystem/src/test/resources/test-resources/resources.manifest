@@ -1,0 +1,35 @@
+# Global Resource Manifest
+# Lists all available resources in this filesystem
+
+# Configuration files
+config/app.properties
+config/database.properties
+config/logging.xml
+
+# Email templates
+templates/email/welcome.html
+templates/email/goodbye.html
+
+# Web templates
+templates/web/home.html
+templates/web/about.html
+
+# Data files
+data/app.properties
+data/data.txt
+
+# Static CSS
+static/css/style.css
+static/css/theme.css
+
+# Static JavaScript
+static/js/app.js
+static/js/utils.js
+
+# Static images
+static/images/logo.txt
+static/images/banner.txt
+
+# Documentation
+docs/README.md
+docs/LICENSE.txt

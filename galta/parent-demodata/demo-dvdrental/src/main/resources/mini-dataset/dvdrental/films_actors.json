@@ -1,0 +1,272 @@
+[
+  {
+    "actor_id": 1,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 2,
+    "film_id": 3,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 10,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 10,
+    "film_id": 9,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 19,
+    "film_id": 2,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 19,
+    "film_id": 3,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 20,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 21,
+    "film_id": 6,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 22,
+    "film_id": 9,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 23,
+    "film_id": 6,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 24,
+    "film_id": 3,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 26,
+    "film_id": 9,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 30,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 40,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 41,
+    "film_id": 4,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 51,
+    "film_id": 5,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 53,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 53,
+    "film_id": 9,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 55,
+    "film_id": 8,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 59,
+    "film_id": 5,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 62,
+    "film_id": 6,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 64,
+    "film_id": 3,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 68,
+    "film_id": 9,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 81,
+    "film_id": 4,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 85,
+    "film_id": 2,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 88,
+    "film_id": 4,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 90,
+    "film_id": 2,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 96,
+    "film_id": 8,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 99,
+    "film_id": 7,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 103,
+    "film_id": 5,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 108,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 108,
+    "film_id": 6,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 108,
+    "film_id": 9,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 110,
+    "film_id": 8,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 123,
+    "film_id": 3,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 130,
+    "film_id": 9,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 133,
+    "film_id": 7,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 137,
+    "film_id": 6,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 138,
+    "film_id": 8,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 147,
+    "film_id": 4,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 160,
+    "film_id": 2,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 162,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 162,
+    "film_id": 4,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 162,
+    "film_id": 7,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 169,
+    "film_id": 6,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 170,
+    "film_id": 7,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 175,
+    "film_id": 9,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 181,
+    "film_id": 5,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 185,
+    "film_id": 7,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 188,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 194,
+    "film_id": 9,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 197,
+    "film_id": 6,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 198,
+    "film_id": 1,
+    "last_update": "2006-02-15 10:05:03.000000"
+  },
+  {
+    "actor_id": 200,
+    "film_id": 5,
+    "last_update": "2006-02-15 10:05:03.000000"
+  }
+]

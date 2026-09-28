@@ -1,0 +1,9 @@
+ASTProgram: const a
++- ASTVariableDeclConst
+|   +- ASTVariableDecl$Entry: ASTIdentifier: a
+|       +- ASTIdentifier: a
+|       +- ASTLiteral: "1"
++- ASTCall: ()
+    +- ASTMember: .log
+    |   +- ASTIdentifier: console
+    +- ASTLiteral: "1"

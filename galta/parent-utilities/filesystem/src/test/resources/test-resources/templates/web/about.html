@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>About - ResourceFS Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; }
+        header { background: #2196F3; color: white; padding: 20px 0; }
+        nav { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; }
+        nav h1 { font-size: 24px; }
+        nav ul { list-style: none; display: flex; gap: 20px; }
+        nav a { color: white; text-decoration: none; }
+        .content { max-width: 800px; margin: 60px auto; padding: 0 20px; }
+        h2 { color: #2196F3; margin: 30px 0 15px; }
+        p { margin-bottom: 15px; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        .code-block { background: #f4f4f4; padding: 15px; border-radius: 5px; margin: 15px 0; overflow-x: auto; }
+        footer { background: #333; color: white; text-align: center; padding: 20px; margin-top: 60px; }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <h1>ResourceFS Demo</h1>
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/about">About</a></li>
+                <li><a href="/docs">Docs</a></li>
+            </ul>
+        </nav>
+    </header>
+    
+    <div class="content">
+        <h1>About ResourceFS</h1>
+        
+        <p>ResourceFS is a custom FileSystem implementation that provides read-only access to classpath resources through the standard Java NIO.2 API.</p>
+        
+        <h2>Why ResourceFS?</h2>
+        <p>Java's ClassLoader can load resources, but it has limitations:</p>
+        <ul style="margin-left: 30px; margin-bottom: 15px;">
+            <li>No way to enumerate resources</li>
+            <li>No directory structure navigation</li>
+            <li>Returns InputStream, not Path API</li>
+        </ul>
+        
+        <p>ResourceFS solves these problems by using a manifest file to enumerate resources and wrapping them in a full FileSystem implementation.</p>
+        
+        <h2>Key Features</h2>
+        <ul style="margin-left: 30px; margin-bottom: 15px;">
+            <li>Standard java.nio.file.Files API</li>
+            <li>Directory navigation and tree walking</li>
+            <li>Pattern matching (glob and regex)</li>
+            <li>Manifest-based resource enumeration</li>
+            <li>Configurable base path and ClassLoader</li>
+        </ul>
+        
+        <h2>Example Usage</h2>
+        <div class="code-block">
+            <pre>Map&lt;String, Object&gt; env = Map.of(
+    ResourceFileSystemProvider.BASE_PATH_PARAM, "config/"
+);
+
+try (FileSystem fs = provider.newFileSystem(uri, env)) {
+    Path config = fs.getPath("/app.properties");
+    Properties props = new Properties();
+    try (InputStream in = Files.newInputStream(config)) {
+        props.load(in);
+    }
+}</pre>
+        </div>
+        
+        <h2>Use Cases</h2>
+        <p>ResourceFS is perfect for:</p>
+        <ul style="margin-left: 30px; margin-bottom: 15px;">
+            <li>Application configuration files</li>
+            <li>HTML/email templates</li>
+            <li>Static web assets</li>
+            <li>Test fixtures</li>
+            <li>Embedded documentation</li>
+        </ul>
+        
+        <h2>Get Started</h2>
+        <p>Check out the documentation to learn how to use ResourceFS in your projects!</p>
+    </div>
+    
+    <footer>
+        <p>&copy; 2024 ResourceFS Demo. All rights reserved.</p>
+    </footer>
+</body>
+</html>

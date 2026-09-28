@@ -1,0 +1,8 @@
+[Logo Placeholder]
+
+This file represents a logo image.
+In a real application, this would be a PNG, SVG, or JPEG file.
+
+Dimensions: 200x100
+Format: PNG
+Purpose: Company logo for navigation bar

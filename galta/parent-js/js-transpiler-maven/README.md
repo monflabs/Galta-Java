@@ -1,0 +1,2 @@
+# GaltaJS Maven  
+

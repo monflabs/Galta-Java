@@ -1,0 +1,27 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>GaltaJS</title>
+</head>
+<body>
+GaltaJS: a JavaScript-inspired scripting engine for the JVM.
+<p>
+Scripts are parsed into an AST that is either interpreted or transpiled to Java
+source and compiled at run time. {@link org.monflabs.galtajs.JSEnvironment} is the
+entry point: it holds the configuration and the standard objects, and creates
+executable units from source code.
+</p>
+<h2>Extensions to JavaScript</h2>
+<p>
+Optional GaltaJS extensions (off by default, enabled with
+{@code JSEnvironment.Builder.enableGaltaJSExtensions()}) add:
+</p>
+<ul>
+	<li>direct access to Java classes and objects,</li>
+	<li>a {@code synchronized(object) { ... }} statement,</li>
+	<li>decimal numbers ({@code BigDecimal}, with the {@code 0m} literal suffix),</li>
+	<li>long integers on integer overflow,</li>
+	<li>JSON path operators and multi-value sequences.</li>
+</ul>
+</body>
+</html>

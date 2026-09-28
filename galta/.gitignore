@@ -1,0 +1,14 @@
+.settings/
+.project
+.classpath
+target/
+bin/
+.idea/
+*.iml
+.flattened-pom.xml
+.claude/
+
+# Fetched by the fetch-externals Maven profile (js-test-test262/pom.xml,
+# js-test-rhino/pom.xml), pinned to a commit there - not tracked here.
+parent-js/js-test-test262/test262/
+parent-js/js-test-rhino/rhino/

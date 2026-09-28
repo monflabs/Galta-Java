@@ -1,0 +1,12 @@
+assertEquals(true,true || false)
+assertEquals(true,true || true)
+assertEquals(true,false || true)
+assertEquals(false,false || false)
+assertEquals(1,0 || 1)
+assertEquals(1,1 || 0)
+assertEquals(0,0 || 0)
+assertEquals(1,1 || 1)
+
+assertEquals("","" || "")
+assertEquals("A","" || "A")
+assertEquals("A","A" || "")

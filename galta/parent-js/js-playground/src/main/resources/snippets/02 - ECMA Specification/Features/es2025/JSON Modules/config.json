@@ -1,0 +1,5 @@
+{
+  "name": "GaltaJS",
+  "version": 16,
+  "features": ["iterator-helpers", "set-methods", "json-modules"]
+}

@@ -1,0 +1,8 @@
+[Banner Placeholder]
+
+This file represents a banner image.
+In a real application, this would be a large PNG or JPEG file.
+
+Dimensions: 1200x400
+Format: JPEG
+Purpose: Hero banner for homepage

@@ -1,0 +1,35 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	
+	<parent>
+		<groupId>org.monflabs.galta</groupId>
+		<artifactId>galta</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>parent-js</artifactId>
+	<packaging>pom</packaging>
+	<name>GaltaJS Parent</name>
+	<description>Parent of the GaltaJS modules.</description>
+
+	<modules>
+		<module>js</module>
+		<module>js-all</module>
+		<module>js-regexp-joni-custom</module>
+		<module>js-debugger</module>
+		<module>js-transpiler-maven</module>
+		<module>js-transpiler-maven-tests</module>
+		<module>js-mod-node</module>
+		<module>js-playground</module>
+		<module>js-playground-cheerpj</module>
+		<module>js-template</module>
+		<module>js-vb</module>
+		<module>js-test-suite</module>
+		<module>js-test-rhino</module>
+		<module>js-test-test262</module>
+		<module>js-library-v8</module>
+		<module>parent-js-precompiled</module>
+	</modules>
+
+</project>

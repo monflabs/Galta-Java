@@ -1,0 +1,14 @@
+ASTProgram: const a, const b
++- ASTVariableDeclConst
+|   +- ASTVariableDecl$Entry: ASTIdentifier: a
+|       +- ASTIdentifier: a
+|       +- ASTLiteral: 3
++- ASTVariableDeclConst
+|   +- ASTVariableDecl$Entry: ASTIdentifier: b
+|       +- ASTIdentifier: b
+|       +- ASTLiteral: 5
++- ASTBlock: const a
+    +- ASTVariableDeclConst
+        +- ASTVariableDecl$Entry: ASTIdentifier: a
+            +- ASTIdentifier: a
+            +- ASTLiteral: 5

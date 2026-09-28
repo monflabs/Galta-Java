@@ -1,0 +1,56 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.monflabs.galta</groupId>
+		<artifactId>parent-ui-commons</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>ui-commons</artifactId>
+	<name>Galta UI Commons</name>
+	<description>Toolkit-independent UI building blocks: value converters, lookups and application support.</description>
+	
+	<dependencies>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>utilities</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		
+		<!-- TextConverter uses JsonUtil: a real compile dependency, not something
+		     to pick up through the test-support artifact -->
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>json</artifactId>
+			<version>${revision}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>test</artifactId>
+    		<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<includes>
+						<include>**/AllUiCommonsTests.class</include>
+					</includes>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

@@ -1,0 +1,8 @@
+ASTProgram: let bb
++- ASTVariableDeclScopedLet
+|   +- ASTVariableDecl$Entry: ASTIdentifier: bb
+|       +- ASTIdentifier: bb
+|       +- ASTLiteral: 1
++- ASTAssignLShift
+    +- ASTIdentifier: bb
+    +- ASTLiteral: 3

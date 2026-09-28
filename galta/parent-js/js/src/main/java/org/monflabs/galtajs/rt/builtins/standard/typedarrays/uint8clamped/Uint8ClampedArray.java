@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2019-2026 Philippe Riand
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.monflabs.galtajs.rt.builtins.standard.typedarrays.uint8clamped;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
+import org.monflabs.galtajs.JSEnvironment;
+import org.monflabs.galtajs.rt.RuntimeUtil;
+import org.monflabs.galtajs.rt.builtins.JSAccessor;
+import org.monflabs.galtajs.rt.builtins.standard.typedarrays.BaseArrayBuffer;
+import org.monflabs.galtajs.rt.builtins.standard.typedarrays.TypedArray;
+
+public class Uint8ClampedArray extends TypedArray {
+
+	public Uint8ClampedArray(Uint8ClampedArray array) {
+		super(array);
+	}
+	public Uint8ClampedArray(JSEnvironment env, long length) {
+		super(env,Uint8ClampedArrayConstructor.CLASSNAME,length);
+	}
+	public Uint8ClampedArray(JSEnvironment env, BaseArrayBuffer buffer, long byteOffset, long length) {
+		super(env,Uint8ClampedArrayConstructor.CLASSNAME,buffer, byteOffset, length);
+	}
+
+	@Override
+	public TypedArray create(long length) {
+		return new Uint8ClampedArray(getEnvironment(),length);
+	}
+	
+	@Override
+	public TypedArray clone() {
+		return new Uint8ClampedArray(this);
+	}
+
+	@Override
+	public TypedArray subarray(long begin, long end) {
+		long start = byteIndex(begin);
+		long length = byteIndex(end)-start;
+		return new Uint8ClampedArray(getEnvironment(),getArrayBuffer(),start,length);
+	}
+
+	@Override
+	public JSAccessor createAccessor(JSEnvironment env) {
+		return new Uint8ClampedAccessor(env);
+	}
+
+	@Override
+	public Short get(long index) {
+		if(index<0 || index>=getLength()) {
+			throw RuntimeUtil.rangeError("Invalid array index {0}",index);
+		}
+		return getArrayBuffer().readUint8(byteIndex(index));
+	}
+
+	@Override
+	public void set(long index, Number value) {
+		if(index<0 || index>=getLength()) {
+			throw RuntimeUtil.rangeError("Invalid array index {0}",index);
+		}
+		if(!getEnvironment().supportMixedBigNumber() && (value instanceof BigInteger || value instanceof BigDecimal)) {
+			throw RuntimeUtil.typeError("Invalid type for array {0}",RuntimeUtil.objectTypeName(getEnvironment(),value));
+		}
+		getArrayBuffer().writeUint8(byteIndex(index),(short)RuntimeUtil.toUint8Clamp(value));
+	}
+}

@@ -1,0 +1,84 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.monflabs.galta</groupId>
+		<artifactId>parent-js</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>js-transpiler-maven-tests</artifactId>
+	<name>GaltaJS Transpiler Maven Plugin Tests</name>
+	<description>Integration tests of the GaltaJS transpiler Maven plugin. Not published.</description>
+
+	<properties>
+		<!-- Not published: excluded from the Maven Central bundle (see the root pom central profile) -->
+		<maven.deploy.skip>true</maven.deploy.skip>
+		<maven.javadoc.skip>true</maven.javadoc.skip>
+		<gpg.skip>true</gpg.skip>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>test</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>		
+	</dependencies>
+	
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-transpiler-maven</artifactId>
+				<version>${revision}</version>
+				<executions>
+					<execution>
+						<id>generate</id>
+						<goals>
+							<goal>generate-sources</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<sourceDirectory>${basedir}/js</sourceDirectory>
+					<includes>
+					    <include>**/*.js</include>
+					</includes>
+					<sourceMap>true</sourceMap>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>add-source</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>add-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>${project.build.directory}/generated-sources/js</source>
+							</sources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>	
+</project>
+

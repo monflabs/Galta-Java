@@ -1,0 +1,6 @@
+ASTProgram: function f
++- ASTFunctionDecl: system arguments
+    +- ASTArrayLiteral
+    +- ASTWhile
+        +- ASTLiteral: 1
+        +- ASTBlock

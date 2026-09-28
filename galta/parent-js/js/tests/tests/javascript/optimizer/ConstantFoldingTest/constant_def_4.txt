@@ -1,0 +1,17 @@
+ASTProgram: const x
++- ASTVariableDeclConst
+|   +- ASTVariableDecl$Entry: ASTIdentifier: x
+|       +- ASTIdentifier: x
+|       +- ASTLiteral: 3
++- ASTAssign
+|   +- ASTIdentifier: o
+|   +- ASTObjectLiteral
+|       +- ASTObjectLiteral$InitializerFieldNameExpression
+|           +- ASTLiteral: 4
+|           +- <null node>
++- ASTAssign
+    +- ASTIdentifier: o
+    +- ASTObjectLiteral
+        +- ASTObjectLiteral$InitializerFieldNameExpression
+            +- ASTIdentifier: x
+            +- <null node>

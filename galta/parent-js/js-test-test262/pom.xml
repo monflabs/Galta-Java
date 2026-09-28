@@ -1,0 +1,216 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.monflabs.galta</groupId>
+		<artifactId>parent-js</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>js-test-test262</artifactId>
+	<name>GaltaJS test262</name>
+	<description>Runs the TC39 test262 compliance suite against GaltaJS. Not published.</description>
+
+	<properties>
+		<!-- Not published: excluded from the Maven Central bundle (see the root pom central profile) -->
+		<maven.deploy.skip>true</maven.deploy.skip>
+		<maven.javadoc.skip>true</maven.javadoc.skip>
+		<gpg.skip>true</gpg.skip>
+		<!--
+			test262 has no ES2015/current-draft tag, only a moving `main`, so
+			the suite is pinned to one commit for reproducibility - see the
+			fetch-externals profile below. Bumping the suite is a one-line
+			change here + `mvn -Pfetch-externals generate-test-resources`.
+			Currently pinned to the same commit Nashorn's own test262 runner
+			uses (the nashorn.test262.commit property of Nashorn's own
+			core/pom.xml), so cross-engine comparisons stay apples-
+			to-apples.
+		-->
+		<galtajs.test262.commit>3655e7464de3d52643ecddd4b5f9f4f3e7f62398</galtajs.test262.commit>
+		<galtajs.test262.dir>${project.basedir}/test262</galtajs.test262.dir>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js-regexp-joni-custom</artifactId>
+			<version>${revision}</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>test</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>		
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js-debugger</artifactId>
+			<version>${revision}</version>
+			<scope>test</scope>
+		</dependency>		
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js</artifactId>
+			<version>${revision}</version>
+			<type>test-jar</type>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>js-test-suite</artifactId>
+			<version>${revision}</version>
+			<type>test-jar</type>
+			<scope>test</scope>
+		</dependency>
+
+
+	</dependencies>
+	
+	<build>
+		<plugins>
+			<!--
+				All262Tests runs all 3 execution modes (interpreted,
+				interpreted+optimized, transpiled) against the WHOLE test262
+				suite - hours, not minutes (the transpiled pass alone is
+				~2.5h). Defaults to the AllBuildNoTest no-op (matches
+				js-precompiled-typescript's identical
+				convention for other slow-test modules) so a plain
+				`mvn test`/`mvn clean install` - including from the repo
+				root - stays fast; this module still gets compiled and its
+				test sources still get checked, just not RUN by default.
+				To actually run test262:
+				  - a single mode, quick check: mvn test -pl parent-js/js-test-test262 -Dtest=Test262AllTest
+				    (interpreted only, ~10 min - see js-test-test262/CLAUDE.md)
+				  - the full suite, all 3 modes: mvn test -pl parent-js/js-test-test262 -Ptest262
+				    (or add -Ptest262 to a release build - see the test262
+				    profile below)
+				`-Dtest=<AnyClass>` always overrides these <includes>
+				regardless of which is active, so a specific class is
+				always reachable manually without touching either profile.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<includes>
+						<include>**/AllBuildNoTest.class</include>
+					</includes>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+	<profiles>
+		<profile>
+			<!--
+				Fetches the test262 suite, pinned to galtajs.test262.commit
+				above, into ${galtajs.test262.dir} - a plain git working
+				directory, NOT a submodule, so bumping the suite is a one-line
+				property edit instead of a submodule-update-and-commit dance.
+				Mirrors Nashorn's own fetch-externals profile (core/pom.xml)
+				exactly, including the git-exits-128-if-it-already-exists
+				success code (makes this safely re-runnable) and the shallow,
+				single-commit fetch (test262 is large; a full clone is not
+				needed to pin one revision).
+
+				Auto-activates whenever test262/.git is missing - i.e. a
+				fresh clone - so a plain `mvn test`/`mvn install` on this
+				module fetches the suite automatically the first time, with
+				no separate step to remember. Once fetched, this file exists
+				and the profile no longer auto-activates, so ordinary builds
+				stay offline and fast. To FORCE a re-fetch (e.g. right after
+				bumping galtajs.test262.commit, when test262/.git already
+				exists from the old commit), activate it explicitly:
+					mvn -pl parent-js/js-test-test262 -Pfetch-externals generate-test-resources
+				(explicit -P activation always runs regardless of the file
+				check below - that's what makes a forced re-fetch possible.)
+			-->
+			<id>fetch-externals</id>
+			<activation>
+				<file>
+					<missing>test262/.git</missing>
+				</file>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.codehaus.mojo</groupId>
+						<artifactId>exec-maven-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>init-test262</id>
+								<phase>generate-test-resources</phase>
+								<goals><goal>exec</goal></goals>
+								<configuration>
+									<executable>git</executable>
+									<successCodes><successCode>0</successCode><successCode>128</successCode></successCodes>
+									<commandlineArgs>init -q ${galtajs.test262.dir}</commandlineArgs>
+								</configuration>
+							</execution>
+							<execution>
+								<id>fetch-test262</id>
+								<phase>generate-test-resources</phase>
+								<goals><goal>exec</goal></goals>
+								<configuration>
+									<executable>git</executable>
+									<workingDirectory>${galtajs.test262.dir}</workingDirectory>
+									<commandlineArgs>-c protocol.version=2 fetch -q --depth 1 https://github.com/tc39/test262 ${galtajs.test262.commit}</commandlineArgs>
+								</configuration>
+							</execution>
+							<execution>
+								<id>checkout-test262</id>
+								<phase>generate-test-resources</phase>
+								<goals><goal>exec</goal></goals>
+								<configuration>
+									<executable>git</executable>
+									<workingDirectory>${galtajs.test262.dir}</workingDirectory>
+									<commandlineArgs>checkout -q ${galtajs.test262.commit}</commandlineArgs>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<profile>
+			<!--
+				Switches this module's default from AllBuildNoTest (no-op)
+				to All262Tests (the full test262 suite, all 3 execution
+				modes - hours, not minutes) - see the surefire plugin's own
+				doc comment above for why the default has to stay fast.
+				Inactive by default; activate explicitly:
+					mvn test -pl parent-js/js-test-test262 -Ptest262
+				or fold into a release build alongside the other release
+				profiles (see the repo-root CLAUDE.md's Build Commands):
+					mvn clean install -P javadoc,sources,codesigning,test262
+			-->
+			<id>test262</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<includes>
+								<include>**/All262Tests.class</include>
+							</includes>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+</project>
+

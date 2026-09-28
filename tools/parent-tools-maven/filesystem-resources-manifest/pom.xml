@@ -1,0 +1,61 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.monflabs.galta.tools</groupId>
+		<artifactId>parent-tools-maven</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>filesystem-resources-manifest</artifactId>
+	<description>Maven plugin that generates the resource manifest used by the Galta classpath ResourceFileSystem to list directories.</description>
+
+	<packaging>maven-plugin</packaging>
+
+	<name>Resources manifest generation for classloader based FileSystem</name>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<source>${maven.compiler.source}</source>
+					<target>${maven.compiler.target}</target>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-plugin-plugin</artifactId>
+				<configuration>
+					<goalPrefix>monflabs</goalPrefix>
+				</configuration>
+			</plugin>
+			<!-- The mojo still uses the javadoc-style descriptor tags read by
+			     maven-plugin-plugin; declare them so javadoc does not reject them -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<configuration>
+					<tags>
+						<tag><name>goal</name><placement>a</placement><head>Goal:</head></tag>
+						<tag><name>phase</name><placement>a</placement><head>Phase:</head></tag>
+						<tag><name>parameter</name><placement>a</placement><head>Parameter:</head></tag>
+						<tag><name>required</name><placement>a</placement><head>Required</head></tag>
+						<tag><name>readonly</name><placement>a</placement><head>Read-only</head></tag>
+					</tags>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.apache.maven</groupId>
+			<artifactId>maven-plugin-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.maven</groupId>
+			<artifactId>maven-core</artifactId>
+		</dependency>
+
+	</dependencies>
+</project>
