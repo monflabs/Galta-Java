@@ -450,6 +450,8 @@ public class GaltaJSTestSuite {
 		// compiler
 		suite.addTestSuite(tests.javascript.compiler.ConstantTest.class);
 		suite.addTestSuite(tests.javascript.compiler.ContextualKeywordIdentifierTest.class);
+		suite.addTestSuite(tests.javascript.compiler.EarlyErrorsNoStrictTest.class);
+		suite.addTestSuite(tests.javascript.compiler.IdentifierEscapeNoStrictTest.class);
 		suite.addTestSuite(tests.javascript.compiler.EmptyScriptNoNewLineTest.class);
 		suite.addTestSuite(tests.javascript.compiler.EmptyScriptTest.class);
 		suite.addTestSuite(tests.javascript.compiler.MultiLineCommentAsiTest.class);

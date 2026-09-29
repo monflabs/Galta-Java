@@ -36,24 +36,19 @@ assertEquals( 1, anotherChild.myParent() )
 
 
 // Test failures
+// super outside of a method/derived constructor is an early SyntaxError
 assertThrows( () => {
-	return super(1,2,3);
-});
+	eval("() => super(1,2,3)");
+}, SyntaxError);
 assertThrows( () => {
-	return super.f(1,2,3);
-});
+	eval("() => super.f(1,2,3)");
+}, SyntaxError);
 assertThrows( () => {
-	function f() {
-		return super.f(1,2,3);
-	}
-	f();
-});
+	eval("function f() { return super.f(1,2,3); }");
+}, SyntaxError);
 assertThrows( () => {
-	function f() {
-		return super(1,2,3);
-	}
-	f();
-});
+	eval("function f() { return super(1,2,3); }");
+}, SyntaxError);
 
 // SuperProperty's `this` binding for accessors, and property-creation-on-receiver
 // for plain assignment, are covered by tests.javascript.object.SuperReceiverTest

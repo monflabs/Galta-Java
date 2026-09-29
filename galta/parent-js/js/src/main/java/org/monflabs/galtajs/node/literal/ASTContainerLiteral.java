@@ -18,6 +18,8 @@ package org.monflabs.galtajs.node.literal;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
+import org.monflabs.galtajs.JSParseException;
+import org.monflabs.galtajs.node.ASTIdentifier;
 import org.monflabs.galtajs.node.ASTNode;
 import org.monflabs.galtajs.node.clazz.ASTClassDecl;
 import org.monflabs.galtajs.node.control.ASTFunction;
@@ -39,6 +41,50 @@ public abstract class ASTContainerLiteral extends ASTNode implements IVarDeclara
 
 	public ASTContainerLiteral(Token t) {
 		super(t);
+	}
+
+	// Set when a "," follows a spread/rest element: legal in a literal
+	// ("[...a, b]"), a SyntaxError once the literal is a destructuring
+	// pattern or a parameter list, where the rest element must come last
+	// and cannot have a trailing comma ("[...a,] = x", "function f(...a,){}").
+	private boolean commaAfterSpread;
+
+	/** Called by the parser for each "," between two entries. */
+	public void markComma() {
+		if(lastIsSpread()) {
+			commaAfterSpread = true;
+		}
+	}
+
+	public boolean hasCommaAfterSpread() {
+		return commaAfterSpread;
+	}
+
+	protected abstract boolean lastIsSpread();
+
+	/**
+	 * Early errors of this literal used as a destructuring pattern: a
+	 * BindingPattern ({@code binding}: declarations, parameters, catch) only
+	 * binds identifiers, an AssignmentPattern assigns to simple targets, and
+	 * in both the rest element comes last, without an initializer.
+	 */
+	public abstract void checkPattern(boolean binding, boolean strict);
+
+	// One pattern element (without its default value): a nested pattern or a leaf target.
+	protected static void checkPatternTarget(ASTNode target, boolean binding, boolean strict) {
+		ASTNode n = target;
+		while(n instanceof org.monflabs.galtajs.node.debug.ASTDebugHook h) {
+			n = h.getNode();
+		}
+		if(n instanceof ASTContainerLiteral lit) {
+			lit.checkPattern(binding, strict);
+		} else if(binding) {
+			if(!(n instanceof ASTIdentifier)) {
+				throw new JSParseException(null, target, "Invalid destructuring binding target");
+			}
+		} else {
+			checkAssignmentTarget(n, AssignmentUse.NESTED, strict);
+		}
 	}
 
 	@Override

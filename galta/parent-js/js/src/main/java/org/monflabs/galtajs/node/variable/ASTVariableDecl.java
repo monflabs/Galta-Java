@@ -307,6 +307,9 @@ public abstract class ASTVariableDecl extends ASTNode {
 				? findParentNodeByClass(IContextRootContainer.class)
 				: findParentNodeByClass(IContextBlockContainer.class);
     	for(Entry e: entries) {
+    		if(e.varDecl instanceof ASTContainerLiteral lit) {
+    			lit.checkPattern(true, initContext.isGenuinelyStrict());
+    		}
     		if(e.varDecl instanceof IVarDeclarator vd) {
     			vd.declareVariables(varContainer,getVarType());
     		}

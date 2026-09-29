@@ -72,6 +72,15 @@ public abstract class ASTAbstractAssign extends ASTNode {
 		
 		// For now - we should find a better way to validate the assigned nodes???
 		ASTNode leftNode = getLeftNode();
+		// ASTAssign drops the parentheses around its target (keeping only the fact)
+		if(this instanceof ASTAssign as && as.isLeftParenthesized() && leftNode instanceof org.monflabs.galtajs.node.literal.ASTContainerLiteral) {
+			throw new JSParseException(null, this, "Invalid assignment target: a parenthesized destructuring pattern");
+		}
+		checkAssignmentTarget(leftNode,
+				this instanceof ASTAssign ? AssignmentUse.PLAIN
+				: (this instanceof ASTAssignAnd || this instanceof ASTAssignOr || this instanceof ASTAssignNullCoalescing) ? AssignmentUse.LOGICAL
+				: AssignmentUse.COMPOUND,
+				initContext.isGenuinelyStrict());
 		if(leftNode instanceof ASTIdentifier id) {
 			// AssignmentTargetType early error (static semantics, e.g. spec
 			// 13.15.1): assigning to "eval"/"arguments" in strict-mode code is

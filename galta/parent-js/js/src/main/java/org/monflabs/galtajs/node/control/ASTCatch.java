@@ -114,6 +114,7 @@ public class ASTCatch extends ASTVarContainer {
 			bodyNode.addVarDeclaration(id.getId(),VAR_TYPE.PREDECLARED,null);
 			checkStrictBindingName(initContext, id.getId(), this);
 		} else if(bindingNode instanceof ASTContainerLiteral lit) {
+			lit.checkPattern(true, initContext.isGenuinelyStrict());
 			// Declared on `this` (ASTCatch's own container), NOT bodyNode -
 			// see KnownGaps.md "a closure in a destructured catch parameter's
 			// default value doesn't capture the catch binding". `this` is

@@ -62,6 +62,24 @@ import tests.BaseProjectTestCase;
 public abstract class BaseTestSuiteTest extends BaseProjectTestCase {
 
 	public static boolean OPTIMIZE_NODES = false;
+
+	/**
+	 * What the runner was doing for the current file when an exception was
+	 * thrown - lets a subclass check WHEN an expected error happened (a
+	 * test262 negative test with {@code phase: parse} must fail while the
+	 * script is being created, never while it runs).
+	 */
+	public enum ExecPhase {
+		/** Loading the harness/shell */
+		SETUP,
+		/** Parsing the file: env.createScript() and its early errors */
+		PARSE,
+		/** Transpiled mode only: generating and compiling the Java source */
+		TRANSPILE,
+		/** Running the script */
+		EXECUTE
+	}
+	protected ExecPhase execPhase = ExecPhase.SETUP;
 	
 	private Charset WIN1252 = Charset.forName("windows-1252");
 
@@ -323,7 +341,8 @@ public abstract class BaseTestSuiteTest extends BaseProjectTestCase {
         			// earlier in this same method).
         			try {
 			            // Load the test code
-			            String shell = readShell(scriptFile.getParent(),null);
+			            execPhase = ExecPhase.SETUP;
+		            String shell = readShell(scriptFile.getParent(),null);
 			            // MUST be read before getScriptFlags() - the latter reads
 			            // currentMetadata, which loadScript()'s own preprocessFile()
 			            // call populates as a side effect (parses the YAML front-
@@ -359,6 +378,7 @@ public abstract class BaseTestSuiteTest extends BaseProjectTestCase {
         	        JSEnvironment env = envBuilder.build();
 
 		        	InterpretedGlobalRuntimeContext jsContext = new InterpretedGlobalRuntimeContext(env,env.createProgramExecutor());
+		        	execPhase = ExecPhase.SETUP;
 
 		            // Initialize the context with the shell
 		            loadShell(jsContext,scriptFile.getParent());
@@ -379,9 +399,11 @@ public abstract class BaseTestSuiteTest extends BaseProjectTestCase {
 			        			ecmaSourceFile.getParentFile().mkdirs();
 			        			support.saveFile(ecmaSourceFile, testCode);
 	    	        		}
+	    	        		execPhase = ExecPhase.PARSE;
 	    	        		JSInterpretedUnit testScript = env.createScript(testCode,moduleName,getScriptFlags(scriptFile));
 	    	        		jsContext.setOutStream(new PrintStream(new ConsoleFilterOutputStream(Console.outStream(),errorCount)));
 	    	        		try {
+	    	        			execPhase = ExecPhase.EXECUTE;
 	    	        			testScript.executeWithContext(jsContext);
 	    	        		} finally {
 	    	        			jsContext.getOutStream().close();
@@ -448,7 +470,9 @@ public abstract class BaseTestSuiteTest extends BaseProjectTestCase {
 
     private void compileAndRunTranspiledUnit(JSEnvironment env, JSTranspiler transpiler, String className,
             String code, String unitName, int scriptFlags, TranspiledGlobalRuntimeContext ctx) throws Exception {
+        execPhase = ExecPhase.PARSE;
         JSInterpretedUnit unitAst = env.createScript(code,unitName,scriptFlags);
+        execPhase = ExecPhase.TRANSPILE;
         String javaSource = transpiler.compile(className,"Object",unitAst);
 
         if(true) {
@@ -481,10 +505,12 @@ public abstract class BaseTestSuiteTest extends BaseProjectTestCase {
         PathClassLoader cl = new PathClassLoader(getClass().getClassLoader(), tgtFs);
         Constructor<?> ctor = cl.loadClass(className).getConstructor(JSEnvironment.class, String.class);
         JSTranspiledUnit hw = (JSTranspiledUnit)ctor.newInstance(env, unitName);
+        execPhase = ExecPhase.EXECUTE;
         hw.runValue(ctx);
     }
 
     protected void loadShell(InterpretedGlobalRuntimeContext jsContext, Path folder) throws Exception {
+    	execPhase = ExecPhase.SETUP;
     	String shellCode = readShell(folder, "");
     	if(StringUtil.isNotEmpty(shellCode)) {
 			JSInterpretedUnit shellScript = jsContext.getEnvironment().createScript(shellCode,"shell.js");

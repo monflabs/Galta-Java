@@ -50,6 +50,7 @@ public abstract class ASTAbstractIncDec extends ASTUnaryOp {
 		
 		// For now - we should find a better way to validate the assigned nodes???
 		ASTNode leftNode = getNode();
+		checkAssignmentTarget(leftNode, AssignmentUse.COMPOUND, initContext.isGenuinelyStrict());
 		if(leftNode instanceof ASTIdentifier id) {
 			VariableDef v = findParentNodeByClass(ASTVarContainer.class).findVariable(id.getId());
 			if(v==null) {

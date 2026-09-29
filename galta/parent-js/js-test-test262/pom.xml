@@ -73,6 +73,20 @@
 	
 	<build>
 		<plugins>
+			<!-- Transpiled test output saved under src/test/java/compiled/ for
+			     inspection only: never compiled by the build itself (as in the js
+			     module). A transpiled run leaves thousands of these files; without
+			     this exclusion the next build of the module compiles them, and one
+			     generated file with a problem breaks it. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<testExcludes>
+						<testExclude>**/compiled/*</testExclude>
+					</testExcludes>
+				</configuration>
+			</plugin>
 			<!--
 				All262Tests runs all 3 execution modes (interpreted,
 				interpreted+optimized, transpiled) against the WHOLE test262

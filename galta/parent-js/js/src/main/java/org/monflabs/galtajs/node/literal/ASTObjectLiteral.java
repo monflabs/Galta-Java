@@ -30,6 +30,7 @@ import org.monflabs.galtajs.node.ASTArrayMember;
 import org.monflabs.galtajs.node.ASTIdentifier;
 import org.monflabs.galtajs.node.ASTMember;
 import org.monflabs.galtajs.node.ASTNode;
+import org.monflabs.galtajs.JSParseException;
 import org.monflabs.galtajs.node.assignop.ASTAssign;
 import org.monflabs.galtajs.node.clazz.ASTClassDecl;
 import org.monflabs.galtajs.node.control.ASTFunction;
@@ -903,6 +904,48 @@ public class ASTObjectLiteral extends ASTContainerLiteral {
     };
 
 	private ArrayList<Initializer> fieldInitializers = new ArrayList<Initializer>();
+
+	// A shorthand PropertyDefinition is an IdentifierReference ("{x}"), or a
+	// CoverInitializedName ("{x = 1}") that only a destructuring pattern
+	// accepts: "{0}", "{this}" or "{[x]}" is a SyntaxError.
+	public void checkShorthands() {
+		for(Initializer init: fieldInitializers) {
+			if(init instanceof InitializerFieldNameExpression f && !f.hasField && f.node!=null) {
+				ASTNode n = f.node instanceof ASTAssign as ? as.getLeftNode() : f.node;
+				if(!(n instanceof ASTIdentifier)) {
+					throw new JSParseException(null, this, "Invalid shorthand property initializer");
+				}
+			}
+		}
+	}
+
+	@Override
+	protected boolean lastIsSpread() {
+		return !fieldInitializers.isEmpty() && fieldInitializers.get(fieldInitializers.size()-1) instanceof InitializerSpread;
+	}
+
+	@Override
+	public void checkPattern(boolean binding, boolean strict) {
+		for(int i=0; i<fieldInitializers.size(); i++) {
+			Initializer init = fieldInitializers.get(i);
+			if(init instanceof InitializerSpread sp) {
+				if(i<fieldInitializers.size()-1 || hasCommaAfterSpread()) {
+					throw new JSParseException(null, this, "Rest element must be last element");
+				}
+				// The object rest target is a simple target, never a nested pattern
+				if(sp.node instanceof ASTContainerLiteral) {
+					throw new JSParseException(null, this, "Invalid rest element");
+				}
+				checkPatternTarget(sp.node, binding, strict);
+			} else if(init instanceof InitializerFieldNameExpression f && f.node!=null) {
+				if(f.accessorType!=null) {
+					throw new JSParseException(null, this, "Invalid destructuring target");
+				}
+				ASTNode n = f.node;
+				checkPatternTarget(n instanceof ASTAssign as ? as.getLeftNode() : n, binding, strict);
+			}
+		}
+	}
 
 	public ASTObjectLiteral(Token t) {
 		super(t);

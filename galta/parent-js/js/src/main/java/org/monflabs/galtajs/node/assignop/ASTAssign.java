@@ -55,6 +55,10 @@ public class ASTAssign extends ASTAbstractAssign implements IVarDeclarator {
 	// unwrapping, specifically for the naming check in init().
 	private final boolean leftWasParenthesized;
 
+	public boolean isLeftParenthesized() {
+		return leftWasParenthesized;
+	}
+
 	public ASTAssign(Token t, ASTNode leftNode, ASTNode rightNode) {
 		super(t,skipTransparent(leftNode),rightNode);
 		this.leftWasParenthesized = leftNode instanceof NoopNode;
@@ -133,7 +137,15 @@ public class ASTAssign extends ASTAbstractAssign implements IVarDeclarator {
 				// to ASTIdentifier's original post-RHS resolution/auto-create
 				// logic exactly as before - no behavior change for that case.
 				VarAccessor preResolved = context.getVariableEntry(ident.getId());
+				// Strict mode: a reference that is unresolvable before the RHS
+				// runs stays unresolvable, so PutValue throws even when the RHS
+				// itself creates the global (test262 language/identifier-
+				// resolution/assign-to-global-undefined.js).
+				boolean unresolvable = preResolved==null && context.isStrictMode() && !ident.isResolvable(context);
 				Object rightValue = getRightNode().evaluateValue(context, result);
+				if(unresolvable) {
+					throw RuntimeUtil.referenceError("{0} is not defined", ident.getId());
+				}
 				ident.evaluateAssign(context, rightValue, null, result, null, preResolved);
 			} else {
 				Object rightValue = getRightNode().evaluateValue(context,result);

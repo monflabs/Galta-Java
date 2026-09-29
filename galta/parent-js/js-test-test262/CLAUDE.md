@@ -52,3 +52,11 @@ org/monflabs/galtajs/test/test262/
 The test262 suite requires harness files (from `test262/harness/`) to be loaded before each test. `GlobalTest262Environment` handles this setup.
 
 Test262 files carry YAML front-matter that specifies expected outcomes (`negative` tests, `flags`, `features`). The test runner parses this metadata to determine whether a test is expected to throw, what features it requires, etc.
+
+Negative tests are checked strictly (`Test262BaseTest.negativeMismatch()`): the thrown error must have the expected constructor name (`SyntaxError`, `ReferenceError`, ...), a `phase: parse` error must come from parsing (`env.createScript()`, before anything runs; `BaseTestSuiteTest.execPhase` tracks the phase), and a negative test that throws nothing fails. Reaching `$DONOTEVALUATE()` is always a failure. Each mismatch is logged as `NEGATIVE MISMATCH <file>: <reason>`.
+
+In transpiled mode the harness (`sta.js`, `assert.js`) and the test are compiled as one program (`Test262BaseTest.combineShellAndScript()`), except for `flags: [raw]` files, which run exactly as written: they use no harness function, and several depend on their own first line (a `"use strict"` directive prologue, an HTML close comment only valid at the start of the source). Interpreted mode always runs the harness as a separate script.
+
+To see what the engine really does with a parse-negative file, run with `-Dtest262.stripDoNotEvaluate=true`: the `$DONOTEVALUATE()` guard is removed, so the mismatch says whether the invalid code is rejected at run time or accepted. It is a diagnostic only (a correct engine fails nothing either way).
+
+After a transpiled run, clean the generated sources with `find src/test/java/compiled -name '*.java' -delete` (a plain `rm compiled/*.java` overflows the argument list).

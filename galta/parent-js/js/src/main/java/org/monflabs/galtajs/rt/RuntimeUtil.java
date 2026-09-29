@@ -5595,6 +5595,13 @@ public class RuntimeUtil {
 		if(v instanceof ArithmeticException me) {
 			return rangeError(me,"Java Exception: {0}",me.getLocalizedMessage());
 		}
+		// A parse failure - e.g. an imported module's early error, surfacing
+		// while a transpiled unit links its imports - is a SyntaxError, as
+		// JSRuntimeException.exceptionObject() already reports it, not a
+		// generic "Java Exception" Error.
+		if(v instanceof org.monflabs.galtajs.JSParseException pe) {
+			return syntaxError(pe,"{0}",pe.getLocalizedMessage());
+		}
 		if(v instanceof Throwable t) {
 			return error(t,"Java Exception: {0}",t.getLocalizedMessage());
 		}

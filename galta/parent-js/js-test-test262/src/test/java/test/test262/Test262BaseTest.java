@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.test.test262.GlobalTest262Environment;
 
+import org.monflabs.util.Console;
+
 import tests.suite.BaseTestSuiteTest;
 
 
@@ -21,6 +23,10 @@ public abstract class Test262BaseTest extends BaseTestSuiteTest {
 	// Current file metadata - set during preprocessFile(), used in handleException()
 	// Tests run sequentially, so a single field is safe
 	private Test262Metadata currentMetadata;
+	// Set by handleException() when the current file threw at all - lets
+	// afterExecute() catch a negative test that threw NOTHING (a pass before
+	// negative tests were checked strictly)
+	private boolean currentThrew;
 
 	// -----------------------------------------------------------------------
 	// Content that must be excluded from tests when introspecting the source
@@ -68,7 +74,221 @@ public abstract class Test262BaseTest extends BaseTestSuiteTest {
 	// -----------------------------------------------------------------------
 	// File path filters – skip files whose relative path contains any token
 	// -----------------------------------------------------------------------
+	// Negative tests the strict harness (negativeMismatch()) fails because the
+	// engine does not report the early error at parse time, grouped by cause;
+	// each group is described in docs/GaltaJS/KnownGaps.md, "Early errors".
 	public static final String[] FILTER = new String[] {
+		// KnownGaps.md "Early errors": RegExp pattern early errors the regexp engine does not report
+		"built-ins/RegExp/property-escapes/character-class-range-end.js",
+		"built-ins/RegExp/property-escapes/character-class-range-no-dash-start.js",
+		"built-ins/RegExp/property-escapes/character-class-range-start.js",
+		"built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Block-implicit-negated.js",
+		"built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Block-implicit.js",
+		"built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-implicit-negated.js",
+		"built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-implicit.js",
+		"built-ins/RegExp/property-escapes/loose-matching-01-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-01.js",
+		"built-ins/RegExp/property-escapes/loose-matching-02-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-02.js",
+		"built-ins/RegExp/property-escapes/loose-matching-03-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-03.js",
+		"built-ins/RegExp/property-escapes/loose-matching-04-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-04.js",
+		"built-ins/RegExp/property-escapes/loose-matching-05-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-05.js",
+		"built-ins/RegExp/property-escapes/loose-matching-06-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-06.js",
+		"built-ins/RegExp/property-escapes/loose-matching-07-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-07.js",
+		"built-ins/RegExp/property-escapes/loose-matching-08-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-08.js",
+		"built-ins/RegExp/property-escapes/loose-matching-09-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-09.js",
+		"built-ins/RegExp/property-escapes/loose-matching-10-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-10.js",
+		"built-ins/RegExp/property-escapes/loose-matching-12-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-12.js",
+		"built-ins/RegExp/property-escapes/loose-matching-13-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-13.js",
+		"built-ins/RegExp/property-escapes/loose-matching-14-negated.js",
+		"built-ins/RegExp/property-escapes/loose-matching-14.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Grapheme_Link-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Grapheme_Link.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Hyphen-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Hyphen.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Alphabetic-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Alphabetic.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Default_Ignorable_Code_Point-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Default_Ignorable_Code_Point.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Grapheme_Extend-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Grapheme_Extend.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Continue-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Continue.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Start-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Start.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Lowercase-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Lowercase.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Math-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Math.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Uppercase-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Uppercase.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Prepended_Concatenation_Mark-negated.js",
+		"built-ins/RegExp/property-escapes/unsupported-binary-property-Prepended_Concatenation_Mark.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-01.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-02.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-04.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-05.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-06.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-07.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-08.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-09.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-10.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-11.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-12.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-13.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-14.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-15.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-16.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-17.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-18.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-19.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-20.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-21.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-22.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-23.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-24.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-25.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-26.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-27.js",
+		"built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-28.js",
+		"language/literals/regexp/invalid-optional-lookbehind.js",
+		"language/literals/regexp/invalid-optional-negative-lookbehind.js",
+		"language/literals/regexp/invalid-range-lookbehind.js",
+		"language/literals/regexp/invalid-range-negative-lookbehind.js",
+		"language/literals/regexp/named-groups/invalid-incomplete-groupname-6.js",
+		"language/literals/regexp/named-groups/invalid-incomplete-groupname.js",
+		"language/literals/regexp/u-invalid-optional-lookbehind.js",
+		"language/literals/regexp/u-invalid-optional-negative-lookbehind.js",
+		"language/literals/regexp/u-invalid-range-lookbehind.js",
+		"language/literals/regexp/u-invalid-range-negative-lookbehind.js",
+		// KnownGaps.md "Early errors": ClassHeritage early errors
+		"language/expressions/class/elements/syntax/early-errors/class-heritage-array-literal-arrow-heritage.js",
+		"language/expressions/class/elements/syntax/early-errors/class-heritage-array-literal-async-arrow-heritage.js",
+		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-array-literal.js",
+		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-chained-usage.js",
+		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-function-expression.js",
+		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-obj-literal.js",
+		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-recursive.js",
+		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage.js",
+		"language/statements/class/elements/syntax/early-errors/class-heritage-array-literal-arrow-heritage.js",
+		"language/statements/class/elements/syntax/early-errors/class-heritage-array-literal-async-arrow-heritage.js",
+		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-array-literal.js",
+		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-chained-usage.js",
+		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-function-expression.js",
+		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-obj-literal.js",
+		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-recursive.js",
+		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage.js",
+		// KnownGaps.md "Early errors": Module import/export names are not resolved before evaluation
+		"language/import/import-attributes/json-named-bindings.js",
+		"language/module-code/ambiguous-export-bindings/error-export-from-named-as.js",
+		"language/module-code/ambiguous-export-bindings/error-export-from-named.js",
+		"language/module-code/ambiguous-export-bindings/error-import-named-as.js",
+		"language/module-code/ambiguous-export-bindings/error-import-named.js",
+		"language/module-code/early-export-global.js",
+		"language/module-code/early-export-unresolvable.js",
+		"language/module-code/instn-iee-err-circular-as.js",
+		"language/module-code/instn-iee-err-dflt-thru-star-as.js",
+		"language/module-code/instn-iee-err-dflt-thru-star.js",
+		"language/module-code/instn-iee-err-not-found-as.js",
+		"language/module-code/instn-iee-err-not-found.js",
+		"language/module-code/instn-named-err-dflt-thru-star-as.js",
+		"language/module-code/instn-named-err-dflt-thru-star-dflt.js",
+		"language/module-code/instn-named-err-not-found-as.js",
+		"language/module-code/instn-named-err-not-found-dflt.js",
+		"language/module-code/instn-named-err-not-found.js",
+		// KnownGaps.md "Early errors": Module-only grammar early errors
+		"language/module-code/comment-multi-line-html-close.js",
+		"language/module-code/comment-single-line-html-close.js",
+		"language/module-code/comment-single-line-html-open.js",
+		"language/module-code/early-dup-export-as-star-as.js",
+		"language/module-code/early-dup-export-dflt-id.js",
+		"language/module-code/early-dup-export-id-as.js",
+		"language/module-code/early-dup-export-id.js",
+		"language/module-code/early-dup-export-star-as-dflt.js",
+		"language/module-code/early-dup-lables.js",
+		"language/module-code/early-export-ill-formed-string.js",
+		"language/module-code/export-expname-from-as-unpaired-surrogate.js",
+		"language/module-code/export-expname-from-unpaired-surrogate.js",
+		"language/module-code/export-expname-import-unpaired-surrogate.js",
+		"language/module-code/export-expname-string-binding.js",
+		"language/module-code/export-expname-unpaired-surrogate.js",
+		"language/module-code/import-attributes/allow-nlt-before-with.js",
+		"language/module-code/parse-err-export-dflt-expr.js",
+		"language/module-code/parse-err-invoke-anon-fun-decl.js",
+		"language/module-code/parse-err-invoke-anon-gen-decl.js",
+		"language/module-code/parse-err-yield.js",
+		// KnownGaps.md "Early errors": import/export declarations tolerated in scripts (GaltaJS extension)
+		"language/global-code/export.js",
+		"language/global-code/import.js",
+		// KnownGaps.md "Early errors": await/yield as identifiers in some contexts
+		"language/expressions/arrow-function/param-dflt-yield-expr.js",
+		"language/expressions/async-arrow-function/await-as-param-ident-nested-arrow-parameter-position.js",
+		"language/expressions/async-arrow-function/await-as-param-nested-arrow-body-position.js",
+		"language/expressions/async-arrow-function/await-as-param-nested-arrow-parameter-position.js",
+		"language/expressions/async-arrow-function/await-as-param-rest-nested-arrow-parameter-position.js",
+		"language/expressions/async-arrow-function/early-errors-arrow-await-in-formals-default.js",
+		"language/expressions/async-arrow-function/early-errors-arrow-await-in-formals.js",
+		"language/expressions/async-generator/early-errors-expression-await-as-function-binding-identifier.js",
+		"language/expressions/async-generator/early-errors-expression-yield-as-function-binding-identifier.js",
+		"language/expressions/await/await-BindingIdentifier-nested.js",
+		"language/expressions/generators/yield-as-generator-expression-binding-identifier.js",
+		"language/expressions/yield/in-iteration-stmt.js",
+		"language/expressions/yield/star-in-iteration-stmt.js",
+		"language/statements/await-using/syntax/await-using-invalid-switchstatement-caseclause.js",
+		"language/statements/await-using/syntax/await-using-invalid-switchstatement-defaultclause.js",
+		"language/statements/await-using/syntax/with-initializer-case-expression-statement-list.js",
+		"language/statements/await-using/syntax/with-initializer-default-statement-list.js",
+		"language/statements/class/definition/methods-gen-yield-as-function-expression-binding-identifier.js",
+		"language/statements/class/static-init-invalid-await.js",
+		"language/statements/class/static-init-invalid-yield.js",
+		"language/statements/labeled/static-init-invalid-await.js",
+		"language/statements/labeled/value-await-module-escaped.js",
+		"language/statements/labeled/value-await-module.js",
+		"language/statements/labeled/value-yield-strict-escaped.js",
+		"language/statements/labeled/value-yield-strict.js",
+		"language/statements/let/syntax/let-newline-yield-in-generator-function.js",
+		// KnownGaps.md "Early errors": Class static block early errors
+		"language/statements/class/static-init-invalid-label-dup.js",
+		"language/statements/class/static-init-invalid-return.js",
+		// KnownGaps.md "Early errors": Other remaining early errors
+		"annexB/language/comments/single-line-html-close.js",
+		"language/asi/S7.9_A11_T4.js",
+		"language/asi/S7.9_A4.js",
+		"language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid-parenless-parameters-expression-body.js",
+		"language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid-parenless-parameters.js",
+		"language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid.js",
+		"language/expressions/conditional/in-branch-2.js",
+		"language/expressions/conditional/in-condition.js",
+		"language/expressions/in/private-field-in.js",
+		"language/expressions/in/private-field-invalid-rhs.js",
+		"language/expressions/object/__proto__-duplicate.js",
+		"language/expressions/object/cover-initialized-name.js",
+		"language/expressions/object/getter-param-dflt.js",
+		"language/expressions/optional-chaining/early-errors-tail-position-null-optchain-template-string-esi.js",
+		"language/expressions/optional-chaining/early-errors-tail-position-null-optchain-template-string.js",
+		"language/expressions/optional-chaining/early-errors-tail-position-optchain-template-string-esi.js",
+		"language/expressions/optional-chaining/early-errors-tail-position-optchain-template-string.js",
+		"language/identifiers/vertical-tilde-continue.js",
+		"language/identifiers/vertical-tilde-start.js",
+		"language/statements/for-of/head-decl-no-expr.js",
+		"language/statements/for-of/head-expr-no-expr.js",
+		"language/statements/for-of/head-lhs-async-invalid.js",
+		"language/statements/for-of/head-var-no-expr.js",
+		"language/statements/for/S12.6.3_A4_T1.js",
+		"language/statements/for/S12.6.3_A4_T2.js",
+		"language/statements/let/syntax/let-let-declaration-split-across-two-lines.js",
+		"language/statements/let/syntax/let-let-declaration-with-initializer-split-across-two-lines.js",
+		"language/statements/try/early-catch-function.js",
 	};
 
 	// -----------------------------------------------------------------------
@@ -212,6 +432,7 @@ public abstract class Test262BaseTest extends BaseTestSuiteTest {
 		// below implicitly leaves it null, so afterExecute() never wrongly
 		// flags a skipped file as a failure.
 		currentMetadata = null;
+		currentThrew = false;
 
 		if (meta == null) {
 			return text;
@@ -277,6 +498,14 @@ public abstract class Test262BaseTest extends BaseTestSuiteTest {
 		// intended strictness (same class of bug already fixed for
 		// combineShellAndScript's transpiled-mode combined text, below).
 		String combined = prefix + text;
+		// Diagnostic: -Dtest262.stripDoNotEvaluate=true removes the
+		// $DONOTEVALUATE() guard from parse/resolution negative tests, so a
+		// NEGATIVE MISMATCH reports what the engine really does with the
+		// invalid code (an error during EXECUTE instead of PARSE, or nothing)
+		// instead of just "$DONOTEVALUATE reached".
+		if (STRIP_DO_NOT_EVALUATE && meta.negative != null && !"runtime".equals(meta.negative.phase)) {
+			combined = combined.replace("$DONOTEVALUATE();", "");
+		}
 		if (meta.hasFlag("onlyStrict")) {
 			combined = "\"use strict\";\n" + combined;
 		}
@@ -328,6 +557,16 @@ public abstract class Test262BaseTest extends BaseTestSuiteTest {
 	// own behavior.
 	@Override
 	protected String combineShellAndScript(String shell, String script) {
+		// flags:[raw] - the file must run exactly as written, with no harness
+		// before it (test262 INTERPRETING.md). These files use no harness
+		// function, and several depend on their own first line: a directive
+		// prologue ("use strict" must be the program's first statement) or a
+		// SingleLineHTMLCloseComment only valid at the start of the source.
+		// Interpreted mode never prepends (it runs the shell as a separate
+		// script), so only this combined transpiled-mode text needs it.
+		if (currentMetadata != null && currentMetadata.hasFlag("raw")) {
+			return script;
+		}
 		// A hashbang (#!...) is only valid as the ABSOLUTE first characters
 		// of a Script - same "must be the leading thing in the COMBINED
 		// text, not just this file's own text" problem as "use strict"
@@ -365,20 +604,113 @@ public abstract class Test262BaseTest extends BaseTestSuiteTest {
 
 	// -----------------------------------------------------------------------
 	// Exception handling
-	// Negative tests expect an exception.  If the current test carries
-	// negative: metadata we treat any thrown exception as a success.
+	// A negative test passes only when it throws the error type its metadata
+	// names (negative.type), at the right time (negative.phase):
+	//   parse      - while the script is created (env.createScript(), with its
+	//                early errors), before anything runs;
+	//   resolution - while modules are linked: after parsing, but before the
+	//                test body is evaluated;
+	//   runtime    - while running.
+	// Test files for the parse and resolution phases start with
+	// $DONOTEVALUATE(), which throws a string: reaching it means the script
+	// started running, so the expected early error never happened. Accepting
+	// any exception (as this harness once did) let such files pass - hiding,
+	// for instance, a parser that accepted an invalid identifier escape.
 	// -----------------------------------------------------------------------
+	static final boolean STRIP_DO_NOT_EVALUATE = Boolean.getBoolean("test262.stripDoNotEvaluate");
+	static final String DO_NOT_EVALUATE = "Test262: This statement should not be evaluated.";
+
 	@Override
 	protected void handleException(String relativePathStr, AtomicInteger errorCount, Throwable t) {
 		Test262Metadata meta = currentMetadata;
+		currentThrew = true;
 
 		if (meta != null && meta.negative != null) {
-			// Expected exception – do not count it as an error
+			String mismatch = negativeMismatch(meta.negative, execPhase, t);
+			if (mismatch == null) {
+				return; // the expected error, at the expected time
+			}
+			errorCount.getAndIncrement();
+			Console.log("       NEGATIVE MISMATCH {0}: {1}", relativePathStr, mismatch);
 			return;
 		}
 
 		errorCount.getAndIncrement();
 		t.printStackTrace();
+	}
+
+	/**
+	 * Why a thrown exception does not satisfy a negative test's expectation,
+	 * or null when it does.
+	 */
+	static String negativeMismatch(Test262Metadata.NegativeInfo negative, ExecPhase phase, Throwable t) {
+		String actual = errorTypeName(t);
+		String expectedType = negative.type;
+		String expectedPhase = negative.phase;
+		String got = "got " + actual + " during " + phase + " (" + firstLine(t) + ")";
+		if (DO_NOT_EVALUATE.equals(actual)) {
+			return "expected " + expectedType + " at " + expectedPhase + ", but the script was evaluated ($DONOTEVALUATE reached)";
+		}
+		if ("parse".equals(expectedPhase) && phase != ExecPhase.PARSE) {
+			return "expected " + expectedType + " at parse, " + got;
+		}
+		if ("resolution".equals(expectedPhase) && phase != ExecPhase.PARSE && phase != ExecPhase.EXECUTE) {
+			return "expected " + expectedType + " at resolution, " + got;
+		}
+		if (expectedType != null && !expectedType.equals(actual)) {
+			return "expected " + expectedType + " at " + expectedPhase + ", " + got;
+		}
+		return null;
+	}
+
+	/**
+	 * The JavaScript error type of a thrown exception - the constructor name
+	 * of a thrown error object ("SyntaxError", "Test262Error"...), SyntaxError
+	 * for a parse failure raised as a Java exception, the value itself for a
+	 * thrown string, or the Java class name for anything else (a transpiler
+	 * or javac failure, for example).
+	 */
+	static String errorTypeName(Throwable t) {
+		for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
+			if (c instanceof org.monflabs.galtajs.rt.JSRuntimeException rt) {
+				Object js = rt.getJavascriptException();
+				if (js instanceof org.monflabs.galtajs.jsonfactory.JSObject jo) {
+					try {
+						Object ctor = jo.getProperty("constructor");
+						if (ctor instanceof org.monflabs.galtajs.jsonfactory.JSObject co) {
+							Object n = co.getProperty("name");
+							if (n instanceof String s && !s.isEmpty()) {
+								return s;
+							}
+						}
+						Object n = jo.getProperty("name");
+						if (n instanceof String s && !s.isEmpty()) {
+							return s;
+						}
+					} catch (Throwable ignored) {
+						// fall through to a generic name
+					}
+					return "Object";
+				}
+				if (js instanceof CharSequence cs) {
+					return cs.toString();
+				}
+				if (js != null) {
+					return String.valueOf(js);
+				}
+			}
+			if (c instanceof org.monflabs.galtajs.JSParseException) {
+				return "SyntaxError";
+			}
+		}
+		return t.getClass().getSimpleName();
+	}
+
+	private static String firstLine(Throwable t) {
+		String m = String.valueOf(t.getMessage()).trim();
+		int nl = m.indexOf('\n');
+		m = nl >= 0 ? m.substring(0, nl) : m;
+		return m.length() > 160 ? m.substring(0, 160) + "..." : m;
 	}
 
 	// -----------------------------------------------------------------------
@@ -401,6 +733,11 @@ public abstract class Test262BaseTest extends BaseTestSuiteTest {
 	@Override
 	protected void afterExecute(String relativePathStr, java.util.concurrent.atomic.AtomicInteger errorCount) {
 		Test262Metadata meta = currentMetadata;
+		// A negative test must throw: completing normally is a failure
+		if (meta != null && meta.negative != null && !currentThrew) {
+			errorCount.getAndIncrement();
+			Console.log("       NEGATIVE MISMATCH {0}: expected {1} at {2}, but nothing was thrown", relativePathStr, meta.negative.type, meta.negative.phase);
+		}
 		if (meta != null && meta.hasFlag("async") && meta.negative == null
 				&& !org.monflabs.galtajs.test.test262.Test262TestLibrary.wasAsyncDoneCalled()) {
 			errorCount.getAndIncrement();

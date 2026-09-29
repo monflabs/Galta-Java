@@ -30,7 +30,7 @@ public class ExportTest extends JavaScriptStrictTestCase {
 		// See: https://developer.mozilla.org/en-US/docs/web/javascript/reference/statements/export
 		
 		//Exporting declarations
-		compileStatement("export const name1, name2;");
+		// (a const declaration always needs an initializer, see "export const name1=1, name2=2" below)
 		compileStatement("export var name1, name2;");
 		compileStatement("export let name1, name2;");
 		compileStatement("export const name1=1, name2=2;");

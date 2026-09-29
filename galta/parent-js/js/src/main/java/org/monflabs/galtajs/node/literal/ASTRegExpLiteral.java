@@ -38,6 +38,20 @@ public class ASTRegExpLiteral extends ASTNode {
 		this.regexp = regexp;
 	}
 
+	// A RegularExpressionLiteral whose pattern or flags are invalid is an
+	// early SyntaxError: validated here at parse time by building the RegExp
+	// once, rather than only when the literal is evaluated.
+	@Override
+	protected void init(InitContext initContext) {
+		super.init(initContext);
+		int pos = regexp.lastIndexOf("/");
+		try {
+			new RegExp(initContext.getEnvironment(),regexp.substring(1,pos),regexp.substring(pos+1));
+		} catch(org.monflabs.galtajs.rt.JSRuntimeException ex) {
+			throw new org.monflabs.galtajs.JSParseException(ex, this, "Invalid regular expression {0}: {1}", regexp, ex.getMessage());
+		}
+	}
+
 	@Override
 	public String getNodeString() {
 		return "Regexp, "+regexp;

@@ -32,6 +32,7 @@ import org.monflabs.galtajs.node.call.ASTCall;
 import org.monflabs.galtajs.node.clazz.ASTBaseClass;
 import org.monflabs.galtajs.node.clazz.ASTClassMethod;
 import org.monflabs.galtajs.node.literal.ASTArrayLiteral;
+import org.monflabs.galtajs.node.literal.ASTContainerLiteral;
 import org.monflabs.galtajs.node.literal.ASTLiteral;
 import org.monflabs.galtajs.node.literal.ASTObjectLiteral;
 import org.monflabs.galtajs.node.literal.DefaultRef;
@@ -794,13 +795,46 @@ public abstract class ASTFunction extends ASTRootStatementList {
 	public void __init(JSEnvironment env) {
 		this.init(new MainContext(env,false));
 		org.monflabs.galtajs.node.PrivateNameValidator.check(this, java.util.Collections.emptySet());
+		org.monflabs.galtajs.node.EarlyErrorsValidator.check(this);
 	}
 	
+	// Early errors of the formal parameters: a rest parameter comes last,
+	// with no trailing comma and no initializer, and destructured
+	// parameters are binding patterns.
+	private void checkParameterPatterns(boolean strict) {
+		ASTArrayLiteral params = getParameters();
+		if(params==null) {
+			return;
+		}
+		if(params.hasCommaAfterSpread()) {
+			throw new JSParseException(null, this, "Rest parameter must be last formal parameter");
+		}
+		if(isForceStrictMode() && !params.isSimpleParameterList()) {
+			throw new JSParseException(null, this, "Illegal 'use strict' directive in function with non-simple parameter list");
+		}
+		for(int i=0; i<params.getChildCount(); i++) {
+			ASTNode p = params.getChild(i);
+			ASTNode target = null;
+			if(p instanceof ASTArrayLiteral.InitializerSpread sp) {
+				if(sp.getNode() instanceof ASTAssign) {
+					throw new JSParseException(null, this, "Rest parameter may not have a default initializer");
+				}
+				target = sp.getNode();
+			} else if(p instanceof ASTArrayLiteral.InitializerExpression exp) {
+				target = exp.getNode() instanceof ASTAssign as ? as.getLeftNode() : exp.getNode();
+			}
+			if(target instanceof ASTContainerLiteral lit) {
+				lit.checkPattern(true, strict);
+			}
+		}
+	}
+
     @Override
 	protected void init(InitContext parentContext) {
     	this.strictMode = isForceStrictMode() || parentContext.isStrictMode();
     	this.genuinelyStrictMode = isForceStrictMode() || parentContext.isGenuinelyStrict();
     	InitContext initContext = new ChildContext(parentContext,strictMode,genuinelyStrictMode);
+    	checkParameterPatterns(genuinelyStrictMode);
 
         // An arrow function has no `arguments` binding of its own at all -
         // per spec it always resolves through the nearest enclosing non-

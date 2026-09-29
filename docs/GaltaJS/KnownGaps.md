@@ -15,21 +15,22 @@ Rules for keeping it accurate:
   into a changelog note - fix narratives belong in commit messages, or in
   the archived history at
   `docs/GaltaJS/Architecture/Notes/Test262KnownGapsHistory.md`.
-- `Test262BaseTest.FILTER` / `TRANSPILER_ONLY_FILTER` must stay **empty**
-  (they are, as of 2026-09-09): the suite runs unfiltered, so this document
-  is the only place a known failure is recorded. If a `FILTER` entry ever
-  has to be added (a pathological file, e.g. a deep-recursion hang), name it
-  here too.
+- Every `Test262BaseTest.FILTER` / `TRANSPILER_ONLY_FILTER` entry must be
+  explained here. Since 2026-09-29 `FILTER` lists the negative tests of
+  "Early errors not reported at parse time" below (203 files, grouped by
+  cause in the same order); `TRANSPILER_ONLY_FILTER` is empty. Remove a file
+  from `FILTER` as soon as its early error is implemented.
 - Snippets show the current (non-conformant) behavior next to what the spec
   requires, so they double as regression checks once someone picks up the
   fix.
 
 ## Current test262 status
 
-Re-verified 2026-09-10 (see "How to regenerate" below for the commands;
-the transpiled and optimizer rows are from the 2026-09-09 full sweeps plus
-directory-scoped transpiled runs of everything the source-phase-imports /
-import-bytes work touched):
+Re-verified 2026-09-29 with the strict negative-test harness (expected
+error type and phase), the 203-file `FILTER` above in place: interpreted
+over the whole suite, optimizer and transpiled per top-level directory
+(`annexB`, `language`, `built-ins`), Maven 3.9.9, JDK 21 (see "How to
+regenerate" below for the commands):
 
 | Mode | Result |
 |---|---|
@@ -82,6 +83,140 @@ var k = class {}; class D { get [k]() {} }  // works
 Found 2026-09-09 while probing computed member names; no test262 file
 covers it (the `cpn-*-accessors-computed-property-name-from-*.js` family has
 no `class-expression` variant).
+
+## Early errors not reported at parse time
+
+Since 2026-09-29 the harness checks negative tests strictly: a `phase:
+parse` test must throw its expected error type while parsing, before any
+code runs (previously any exception, including the `$DONOTEVALUATE()`
+guard throwing at run time, counted as a pass). The strict check exposed
+2806 files; most were fixed (identifier escapes, assignment targets,
+patterns, RegExp literals, `super`/`new.target`/`arguments` contexts,
+declarations in statement position, redeclarations, labels, class element
+rules, numeric separators, string escapes...). The 203 below remain, all in
+`FILTER`. In each group the engine accepts the code (or reports it only
+when it runs); running the file with `-Dtest262.stripDoNotEvaluate=true`
+shows which.
+
+### RegExp pattern early errors the regexp engine does not report (92 files)
+
+The pattern of a RegExp literal is now validated at parse time, but only
+as strictly as the regexp engine itself (`joni`, customized), which accepts
+some patterns the spec forbids: quantified lookbehinds, `\k` without a
+group name in a non-`u` pattern that has named groups, `\p{...}` with loose
+matching (`\p{ lowercase }`), unsupported binary properties
+(`\p{Other_Alphabetic}`) or as a class range bound (`[--\p{Hex}]`), and the
+characters `v` mode reserves (`/[(]/v`).
+
+```js
+/.(?<=.)?/;          // spec: SyntaxError -- GaltaJS: accepted
+new RegExp("[(]", "v"); // spec: SyntaxError -- GaltaJS: accepted
+```
+
+Files: `built-ins/RegExp/property-escapes/` (55: `loose-matching-*`,
+`unsupported-binary-property-*`, `character-class-range-*`,
+`grammar-extension-In-prefix-*`), `built-ins/RegExp/prototype/unicodeSets/
+breaking-change-from-u-to-v-*` (27 of 28), `language/literals/regexp/` (10:
+`*-lookbehind.js`, `named-groups/invalid-incomplete-groupname{,-6}.js`).
+
+### ClassHeritage early errors (16 files)
+
+An arrow function is accepted as a class heritage (`class C extends () =>
+{} {}`; the grammar requires a LeftHandSideExpression), and the class's own
+private names are visible in its heritage expression, where the spec
+resolves them in the *outer* private environment (`PrivateNameValidator`
+treats the heritage as part of the class body).
+
+```js
+class C extends class { x = this.#foo; } { #foo; } // spec: SyntaxError -- GaltaJS: accepted
+```
+
+Files: `language/{expressions,statements}/class/elements/syntax/early-errors/
+class-heritage-array-literal-*arrow-heritage.js` and
+`grammar-private-environment-on-class-heritage*.js`.
+
+### Module import/export names are not resolved before evaluation (17 files)
+
+GaltaJS links a module lazily, while evaluating it: an imported name that a
+dependency does not export, exports ambiguously through two `export *`, or
+only through a circular re-export is detected (as a SyntaxError since
+2026-09-29) only once the binding is resolved, after the importing module
+started running - and `export { x }` of a name the module does not declare
+(`export { Number }`, `export { unresolvable }`) is not checked at all. The
+spec resolves every import/export name (ResolveExport) before any module
+body runs. The same applies to a named import from a JSON module.
+
+Files: `language/module-code/ambiguous-export-bindings/error-*.js`,
+`instn-iee-err-*.js`, `instn-named-err-*.js`, `early-export-global.js`,
+`early-export-unresolvable.js`, `language/import/import-attributes/
+json-named-bindings.js`.
+
+### Module-only grammar early errors (20 files)
+
+The parser does not know whether it parses a script or a module, so rules
+that only apply to module code are not checked: HTML-like comments
+(`<!--`, `-->`) are accepted in modules, `yield` is not reserved at a
+module's top level, duplicate exported names (`export {x}; export {x}`) and
+duplicate labels are accepted, export names that are strings with an
+unpaired surrogate, a string local name (`export { "foo" as "bar" }`),
+`export default null, null`, `export default function(){}()` and a line
+terminator before `with` in an import are accepted.
+
+Files: `language/module-code/comment-*-html-*.js`, `early-dup-*.js`,
+`early-export-ill-formed-string.js`, `export-expname-*.js`,
+`import-attributes/allow-nlt-before-with.js`, `parse-err-export-dflt-expr.js`,
+`parse-err-invoke-anon-{fun,gen}-decl.js`, `parse-err-yield.js`.
+
+### import/export declarations tolerated in scripts (2 files)
+
+By design, GaltaJS accepts `import`/`export` at the top level of any script
+(not only in modules), so `language/global-code/{export,import}.js` do not
+get their SyntaxError. Inside a function or a block they are rejected.
+
+### `await`/`yield` as identifiers in some contexts (26 files)
+
+`await` and `yield` are rejected as identifiers in the body of an async
+function or generator, but not yet: in an async arrow function's
+parameters (`async(await) => {}`, `async(a = await => {}) => {}`), as the
+name of a generator or async generator *expression* (`function* yield(){}`
+as an expression), as a nested function named `await` in an async
+function, as a label in strict code or a module (`yield: 1`), in a
+generator's arrow parameter default (`(x = yield) => {}`), for `yield` in a
+for-statement head (`for (yield '' in {}; ;)`), for `let` followed by a
+line break and `yield` in a generator, or for `await`/`yield`/`return` in a
+class static block. `await using` is also accepted directly in a `case`
+clause.
+
+Files: `language/expressions/{arrow-function/param-dflt-yield-expr,
+async-arrow-function/*await*, async-generator/early-errors-expression-
+{await,yield}-as-function-binding-identifier, await/await-BindingIdentifier-
+nested, generators/yield-as-generator-expression-binding-identifier,
+yield/*in-iteration-stmt}.js`, `language/statements/{await-using/syntax/
+*switchstatement*, *-statement-list, class/definition/methods-gen-yield-as-
+function-expression-binding-identifier, class/static-init-invalid-{await,
+yield}, labeled/static-init-invalid-await, labeled/value-{await-module,
+yield-strict}*, let/syntax/let-newline-yield-in-generator-function}.js`.
+
+### Class static block early errors (2 files)
+
+`return` and a duplicate label (`x: x: 0`) are accepted in a class static
+block: `language/statements/class/static-init-invalid-{return,label-dup}.js`.
+
+### Other remaining early errors (28 files)
+
+| Accepted, spec says SyntaxError | Files |
+|---|---|
+| `-->` after a comment sequence on the *first* line of a script, followed by more code | `annexB/language/comments/single-line-html-close.js` |
+| ASI where the grammar forbids it (`if (a) x = 1 else ...`, `throw` followed by a line break) | `language/asi/S7.9_A11_T4.js`, `S7.9_A4.js` |
+| A line break before `=>` | `language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid*.js` (3) |
+| `in` inside a for-statement's first expression (`for (a ? b : c in d;;)`, `for (a in b;;)`) | `language/expressions/conditional/in-{branch-2,condition}.js`, `language/statements/for/S12.6.3_A4_T{1,2}.js` |
+| `#x in` outside of a relational expression (`for (#x in o;;)`, `#x in () => {}`) | `language/expressions/in/private-field-{in,invalid-rhs}.js` |
+| Duplicate `__proto__`, a CoverInitializedName (`({a = 1})`) outside a pattern, a getter parameter in an object literal | `language/expressions/object/{__proto__-duplicate,cover-initialized-name,getter-param-dflt}.js` |
+| A tagged template in an optional chain (`` a?.fn`x` ``) | `language/expressions/optional-chaining/early-errors-tail-position-*template-string*.js` (4) |
+| U+2E2F (VERTICAL TILDE) *unescaped* in an identifier (the lexer's character tables come from `Character.isUnicodeIdentifier*`, which includes it; the escaped form is rejected) | `language/identifiers/vertical-tilde-{start,continue}.js` |
+| A comma expression after `of` (`for (x of [], [])`), `for (async of ...)` | `language/statements/for-of/head-{decl,expr,var}-no-expr.js`, `head-lhs-async-invalid.js` |
+| `let` then a line break then `let` (a declaration binding `let`) | `language/statements/let/syntax/let-let-declaration-*split-across-two-lines.js` |
+| A function declared in a catch block with the catch parameter's name | `language/statements/try/early-catch-function.js` |
 
 ## Not implemented (separate features, not conformance failures)
 

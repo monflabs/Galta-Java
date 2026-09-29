@@ -28,6 +28,7 @@ import org.monflabs.galtajs.node.ASTArrayMember;
 import org.monflabs.galtajs.node.ASTIdentifier;
 import org.monflabs.galtajs.node.ASTMember;
 import org.monflabs.galtajs.node.ASTNode;
+import org.monflabs.galtajs.JSParseException;
 import org.monflabs.galtajs.node.assignop.ASTAssign;
 import org.monflabs.galtajs.node.control.IContextBlockContainer;
 import org.monflabs.galtajs.parser.Token;
@@ -918,6 +919,29 @@ public class ASTArrayLiteral extends ASTContainerLiteral {
 
 	public void addSpread(ASTNode node){
 	    fieldInitializers.add(assignParent(new InitializerSpread(node)));
+	}
+
+	@Override
+	protected boolean lastIsSpread() {
+		return !fieldInitializers.isEmpty() && fieldInitializers.get(fieldInitializers.size()-1) instanceof InitializerSpread;
+	}
+
+	@Override
+	public void checkPattern(boolean binding, boolean strict) {
+		if(hasCommaAfterSpread()) {
+			throw new JSParseException(null, this, "Rest element must be last element");
+		}
+		for(Initializer init: fieldInitializers) {
+			if(init instanceof InitializerSpread sp) {
+				if(sp.getNode() instanceof ASTAssign) {
+					throw new JSParseException(null, this, "Rest element may not have a default initializer");
+				}
+				checkPatternTarget(sp.getNode(), binding, strict);
+			} else if(init instanceof InitializerExpression exp && exp.getNode()!=null) {
+				ASTNode n = exp.getNode();
+				checkPatternTarget(n instanceof ASTAssign as ? as.getLeftNode() : n, binding, strict);
+			}
+		}
 	}
 	
 	

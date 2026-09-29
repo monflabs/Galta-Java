@@ -337,6 +337,16 @@ public class JSInterpretedUnit extends JSScriptUnit {
     				}
     				return null;
     			});
+    			// The drain may have finished this module's deferred evaluation
+    			// with an error from a dependency (a rejected top-level await):
+    			// surface it to the caller the same way a module that runs its
+    			// own body reports its failure (test262 language/module-code/
+    			// top-level-await/module-import-rejection*.js). A nested module
+    			// reaching this point has not been drained yet, so it has no
+    			// error to report here.
+    			if(moduleStatus==ModuleStatus.ERRORED && evaluationError!=null) {
+    				throw RuntimeUtil.wrap(evaluationError);
+    			}
     			return RuntimeUtil.UNDEFINED;
     		}
     	}
@@ -599,6 +609,18 @@ public class JSInterpretedUnit extends JSScriptUnit {
     		pendingAsyncDependencies = 0;
     		state.index++;
     		state.stack.add(this);
+    		// Every requested module is located (HostLoadImportedModule) before
+    		// any of them is linked or evaluated: an unresolvable specifier
+    		// fails the import with its host error even when an earlier request
+    		// would fail to link (test262 source-phase-import/import-source.js).
+    		for(ASTProgram.ModuleRequestItem item: program.getModuleEvaluationOrder()) {
+    			String resolvedName = ModuleUtil.resolvePath(getDescriptor().getName(), item.specifier());
+    			if(RuntimeUtil.findModuleDescriptor(context.getEnvironment(), resolvedName)==null) {
+    				RuntimeException ex = RuntimeUtil.typeError("Cannot find module {0}", resolvedName);
+    				unwindOnError(state, org.monflabs.galtajs.rt.JSRuntimeException.exceptionObject(ex));
+    				throw ex;
+    			}
+    		}
     		// ONE combined, source-ORDER-preserving walk (spec's own
     		// InnerModuleEvaluation builds a single evaluationList this way,
     		// interleaving ordinary requests with each `import defer`
@@ -812,11 +834,38 @@ public class JSInterpretedUnit extends JSScriptUnit {
     	if(asyncParentModules==null) {
     		return;
     	}
+    	boolean errored = moduleStatus==ModuleStatus.ERRORED;
+    	if(!errored) {
+    		if(parentsGathered) {
+    			// Already counted down by the async module whose completion
+    			// gathered this (synchronous) module - see below
+    			asyncParentModules = null;
+    			return;
+    		}
+    		// Spec AsyncModuleExecutionFulfilled: gather every ancestor that
+    		// becomes ready, following synchronous ones transitively, then run
+    		// them in [[AsyncEvaluationOrder]] - not depth first (test262
+    		// top-level-await/dfs-invariant.js: a sibling of the async module's
+    		// parent runs before that parent's own importer).
+    		java.util.List<JSInterpretedUnit> execList = new java.util.ArrayList<>();
+    		gatherAvailableAncestors(this, execList);
+    		asyncParentModules = null;
+    		execList.sort(java.util.Comparator.comparingInt(m -> m.asyncEvaluationOrder));
+    		for(JSInterpretedUnit m: execList) {
+    			if(m.moduleStatus==ModuleStatus.EVALUATING) {
+    				JSInterpretedRuntimeContext mContext = m.executionContext;
+    				mContext.with( () -> m.runBody(mContext) );
+    			}
+    		}
+    		return;
+    	}
     	java.util.List<JSInterpretedUnit> parents = asyncParentModules;
     	asyncParentModules = null;
-    	boolean errored = moduleStatus==ModuleStatus.ERRORED;
+    	boolean counted = parentsGathered;
     	for(JSInterpretedUnit parent: parents) {
-    		parent.pendingAsyncDependencies--;
+    		if(!counted) {
+    			parent.pendingAsyncDependencies--;
+    		}
     		if(errored) {
     			// Spec AsyncModuleExecutionRejected: propagate the SAME
     			// error to every waiting ancestor WITHOUT ever running its
@@ -841,6 +890,32 @@ public class JSInterpretedUnit extends JSScriptUnit {
     		}
     	}
     }
+    // Spec GatherAvailableAncestors: the waiting ancestors of `module` whose
+    // last pending dependency this was. A synchronous (no top-level await)
+    // ancestor completes as soon as it runs, so its own ancestors are
+    // gathered (and counted down) now as well; parentsGathered tells its
+    // own later notifyAsyncParents() not to count them down twice.
+    private static void gatherAvailableAncestors(JSInterpretedUnit module, java.util.List<JSInterpretedUnit> execList) {
+    	java.util.List<JSInterpretedUnit> parents = module.asyncParentModules;
+    	if(parents==null) {
+    		return;
+    	}
+    	for(JSInterpretedUnit parent: parents) {
+    		if(execList.contains(parent) || parent.moduleStatus==ModuleStatus.ERRORED) {
+    			continue;
+    		}
+    		parent.pendingAsyncDependencies--;
+    		if(parent.pendingAsyncDependencies==0 && parent.moduleStatus==ModuleStatus.EVALUATING) {
+    			execList.add(parent);
+    			if(!parent.program.isAsyncExecution() && parent.asyncParentModules!=null) {
+    				parent.parentsGathered = true;
+    				gatherAvailableAncestors(parent, execList);
+    			}
+    		}
+    	}
+    }
+    private boolean parentsGathered;
+
     public Object executeForEval(JSInterpretedRuntimeContext evalContext) {
     	// This one should not eval in it own loop!
     	if(evalContext instanceof org.monflabs.galtajs.rt.JSEvalRuntimeContext eec) {

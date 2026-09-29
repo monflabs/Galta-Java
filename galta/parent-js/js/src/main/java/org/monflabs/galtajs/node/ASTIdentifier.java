@@ -394,6 +394,20 @@ public class ASTIdentifier extends ASTNode implements IVarDeclarator {
 	// "resolve now", preserving this method's original behavior for every
 	// other caller (compound assignment, ++/--, ...), which already achieves
 	// correct ordering by deferring RHS evaluation into the assigner callback.
+	// Whether this identifier currently resolves to a binding, looked up the
+	// same way the slow path of evaluateAssign() below does (without creating
+	// anything or triggering a getter).
+	public boolean isResolvable(JSInterpretedRuntimeContext context) {
+		if(context.getVariableEntry(id)!=null) {
+			return true;
+		}
+		if(context.getGlobalContext().isEvalExecution() && context.getParent()!=null && context.getParent().getVariableEntry(id)!=null) {
+			return true;
+		}
+		return context.getGlobalContext().getGlobalThis().hasProperty(id)
+			|| RuntimeUtil.getIdentifierValue(context, id, false)!=RuntimeUtil.NOT_AVAILABLE;
+	}
+
 	public void evaluateAssign(JSInterpretedRuntimeContext context, Object rightValue, Function<Object, Object> assigner, JSResult result, Function<Object, Object> returnOriginalValue, VarAccessor preResolved) {
 		if(context.isStrictMode() && ("eval".equals(id) || Arguments.ARGUMENTS.equals(id) || isStrictFutureReservedWord(id))) {
 			throw RuntimeUtil.syntaxError("Cannot assign to {0} in strict mode", id);

@@ -218,7 +218,10 @@ public class ASTFunctionDecl extends ASTFunction implements TopNode, HoistableNo
     	IContextBlockContainer nearestBlock = findParentNodeByClass(IContextBlockContainer.class);
     	blockNested = (nearestBlock!=rootContainer) || isBareIfClauseBody();
     	boolean enclosingGenuinelyStrict = rootContainer.isGenuinelyStrictMode();
-    	IContextBlockContainer varContainer = enclosingGenuinelyStrict
+    	// Annex B.3.3 only covers plain FunctionDeclarations: a block-nested
+    	// generator or async function stays block-scoped in sloppy mode too.
+    	boolean plainFunction = !isGenerator() && !isAsync();
+    	IContextBlockContainer varContainer = enclosingGenuinelyStrict || !plainFunction
     		? nearestBlock
     		: rootContainer;
     	// Annex B.3.3's hoist is skipped (not an error) - not just suppressed
@@ -234,7 +237,7 @@ public class ASTFunctionDecl extends ASTFunction implements TopNode, HoistableNo
     	// (nearestBlock!=rootContainer) - a conflict for a NON-nested
     	// declaration (no Annex B involved at all) is a genuine redeclaration
     	// error, left to addVarDeclaration() below.
-    	boolean isAnnexBHoistCandidate = (nearestBlock!=rootContainer || isBareIfClauseBody());
+    	boolean isAnnexBHoistCandidate = plainFunction && (nearestBlock!=rootContainer || isBareIfClauseBody());
     	if(varContainer==rootContainer && isAnnexBHoistCandidate) {
     		boolean conflicts = false;
     		// Also track whether the FALLBACK container itself (nearestBlock)

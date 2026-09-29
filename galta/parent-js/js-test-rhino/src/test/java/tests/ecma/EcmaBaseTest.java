@@ -90,7 +90,23 @@ public abstract class EcmaBaseTest extends BaseTestSuiteTest {
 		"ecma_3/Statements/12.10-01.js",
 		
 		// catch (identifier if condition) is specific to Rhino
-		"ecma_3_1/Object/regress-444787.js"
+		"ecma_3_1/Object/regress-444787.js",
+
+		// Pre-ES5 lenient string escapes: a backslash-x with fewer than 2 hex
+		// digits ("x0", "xG", "xCG"), a backslash-u with no hex digits (7.7.4),
+		// backslash-x "1g" (hex-001), and every backslash + char from 0x20 to
+		// 0xFE, which includes a bare backslash-u and backslash-x (15.4.5.1-1,
+		// through eval). Since ES5 a string literal's hex escape needs exactly
+		// 2 hex digits and the unicode escape 4 (or braces): x and u are
+		// EscapeCharacters, not NonEscapeCharacters, so anything else is a
+		// SyntaxError, and Annex B only adds legacy octal escapes.
+		// (No literal backslash-u here: javac decodes it even in comments.)
+		// test262 checks it (language/literals/string/unicode-escape-no-hex-err-*.js,
+		// and the \x cases), and GaltaJS now reports it at parse time; each
+		// file aborts on its first such literal, so its other cases cannot run.
+		"ecma/LexicalConventions/7.7.4.js",
+		"ecma_2/RegExp/hex-001.js",
+		"ecma/Array/15.4.5.1-1.js"
 
 	};
 	

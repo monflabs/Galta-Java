@@ -77,9 +77,25 @@ public class ASTLiteral extends ASTNode {
 		// "use strict"), only a genuine directive (or, for eval'd text, the
 		// calling context's genuine strictness) should reject this syntax.
 		if(legacyOctalLiteral && initContext.isGenuinelyStrict()) {
-			throw new JSParseException(null,this,"Octal literals are not allowed in strict mode");
+			throw new JSParseException(null,this,value instanceof String ? "Octal escape sequences are not allowed in strict mode" : "Octal literals are not allowed in strict mode");
 		}
 		super.init(initContext);
+	}
+
+	// Whether a string literal's source text has a LegacyOctalEscapeSequence
+	// or a NonOctalDecimalEscapeSequence ("\\1", "\\08", "\\8"): an early
+	// SyntaxError in strict mode code (see init()).
+	public static boolean hasLegacyEscape(String image) {
+		for(int i=0; i<image.length()-1; i++) {
+			if(image.charAt(i)=='\\') {
+				char c = image.charAt(i+1);
+				if((c>='1' && c<='9') || (c=='0' && i+2<image.length() && Character.isDigit(image.charAt(i+2)))) {
+					return true;
+				}
+				i++;
+			}
+		}
+		return false;
 	}
 
 	// A Directive Prologue entry ("use strict" being the only one GaltaJS
@@ -270,12 +286,8 @@ public class ASTLiteral extends ASTNode {
 				return new BigInteger(s.substring(2),8);
 			}
 			if(s.length()>1 && s.startsWith("0")) {
-				if(legacyOctalOut!=null) {
-					legacyOctalOut[0] = true;
-				}
-				if(zeroOctal) {
-					return new BigInteger(s.substring(1),8);
-				}
+				// A BigInt literal never has a legacy octal (or leading 0) form
+				throw new JSException(null,"Invalid BigInt literal {0}n", s);
 			}
 			return new BigInteger(s);
 		}
@@ -307,10 +319,27 @@ public class ASTLiteral extends ASTNode {
 		return env.getJsonFactory().parseInteger(s);
 	}
 	
+	private static boolean isSeparatedDigit(char c, boolean hex) {
+		return (c>='0' && c<='9') || (hex && ((c>='a' && c<='f') || (c>='A' && c<='F')));
+	}
+
 	private static String removeNumericSeparator(String s, boolean checkExponent) {
 		if(s.indexOf('_')>=0) {
-			if(s.endsWith("_") || s.contains("_.") || (checkExponent && (s.contains("_e") || s.contains("_E")))) {
-				throw new JSException(null,"Invalid numeric separator position");
+			// A NumericLiteralSeparator sits between two digits of the same
+			// digit sequence: not after a 0x/0o/0b prefix, not next to "."/"e"/a
+			// suffix, not doubled, and never in a literal with a leading 0
+			// (legacy octal "0_7", "00_0", or "0_1").
+			boolean prefixed = s.length()>1 && s.charAt(0)=='0' && "xXoObB".indexOf(s.charAt(1))>=0;
+			boolean hex = prefixed && (s.charAt(1)=='x' || s.charAt(1)=='X');
+			boolean leadingZero = !prefixed && s.length()>1 && s.charAt(0)=='0' && (s.charAt(1)=='_' || Character.isDigit(s.charAt(1)));
+			for(int i=0; i<s.length(); i++) {
+				if(s.charAt(i)=='_') {
+					boolean ok = !leadingZero && i>(prefixed ? 2 : 0) && i+1<s.length()
+							&& isSeparatedDigit(s.charAt(i-1), hex) && isSeparatedDigit(s.charAt(i+1), hex);
+					if(!ok) {
+						throw new JSException(null,"Invalid numeric separator position");
+					}
+				}
 			}
 			StringBuilder b = new StringBuilder();
 			int l = s.length();
@@ -466,8 +495,104 @@ public class ASTLiteral extends ASTNode {
 		return _parseString(s, removeQuotes, true);
 	}
 	
+	/**
+	 * Decodes an IdentifierName token: its only escapes are the lexer's
+	 * backslash-u XXXX and backslash-u {...} escapes, and each must denote a code point
+	 * allowed at its position (ID_Start, "$" or "_" first; ID_Continue, "$",
+	 * ZWNJ or ZWJ after), otherwise the name is a SyntaxError at parse time.
+	 */
 	public static String parseIdentifier(String s) {
-		return _parseString(s, false, false);
+		if(s.indexOf('\\')<0) {
+			return s;
+		}
+		int length = s.length();
+		StringBuilder sb = new StringBuilder(length);
+		for (int i=0; i<length; ) {
+			char c = s.charAt(i);
+			if(c!='\\') {
+				sb.append(c);
+				i++;
+				continue;
+			}
+			int cp = -1;
+			int end = i;
+			if(i+1<length && s.charAt(i+1)=='u') {
+				if(i+2<length && s.charAt(i+2)=='{') {
+					int j = i+3;
+					long v = 0;
+					while(j<length && hexval(s.charAt(j))>=0) {
+						v = Math.min(v*16 + hexval(s.charAt(j)), 0x110000);
+						j++;
+					}
+					if(j>i+3 && j<length && s.charAt(j)=='}') {
+						cp = (int)v;
+						end = j+1;
+					}
+				} else if(i+6<=length) {
+					int v = 0;
+					int j = i+2;
+					for(; j<i+6 && hexval(s.charAt(j))>=0; j++) {
+						v = v*16 + hexval(s.charAt(j));
+					}
+					if(j==i+6) {
+						cp = v;
+						end = j;
+					}
+				}
+			}
+			if(cp<0 || cp>Character.MAX_CODE_POINT) {
+				throw RuntimeUtil.syntaxError("Invalid Unicode escape sequence in identifier {0}", s);
+			}
+			if(!(sb.length()==0 ? isIdentifierStart(cp) : isIdentifierPart(cp))) {
+				throw RuntimeUtil.syntaxError("Invalid identifier character U+{0} in {1}", String.format("%04X", cp), s);
+			}
+			sb.appendCodePoint(cp);
+			i = end;
+		}
+		return sb.toString();
+	}
+
+	/**
+	 * {@link #parseIdentifier(String)} for an IdentifierReference, a
+	 * BindingIdentifier or a LabelIdentifier: a reserved word cannot be
+	 * spelled with escapes to use it there (the lexer only recognizes the
+	 * unescaped keyword, so the escaped spelling reaches here as a name).
+	 */
+	public static String parseBindingIdentifier(String s) {
+		String id = parseIdentifier(s);
+		if(id!=s && ESCAPE_FREE_RESERVED_WORDS.contains(id)) {
+			throw RuntimeUtil.syntaxError("Keyword must not contain escaped characters: {0}", s);
+		}
+		return id;
+	}
+
+	private static final java.util.Set<String> ESCAPE_FREE_RESERVED_WORDS = java.util.Set.of(
+			"break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",
+			"do", "else", "enum", "export", "extends", "false", "finally", "for", "function", "if",
+			"import", "in", "instanceof", "new", "null", "return", "super", "switch", "this", "throw",
+			"true", "try", "typeof", "var", "void", "while", "with");
+
+	// Java's identifier predicates follow UAX #31 like ECMAScript's ID_Start/
+	// ID_Continue, except that they keep U+2E2F VERTICAL TILDE (a Pattern_Syntax
+	// character, excluded from both) and that isUnicodeIdentifierPart() also
+	// accepts the "ignorable" format and control characters.
+	private static final int VERTICAL_TILDE = 0x2E2F;
+
+	// A code point the JDK's Unicode version does not assign yet is accepted:
+	// newer Unicode versions (test262 has 15.1 to 17.0 identifier tests) keep
+	// adding letters, and the lexer is equally permissive for them.
+	private static boolean isIdentifierStart(int cp) {
+		return cp=='$' || cp=='_' || (cp!=VERTICAL_TILDE && (Character.isUnicodeIdentifierStart(cp) || isUnassigned(cp)));
+	}
+
+	private static boolean isIdentifierPart(int cp) {
+		// U+30FB and U+FF65 (katakana middle dots) joined Other_ID_Continue in Unicode 15.1
+		return cp=='$' || cp==0x200C || cp==0x200D || cp==0x30FB || cp==0xFF65
+				|| (cp!=VERTICAL_TILDE && ((Character.isUnicodeIdentifierPart(cp) && !Character.isIdentifierIgnorable(cp)) || isUnassigned(cp)));
+	}
+
+	private static boolean isUnassigned(int cp) {
+		return Character.getType(cp)==Character.UNASSIGNED;
 	}
 
 	
@@ -499,37 +624,37 @@ public class ASTLiteral extends ASTNode {
 				else if (c == 'v')
 					c = '\u000B';
 				else if (c == 'x') {
-					if(i+2<length) {
-						int c1 = hexval(s.charAt(i + 1));
-						int c2 = hexval(s.charAt(i + 2));
-						if(c1>=0 && c2>=0) {
-							c = (char) (c1<< 4 | c2);
-							i += 2;
-						} // else keep x as is
+					// A malformed HexEscapeSequence is a SyntaxError
+					int c1 = i+2<length ? hexval(s.charAt(i + 1)) : -1;
+					int c2 = i+2<length ? hexval(s.charAt(i + 2)) : -1;
+					if(c1<0 || c2<0) {
+						throw RuntimeUtil.syntaxError("Invalid hexadecimal escape sequence");
 					}
+					c = (char) (c1<< 4 | c2);
+					i += 2;
 				} else if (c == 'u' && i+1<length && s.charAt(i+1)=='{') {
 					int j = i+2;
-					int cp = 0;
+					long cp = 0;
 					while(j<length && hexval(s.charAt(j))>=0) {
-						cp = (cp<<4) | hexval(s.charAt(j));
+						cp = Math.min((cp<<4) | hexval(s.charAt(j)), 0x110000);
 						j++;
 					}
-					if(j<length && s.charAt(j)=='}' && j>i+2) {
-						sb.appendCodePoint(cp);
+					if(j<length && s.charAt(j)=='}' && j>i+2 && cp<=Character.MAX_CODE_POINT) {
+						sb.appendCodePoint((int)cp);
 						i = j;
 						continue;
 					}
-					// malformed brace-form escape - leave 'u' as-is, matching the lenient fallback below
+					throw RuntimeUtil.syntaxError("Invalid Unicode escape sequence");
 				} else if (c == 'u') {
-					if(i+4<length) {
-						int c1 = hexval(s.charAt(i + 1));
-						int c2 = hexval(s.charAt(i + 2));
-						int c3 = hexval(s.charAt(i + 3));
-						int c4 = hexval(s.charAt(i + 4));
-						if(c1>=0 && c2>=0 && c3>=0 && c4>=0) {
-							c = (char) (c1 << 12 | c2 << 8 | c3 << 4 | c4);
-						}
+					// A malformed UnicodeEscapeSequence is a SyntaxError
+					int c1 = i+4<length ? hexval(s.charAt(i + 1)) : -1;
+					int c2 = i+4<length ? hexval(s.charAt(i + 2)) : -1;
+					int c3 = i+4<length ? hexval(s.charAt(i + 3)) : -1;
+					int c4 = i+4<length ? hexval(s.charAt(i + 4)) : -1;
+					if(c1<0 || c2<0 || c3<0 || c4<0) {
+						throw RuntimeUtil.syntaxError("Invalid Unicode escape sequence");
 					}
+					c = (char) (c1 << 12 | c2 << 8 | c3 << 4 | c4);
 					i += 4;
 				} else if (c >= '0' && c <= '7') {
 					if(!allowOctal) {

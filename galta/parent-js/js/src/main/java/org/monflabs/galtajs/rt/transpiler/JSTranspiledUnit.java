@@ -579,6 +579,16 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 				tgc.setOwnForceStrictMode(isForceStrictMode());
 			}
 			Object val = runOnce(context);
+			// A module that deferred its body (deferModuleUntilSettled()) may
+			// have finished, during the drain runOnce() just ran, with an
+			// error: a failed dependency, or its own body failing on the
+			// retry, whose exception had no caller to reach. Surface it the
+			// way a module running its own body reports a failure - mirrors
+			// JSInterpretedUnit.executeWithContext() (test262
+			// language/module-code/top-level-await/module-import-rejection*.js).
+			if (isModuleUnit() && evalStatus == ModuleEvalStatus.ERRORED && evaluationError != null) {
+				throw RuntimeUtil.wrap(evaluationError);
+			}
 			if (val instanceof ConsSequence cs) {
 				return cs.toString();
 			}
@@ -695,6 +705,19 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 		for (JSInterpretedUnit dep : deps) {
 			dep.addEvaluationCompletionCallback(() -> {
 				if (--remaining[0] == 0) {
+					// A dependency whose evaluation failed (e.g. a rejected
+					// top-level await) makes this module fail with the same
+					// error, without running its body (spec
+					// AsyncModuleExecutionRejected, as JSInterpretedUnit's
+					// notifyAsyncParents() does). runValue() reports it.
+					for (JSInterpretedUnit d : deps) {
+						if (d.getModuleStatus() == JSInterpretedUnit.ModuleStatus.ERRORED) {
+							evalStatus = ModuleEvalStatus.ERRORED;
+							evaluationError = d.getEvaluationError();
+							deferredPending = false;
+							return;
+						}
+					}
 					runOnce(context);
 				}
 			});

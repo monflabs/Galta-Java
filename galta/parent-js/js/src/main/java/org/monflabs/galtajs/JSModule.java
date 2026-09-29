@@ -91,13 +91,15 @@ public interface JSModule {
 		return new org.monflabs.galtajs.rt.builtins.standard.module.ModuleNamespaceObject(getEnvironment(), this);
 	}
 
+	// An import of a name the module does not export is a SyntaxError at
+	// link time (ResolveExport returns null: InitializeEnvironment step 7.d.i).
 	public default Object getExport(String name) {
 		JSObject namedExports = getNamedExports();
 		if (namedExports == null) {
-			throw new JSException(null, "Module {0} does not export named entries", getDescriptor().getName());
+			throw org.monflabs.galtajs.rt.RuntimeUtil.syntaxError("Module {0} does not export named entries", getDescriptor().getName());
 		}
 		if (!namedExports.hasProperty(name)) {
-			throw new JSException(null, "Module {0} does not export an entry {1}", getDescriptor().getName(), name);
+			throw org.monflabs.galtajs.rt.RuntimeUtil.syntaxError("Module {0} does not export an entry {1}", getDescriptor().getName(), name);
 		}
 		return namedExports.getProperty(name);
 	}

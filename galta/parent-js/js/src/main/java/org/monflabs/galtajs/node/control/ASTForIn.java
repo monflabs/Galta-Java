@@ -145,6 +145,7 @@ public class ASTForIn extends ASTFor_ {
 		super.init(initContext);
 		
 		// For now - we should find a better way to validate the assigned nodes???
+		checkAssignmentTarget(varDecl, AssignmentUse.FOR_IN_OF, initContext.isGenuinelyStrict());
 		if(skipTransparent(varDecl) instanceof ASTIdentifier id) {
 			VariableDef v = findParentNodeByClass(ASTVarContainer.class).findVariable(id.getId());
 			if(v==null) {

@@ -242,10 +242,35 @@ public abstract class ASTNode implements INode {
 	// their own separate, context-sensitive handling elsewhere (yield's
 	// generator-scope-aware reservation in the parser, let's contextual
 	// keyword status).
-	protected static boolean isStrictFutureReservedWord(String name) {
+	public static boolean isStrictFutureReservedWord(String name) {
 		return "implements".equals(name) || "interface".equals(name) || "package".equals(name)
 			|| "private".equals(name) || "protected".equals(name) || "public".equals(name)
 			|| "static".equals(name);
+	}
+
+	// Where the parser found this node as the Statement of another statement
+	// (a bit set of the POSITION_* flags, 0 for anywhere else) - checked by
+	// EarlyErrorsValidator, since a declaration is not a Statement there.
+	public static final int POSITION_BODY = 1;			// loop or with body
+	public static final int POSITION_IF_CLAUSE = 2;		// if/else clause
+	public static final int POSITION_LABELLED = 4;		// labelled statement
+	private byte statementPosition;
+
+	public void markStatementPosition(int position) {
+		statementPosition |= position;
+	}
+
+	public int getStatementPosition() {
+		return statementPosition;
+	}
+
+	// The parent of node, above any transparent (debug hook) wrapper
+	public static ASTNode skipTransparentParent(ASTNode node) {
+		ASTNode p = node.getParent();
+		while(p instanceof org.monflabs.galtajs.node.debug.ASTDebugHook) {
+			p = p.getParent();
+		}
+		return p;
 	}
 
 	public static ASTNode skipTransparent(ASTNode node) {
@@ -583,6 +608,91 @@ public abstract class ASTNode implements INode {
 	
 	public void evaluateAssign(JSInterpretedRuntimeContext context, Object rightValue, Function<Object, Object> assigner, JSResult result, Function<Object, Object> returnOriginalValue) {
 		throw RuntimeUtil.syntaxError("Left part of assign, {0}, is not assignable", getClass());
+	}
+
+	/** How a node is used as an assignment target, for {@link #checkAssignmentTarget}. */
+	public enum AssignmentUse {
+		/** {@code target = value}: destructuring patterns allowed */
+		PLAIN,
+		/** {@code for (target in/of ...)}: destructuring patterns allowed */
+		FOR_IN_OF,
+		/** {@code target op= value}, {@code ++target}, {@code target--} */
+		COMPOUND,
+		/** {@code target &&= value}, {@code ||=}, {@code ??=} */
+		LOGICAL,
+		/** An element of a destructuring assignment pattern (nested patterns are checked by the pattern itself) */
+		NESTED
+	}
+
+	/**
+	 * Static Semantics AssignmentTargetType as an early error: throws a
+	 * SyntaxError at parse time when {@code target} cannot be assigned
+	 * (a literal, an operator expression, {@code this}, an optional chain,
+	 * a parenthesized pattern...), instead of failing only once the
+	 * assignment runs. A call expression keeps Annex B's web-compat runtime
+	 * ReferenceError in sloppy code, except as a logical assignment target.
+	 */
+	public static void checkAssignmentTarget(ASTNode target, AssignmentUse use, boolean strict) {
+		ASTNode n = target;
+		boolean parenthesized = false;
+		while(n instanceof org.monflabs.galtajs.node.unaryop.ASTParen || n instanceof org.monflabs.galtajs.node.debug.ASTDebugHook) {
+			parenthesized |= n instanceof org.monflabs.galtajs.node.unaryop.ASTParen;
+			n = ((NoopNode)n).getNode();
+		}
+		String invalid = null;
+		if(n instanceof ASTIdentifier id && strict && ("eval".equals(id.getId()) || "arguments".equals(id.getId()))) {
+			invalid = "'"+id.getId()+"' in strict mode";
+		} else if(n instanceof org.monflabs.galtajs.node.literal.ASTContainerLiteral) {
+			if(parenthesized || (use!=AssignmentUse.PLAIN && use!=AssignmentUse.FOR_IN_OF)) {
+				invalid = "a parenthesized or compound-assigned destructuring pattern";
+			} else {
+				((org.monflabs.galtajs.node.literal.ASTContainerLiteral)n).checkPattern(false, strict);
+			}
+		} else if(n instanceof ASTSuperCtor || n instanceof org.monflabs.galtajs.node.unaryop.ASTNew) {
+			invalid = n instanceof ASTSuperCtor ? "super()" : "new";
+		} else if(n instanceof org.monflabs.galtajs.node.call.ASTBaseCall) {
+			if(strict || use==AssignmentUse.LOGICAL || use==AssignmentUse.NESTED) {
+				invalid = "a function call";
+			}
+		} else if(n instanceof ASTImportMeta) {
+			invalid = "import.meta";
+		} else if(n instanceof ASTNewMember) {
+			invalid = "new.target";
+		} else if(n instanceof ChainingNode c && isOptionalChain(c)) {
+			invalid = "an optional chain";
+		} else if(n!=null && !overridesEvaluateAssign(n)) {
+			invalid = n.getClass().getSimpleName();
+		}
+		if(invalid!=null) {
+			throw new JSParseException(null, target, "Invalid assignment target: {0}", invalid);
+		}
+	}
+
+	private static boolean isOptionalChain(ChainingNode c) {
+		for(ChainingNode n=c; ; ) {
+			if(n.isNullOp() && !(n.getNode() instanceof ASTIdentifierFilter)) {
+				return true;
+			}
+			if(!(n.getNode() instanceof ChainingNode next)) {
+				return false;
+			}
+			n = next;
+		}
+	}
+
+	private static final ClassValue<Boolean> OVERRIDES_EVALUATE_ASSIGN = new ClassValue<>() {
+		@Override
+		protected Boolean computeValue(Class<?> type) {
+			try {
+				return type.getMethod("evaluateAssign", JSInterpretedRuntimeContext.class, Object.class, Function.class, JSResult.class, Function.class)
+						.getDeclaringClass()!=ASTNode.class;
+			} catch(NoSuchMethodException ex) {
+				return false;
+			}
+		}
+	};
+	private static boolean overridesEvaluateAssign(ASTNode n) {
+		return OVERRIDES_EVALUATE_ASSIGN.get(n.getClass());
 	}
 	
 	public boolean evaluateDelete(JSInterpretedRuntimeContext context, JSResult result) {

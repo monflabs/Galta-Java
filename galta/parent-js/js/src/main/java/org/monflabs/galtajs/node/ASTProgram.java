@@ -639,6 +639,7 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 		checkParameterExpressionArgumentsRestriction(callerInParameterExpressionScope);
 		checkFieldInitializerArgumentsRestriction(callerInFieldInitializer);
 		PrivateNameValidator.check(this, callerPrivateNames);
+		EarlyErrorsValidator.check(this);
 	}
 
 	// A direct eval whose call site is inside a function's default parameter-
