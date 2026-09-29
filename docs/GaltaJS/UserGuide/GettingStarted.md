@@ -2,6 +2,8 @@
 
 GaltaJS is a JavaScript engine written in Java. This page shows how to depend on it, create an environment, and evaluate the first expressions and scripts. The engine works with plain Java values (there is no `JSNumber` or `JSString` wrapper), which is what makes it easy to embed.
 
+?> To experiment before writing any Java, open the [GaltaJS playground](playground/ ':ignore'): it runs in the browser (through CheerpJ) and evaluates scripts with the engine and its extensions.
+
 ## Maven dependency
 
 The engine is published as Maven artifacts under the `org.monflabs.galta` group. The core engine is the `js` artifact; its own dependencies (`json`, `javacompiler`, `utilities`) are transitive, so a standard application only needs:

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GaltaJS Playground</title>
+    <!-- CheerpJ runs the playground's Java (Swing) application in the browser.
+         Keep the loader version in sync with
+         galta/parent-js/js-playground-cheerpj/cheerpj/index.html. -->
+    <script src="https://cjrtnc.leaningtech.com/20260907_3546/loader.js"></script>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      #bar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        z-index: 10;
+        padding: 4px 10px;
+        font-size: 12px;
+        background: rgba(255, 255, 255, 0.85);
+        border-bottom-left-radius: 6px;
+      }
+      #loading {
+        position: absolute;
+        top: 40%;
+        width: 100%;
+        text-align: center;
+        color: #555;
+      }
+      #cheerpj {
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="bar"><a href="../">Galta documentation</a></div>
+    <div id="loading">Loading the GaltaJS playground (a Java application running in your browser)...</div>
+    <div id="cheerpj"></div>
+    <script>
+      (async function () {
+        // CheerpJ maps "/app/" to the ROOT of this web server, not to the folder of
+        // this page. The site is served at / locally but under /Galta-Java/ on
+        // GitHub Pages, so the jar URL is built from this page's own path.
+        const dir = location.pathname.replace(/[^/]*$/, "");
+        const jar = "/app" + dir + "jsplayground-cheerpj.jar";
+        try {
+          await cheerpjInit({ version: 21 });
+          cheerpjCreateDisplay(-1, -1, document.getElementById("cheerpj"));
+          document.getElementById("loading").remove();
+          await cheerpjRunMain("playground.GaltaJSPlaygroundCheerpJ", jar);
+        } catch (e) {
+          document.getElementById("loading").textContent =
+            "The playground could not be started: " + e;
+        }
+      })();
+    </script>
+  </body>
+</html>

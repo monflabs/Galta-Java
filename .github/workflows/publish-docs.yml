@@ -1,0 +1,68 @@
+# Publishes the documentation site (docs/) to GitHub Pages, with the javadoc of
+# every published module and the CheerpJ (browser) build of the playground
+# generated into it by buildtools/build-site.sh - the same script used for a
+# local preview. Nothing generated is checked in, so the site always documents
+# the revision it was published from.
+#
+# One-time setup: Settings -> Pages -> Source = "GitHub Actions". GitHub Pages
+# needs the repository to be public, or a paid plan for a private one (the site
+# itself is then public).
+name: Publish documentation
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one half-done: a cancelled deploy
+# can leave the site serving a partial upload.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 21
+          cache: maven
+
+      # Writes docs/api/<artifactId>/ (linked from docs/API.md) and
+      # docs/playground/jsplayground-cheerpj.jar (loaded by docs/playground/).
+      - name: Generate the javadoc and the playground into the site
+        run: ./buildtools/build-site.sh
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      # docs/ is the site root: index.html, the markdown, the javadoc and
+      # playground just generated, and the .nojekyll that keeps Pages from
+      # hiding _sidebar.md.
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

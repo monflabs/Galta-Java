@@ -2,6 +2,10 @@
 
 With `supportTypeHints`, GaltaJS accepts TypeScript-style type annotations and type declarations and ignores them: parameters, return types, variable types, generics, `interface`, `type` and `declare` statements parse, produce nothing, and never influence execution. It lets a script be written, edited and type-checked with TypeScript tooling while the engine runs it directly, with no transpilation step. There is no type checking and no code generation for types; a `string` flowing into a `number` parameter is not an error.
 
+## Scope
+
+The goal of type hints is to deal with the **type system** only: to let a script carry TypeScript's static type information, so that it can be written and checked with TypeScript tooling and run as is. They are not a way to add language features: nothing that is not native to JavaScript is introduced through them. TypeScript constructs that exist at run time rather than in the type system - constructs that generate code or values, as opposed to annotations that are erased - are out of scope, and a script using type hints behaves exactly like the same script with its annotations removed.
+
 **Status: experimental.** The parser support is recent and still being extended; the exact subset below is what the grammar accepts today. The flag is on in `enableGaltaJSExtensions()` (hence in `GaltaJSEnvironment`) and off in `JavaScriptEnvironment`.
 
 ## What is accepted

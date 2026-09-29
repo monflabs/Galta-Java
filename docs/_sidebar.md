@@ -1,4 +1,6 @@
 * [Home](/)
+* [API Reference](/API)
+* [Playground (in your browser)](playground/ ':ignore')
 * [Building and Releasing](/BuildAndRelease)
 * [Generating the Documentation](/Documentation)
 

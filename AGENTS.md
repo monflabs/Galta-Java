@@ -26,8 +26,15 @@ mvn clean install
 # Release build (with javadoc, sources, signing)
 mvn clean install -P javadoc,sources,codesigning
 
-# Maven Central release (sources, javadoc, GPG signatures, Central Portal upload) - from the repository root
-mvn clean deploy -P central
+# Release - from the repository root: stages to Maven Central, smoke-tests,
+# tags and creates the GitHub release (rehearse with RELEASE_DRY_RUN=1).
+# Never run it without being asked. See docs/BuildAndRelease.md.
+buildtools/release.sh
+
+# Documentation site: javadoc of the published modules -> docs/api/, CheerpJ
+# playground -> docs/playground/ (both gitignored), then preview it. The
+# publish-docs workflow deploys docs/ to GitHub Pages on every push to master.
+./buildtools/build-site.sh && ./serve-docs.sh
 
 # Build a single module and its dependencies
 mvn clean install -pl parent-js/js --also-make

@@ -89,6 +89,10 @@ description, licenses, developers, scm - as written. A version bump changes:
   `tools/monflabs-parent/pom.xml`, and the root pom's `<parent><version>`
   (a parent is located before properties are known, so it is not `${revision}`).
 
+`buildtools/release.sh` refuses to run when these disagree. The default
+`galta.version` of `smoke-test/pom.xml` can follow too (the release script
+passes the version explicitly), and `CHANGELOG.md` gets a section per version.
+
 ## Dependency and plugin versions
 
 Every version is declared in exactly one place:
@@ -187,7 +191,8 @@ which has no parent, carries its own copy.
 1. A Central Portal account with the `org.monflabs` namespace verified
    (<https://central.sonatype.com>).
 2. A Central Portal user token, stored in `~/.m2/settings.xml` under the
-   server id `central`:
+   server id `central` (encrypt it with `mvn --encrypt-password` and a master
+   password in `settings-security.xml` so it is not on disk in the clear):
 
    ```xml
    <server>
@@ -199,23 +204,74 @@ which has no parent, carries its own copy.
 
 3. A GPG key whose public part is published to a key server
    (`gpg --keyserver keyserver.ubuntu.com --send-keys <key id>`). The
-   passphrase comes from `gpg-agent`, or from `-Dgpg.passphrase=...`.
+   passphrase is asked by `gpg-agent` when the artifacts are signed; it is
+   never passed on the command line. If signing fails with *Inappropriate ioctl
+   for device*, configure a GUI pinentry (`pinentry-mac`, `pinentry-gtk-2`) in
+   `~/.gnupg/gpg-agent.conf`.
+4. The GitHub CLI, authenticated for the repository: `gh auth login`.
+5. For the documentation site: *Settings → Pages → Source* set to
+   **GitHub Actions** (see [Documentation site](#documentation-site)).
 
 ### Releasing
 
+`buildtools/release.sh` cuts a release. Rehearse it first - a dry run builds
+everything, installs the jars, runs the smoke test and shows what would be
+tagged and uploaded, but publishes, pushes and tags nothing:
+
 ```sh
-# From the repository root
-# 1. Set the release version (see Versioning for the places to change)
-# 2. Full build, including the long test262 compliance sweep
-mvn clean install -P test262
-# 3. Build, sign and upload the bundle
-mvn clean deploy -P central
+RELEASE_DRY_RUN=1 buildtools/release.sh
 ```
 
-`autoPublish` is off: the upload is validated by the Portal and then waits
-under *Deployments* at <https://central.sonatype.com/publishing>, where it
-is released (or dropped) by hand. Once released, tag the commit
-(`git tag v<version>`) and move `<revision>` to the next version.
+Then, for the real release:
+
+1. Set the release version everywhere it is declared (see [Versioning](#versioning))
+   and write its section in `CHANGELOG.md` (`## <version> (<date>)`); commit and
+   push to `master`.
+2. Optionally run the full test262 suite first (hours):
+   `RELEASE_TEST262=1 buildtools/release.sh`, or run it separately with
+   `mvn clean install -P test262`.
+3. Run `buildtools/release.sh` from a clean `master` in sync with `origin`.
+
+The script:
+
+1. checks the environment (tools, `gh` login, GPG key and a test signature,
+   the Central token), a clean `master` in sync with `origin`, a free tag, a
+   version without `SNAPSHOT`, and that every place declaring the version agrees;
+2. builds, tests, signs and **stages** the artifacts on the Central Portal
+   (`mvn -P central clean deploy`, `autoPublish` off), and checks the upload
+   really happened;
+3. installs the jars locally and runs the [smoke test](#smoke-test) against
+   them;
+4. waits while you review and **Publish** the deployment at
+   <https://central.sonatype.com/publishing/deployments> (or drop it if
+   something is wrong - nothing is public before that);
+5. tags `master` as `v<version>` and pushes the tag;
+6. creates the GitHub release, with the version's `CHANGELOG.md` section as
+   notes and the runnable jars attached: `galtajs-playground-<version>.jar`
+   (the desktop playground, `java -jar`) and `galtajs-all-<version>.jar` (the
+   engine and its dependencies in one jar).
+
+It holds no secrets: the Central token is read by Maven from `settings.xml`,
+the GPG passphrase comes from `gpg-agent`, GitHub access from the `gh` keyring.
+Other knobs (`RELEASE_YES`, `RELEASE_SKIP_CENTRAL`, `RELEASE_SKIP_SMOKE`,
+`RELEASE_SKIP_GHRELEASE`, `MVN`) are described in the script's header.
+
+The documentation is **not** published by the release script: the site is
+deployed on every push to `master` (see below), so the commit being released is
+already online. After the release, move the version to the next one.
+
+### Smoke test
+
+`smoke-test/` is a standalone Maven project - not a module of the build, never
+published - that uses Galta the way an application does: it imports
+`galta-bom`, depends on `json` and `js` without versions, and checks JSON
+parsing/stringifying and GaltaJS script evaluation. It runs against whatever is
+in `~/.m2`:
+
+```sh
+mvn install -DskipTests
+mvn -f smoke-test/pom.xml test -Dgalta.version=0.8.0
+```
 
 ### What is published
 
@@ -243,6 +299,32 @@ instead, add a `distributionManagement` block to the root `pom.xml`, with
 credentials for its server id in `settings.xml`, and run
 `mvn clean deploy -P javadoc,sources,codesigning`; `codesigning` signs the jars
 with `jarsigner`, which is separate from the GPG signatures Central requires.
+
+## Documentation site
+
+The documentation is published to GitHub Pages at
+<https://monflabs.github.io/Galta-Java/>: the guides (the docsify site in
+`docs/`), the [API reference](/API) with the javadoc of every published module,
+and the GaltaJS [playground](playground/ ':ignore') running in the browser.
+
+`.github/workflows/publish-docs.yml` publishes it on every push to `master`
+(and on demand from the *Actions* tab): it runs `buildtools/build-site.sh`,
+which builds the published modules and generates into `docs/`
+
+- `docs/api/<artifactId>/`: the javadoc of every module managed by `galta-bom`,
+- `docs/playground/jsplayground-cheerpj.jar`: the CheerpJ build of the
+  playground, loaded by `docs/playground/index.html`,
+
+then uploads `docs/` as the site. Both generated parts are gitignored, so the
+site always documents the revision it was published from.
+
+GitHub Pages must use **GitHub Actions** as its source (*Settings → Pages →
+Source*). Pages publishes from a **public** repository, or from a private one
+only on a paid plan (GitHub Pro, Team or Enterprise), and the site is public
+either way. While `monflabs/Galta-Java` is private on a free plan, the workflow
+fails at its deploy step.
+
+See [Generating the Documentation](/Documentation) to preview the site locally.
 
 ## Module dependency order
 

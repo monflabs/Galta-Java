@@ -8,7 +8,7 @@ GaltaJS implements ECMAScript and, on top of it, a set of extensions aimed at sc
 | [Decimal](/GaltaJS/Extensions/Decimal) | The `Decimal` type (`java.math.BigDecimal`), `m` literals, precision, `Math` on big numbers |
 | [Sequences](/GaltaJS/Extensions/Sequences) | Multi-valued expression results and operator broadcasting |
 | [JSON Path](/GaltaJS/Extensions/JsonPath) | The path operators (`..`, `[*]`, `[?()]`, slices...) built on sequences |
-| [Type Hints](/GaltaJS/Extensions/TypeHints) | TypeScript-style annotations, parsed and ignored |
+| [Type Hints](/GaltaJS/Extensions/TypeHints) | TypeScript-style annotations, parsed and ignored: type-system information only, no language feature that is not native to JavaScript |
 | [Syntax](/GaltaJS/Extensions/Syntax) | `?:`, `|>`, `synchronized`, top-level `return`, `@`, member names, `global` |
 | [Java Types](/GaltaJS/Extensions/JavaTypes) | How Java dates, longs, big numbers and collections appear in scripts |
 

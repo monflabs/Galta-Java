@@ -56,7 +56,12 @@ Galta requires **Java 21** or later.
 
 ## Documentation
 
-The documentation lives in [`docs/`](docs/README.md), a docsify site (see
+The documentation is online at **<https://monflabs.github.io/Galta-Java/>**,
+with the [API reference](https://monflabs.github.io/Galta-Java/#/API) (the
+javadoc of every published module) and the GaltaJS
+[playground running in your browser](https://monflabs.github.io/Galta-Java/playground/).
+
+Its sources live in [`docs/`](docs/README.md), a docsify site (see
 [Generating the Documentation](docs/Documentation.md) to view it locally):
 
 - [GaltaJSON](docs/GaltaJSON/README.md) - the JSON library and its add-on modules
@@ -71,7 +76,9 @@ mvn clean install        # from the repository root; Java 21, Maven 3.8.1+
 ```
 
 See [Building and Releasing](docs/BuildAndRelease.md) for the profiles, the
-test262 compliance sweep and publishing.
+test262 compliance sweep and publishing. Releases are cut with
+`buildtools/release.sh` (rehearse with `RELEASE_DRY_RUN=1`); what changed in each
+version is in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
