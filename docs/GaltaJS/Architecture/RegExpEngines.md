@@ -1,6 +1,6 @@
 # RegExp engines
 
-`RegExp` objects delegate matching to a pluggable engine chosen once per environment. Two engines ship in the `js` module: a translation layer over `java.util.regex` and a port of Joni (Oniguruma) vendored under `external/org_joni`, with a customized fork also available as the separate `js-regexp-joni-custom` module. Choosing an engine and the compatibility trade-offs are covered in [Regular expressions](/GaltaJS/UserGuide/RegularExpressions); this page describes the machinery.
+`RegExp` objects delegate matching to a pluggable engine chosen once per environment. Two engines ship in the `js` module: a translation layer over `java.util.regex` and Joni (a Java port of Oniguruma), embedded and customized for GaltaJS under `external/org_joni`. Choosing an engine and the compatibility trade-offs are covered in [Regular expressions](/GaltaJS/UserGuide/RegularExpressions); this page describes the machinery.
 
 ## Interface and selection
 
@@ -16,7 +16,7 @@ int search(JSRuntimeContext context, String str);
 String replace(JSRuntimeContext context, String str, Object replace);
 ```
 
-There is no factory type: the factory is a `BiFunction<JSEnvironment,RegExp,RegExpEngine>` set with `JSEnvironment.Builder.regexpEngineFactory(...)` and invoked by `JSEnvironment.createRegExpEngine(RegExp)`. `RegExpEngineJdkJavascript.factory()` and `RegExpEngineJoni.factory()` return one. The default is picked in a static initializer of `ConfigurationImpl`: if `org.monflabs.galtajs.external.org_joni.Regex` can be loaded (it always can, since `js` vendors it) the default is Joni, otherwise the JDK engine. Compiled patterns are LRU-cached through `JSEnvironment.getRegExp(expr, factory)` when `regexpCacheSize` is greater than 0.
+There is no factory type: the factory is a `BiFunction<JSEnvironment,RegExp,RegExpEngine>` set with `JSEnvironment.Builder.regexpEngineFactory(...)` and invoked by `JSEnvironment.createRegExpEngine(RegExp)`. `RegExpEngineJdkJavascript.factory()` and `RegExpEngineJoni.factory()` return one. The default, set in `ConfigurationImpl`, is always Joni; the JDK engine is an explicit opt-in. Compiled patterns are LRU-cached through `JSEnvironment.getRegExp(expr, factory)` when `regexpCacheSize` is greater than 0.
 
 ## JDK engine
 
@@ -31,13 +31,12 @@ There is no factory type: the factory is a `BiFunction<JSEnvironment,RegExp,RegE
 
 ## Joni engine
 
-`joni/RegExpEngineJoni` (about 4,800 lines) drives the vendored Joni:
+`joni/RegExpEngineJoni` (about 4,800 lines) drives the embedded Joni. The copy under `external/org_joni` is not stock Joni: it has no external dependency (the `org.jruby.joni` artifact is not used) and carries GaltaJS changes for ECMAScript semantics (captures reset on each quantifier iteration, empty mandatory iterations, backreferences to unset groups) and for speed (see below).
 
 - it defines its own `Syntax JS_SYNTAX`, and `translatePattern()` rewrites what Joni's options cannot express locally: `.` becomes `[^\n\r\u2028\u2029]` (or `[\s\S]` under a local `(?s:...)`), and `^`/`$` under `m` become `(?:\A|(?<=[...]))` / `(?=\r\n|[...]|\z)`;
 - two bespoke encodings decide surrogate handling: `LenientUTF16BEEncoding` for `u`/`v` mode (a valid pair is one character, so a match cannot start between halves) and `LenientUTF16BECodeUnitEncoding` for non-unicode mode (every code unit is a character, so `/\udf06/` can match the low half of a pair);
-- `LookbehindReversal` implements lookbehind, `VClassParser` parses the `v`-flag character-class grammar (set operations, `\q{...}`, string properties).
-
-`js-regexp-joni-custom` holds the customized fork under the same package name for consumers who want to replace the vendored copy; the module's own `README.md` is a stale stub.
+- `LookbehindReversal` implements lookbehind, `VClassParser` parses the `v`-flag character-class grammar (set operations, `\q{...}`, string properties);
+- in non-unicode mode the code-unit encoding is fixed width (`Encoding.isFixedWidth2()`): the matcher gets the subject `String` and its `char[]` as sidecars, so hot opcodes read `chars[s >> 1]` and exact-string searches use `String.indexOf`; `test()` also skips building the capture `Region`.
 
 ## Source
 

@@ -82,7 +82,6 @@
 								<excludeArtifact>json-performance</excludeArtifact>
 								<excludeArtifact>js-all</excludeArtifact>
 								<excludeArtifact>js-library-v8</excludeArtifact>
-								<excludeArtifact>js-regexp-joni-custom</excludeArtifact>
 								<excludeArtifact>js-playground-cheerpj</excludeArtifact>
 								<excludeArtifact>js-test-rhino</excludeArtifact>
 								<excludeArtifact>js-test-suite</excludeArtifact>

@@ -137,6 +137,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 	// Cached byte representation of last matched string
 	private byte[] lastBytes;
 	private String lastString;
+	private char[] lastChars;
 	private int lastMatchStart = -1;
 	private int lastMatchEnd = -1;
 	private Region lastRegion;
@@ -3831,7 +3832,32 @@ public class RegExpEngineJoni implements RegExpEngine {
 		if (str == lastString) return lastBytes;
 		lastString = str;
 		lastBytes = toUtf16BEBytes(str);
+		lastChars = null; // invalidate; populated lazily via getChars() if needed
 		return lastBytes;
+	}
+
+	// Returns a char[] parallel to lastBytes for the current lastString.
+	// Only meaningful when the joni encoding is fixedWidth2 - populated
+	// lazily so callers under the u/v encoding (LenientUTF16BEEncoding, which
+	// combines surrogate pairs) never pay for it. Amortized once across every
+	// iteration of a global/exec loop against the same String instance.
+	// PRECONDITION: caller must have just called getBytes(str) for the same
+	// String identity, so lastString == str (keeps lastBytes/lastChars paired).
+	private char[] getChars(String str) {
+		if (lastChars == null) lastChars = str.toCharArray();
+		return lastChars;
+	}
+
+	// Matcher over the main regex for `str`, whose bytes come from
+	// getBytes(str). Under the fixed-width code-unit encoding (no u/v flag),
+	// the String and a parallel char[] are passed as sidecars: hot opcodes
+	// read chars[s >> 1] directly and exact-string searches go through
+	// String.indexOf (a HotSpot intrinsic) - see Regex.matcher(byte[],
+	// char[], String, int, int).
+	private Matcher newMatcher(String str, byte[] bytes) {
+		return joniEncoding.isFixedWidth2()
+				? regex.matcher(bytes, getChars(str), str, 0, bytes.length)
+				: regex.matcher(bytes, 0, bytes.length);
 	}
 
 	// Lossless String<->byte[] conversion for UTF-16BE, NOT
@@ -3881,6 +3907,15 @@ public class RegExpEngineJoni implements RegExpEngine {
 	}
 
 	private boolean execInternal(String str) {
+		return execInternal(str, true);
+	}
+
+	// needRegion false (test() only): on success, skip building the Region
+	// (getEagerRegion() allocates one when the pattern has no capture group)
+	// and leave lastRegion stale - only the exec()/replace()/... callers that
+	// just ran execInternal(str) read it. lastMatchStart/lastMatchEnd and
+	// lastIndex are still updated from the matcher's overall bounds.
+	private boolean execInternal(String str, boolean needRegion) {
 		boolean global = regExp.isGlobal();
 		boolean sticky = regExp.isSticky();
 		int strLen = str.length();
@@ -3912,7 +3947,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 		byte[] bytes = getBytes(str);
 		int byteStart = charIndexToByteIndex(str, bytes, charIndex);
 
-		Matcher matcher = regex.matcher(bytes, 0, bytes.length);
+		Matcher matcher = newMatcher(str, bytes);
 		int result;
 		if (sticky) {
 			result = matcher.match(byteStart, bytes.length, Option.NONE);
@@ -3921,10 +3956,15 @@ public class RegExpEngineJoni implements RegExpEngine {
 		}
 
 		if (result >= 0) {
-			Region region = matcher.getEagerRegion();
-			lastRegion = region;
-			lastMatchStart = byteIndexToCharIndex(str, bytes, region.getBeg(0));
-			lastMatchEnd = byteIndexToCharIndex(str, bytes, region.getEnd(0));
+			if (needRegion) {
+				Region region = matcher.getEagerRegion();
+				lastRegion = region;
+				lastMatchStart = byteIndexToCharIndex(str, bytes, region.getBeg(0));
+				lastMatchEnd = byteIndexToCharIndex(str, bytes, region.getEnd(0));
+			} else {
+				lastMatchStart = byteIndexToCharIndex(str, bytes, matcher.getBegin());
+				lastMatchEnd = byteIndexToCharIndex(str, bytes, matcher.getEnd());
+			}
 
 			if (global || sticky) {
 				// Per RegExpBuiltinExec, lastIndex is set to the match's end
@@ -4451,7 +4491,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 
 	@Override
 	public boolean test(JSRuntimeContext context, String str) {
-		return execInternal(str);
+		return execInternal(str, false);
 	}
 
 	@Override
@@ -4481,7 +4521,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 		}
 
 		byte[] bytes = getBytes(str);
-		Matcher matcher = regex.matcher(bytes, 0, bytes.length);
+		Matcher matcher = newMatcher(str, bytes);
 
 		// Spec's own algorithm (21.2.5.11) tracks TWO distinct positions - p
 		// (the start of the next chunk to emit, i.e. the last real split
@@ -4580,7 +4620,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 		}
 
 		byte[] bytes = getBytes(str);
-		Matcher matcher = regex.matcher(bytes, 0, bytes.length);
+		Matcher matcher = newMatcher(str, bytes);
 		JSArray a = JSArray.create(env);
 
 		int pos = 0;
@@ -4636,7 +4676,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 	@Override
 	public int search(JSRuntimeContext context, String str) {
 		byte[] bytes = getBytes(str);
-		Matcher matcher = regex.matcher(bytes, 0, bytes.length);
+		Matcher matcher = newMatcher(str, bytes);
 		// Per spec, Symbol.search resets lastIndex to 0 then calls the
 		// GENERIC RegExpExec, which honors the regexp's own sticky ("y")
 		// flag exactly as exec() does - a sticky regex must only match

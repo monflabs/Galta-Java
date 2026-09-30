@@ -6,9 +6,8 @@ This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 It includes third-party code that keeps its original license and copyright
 notice, reproduced in the header of each file:
 
-- Joni regular expression engine (MIT License)
+- Joni regular expression engine (MIT License), modified for GaltaJS
   galta/parent-js/js/src/main/java/org/monflabs/galtajs/external/org_joni
-  galta/parent-js/js-regexp-joni-custom/src/main/java/org/monflabs/galtajs/external/org_joni
 - big-math by Eric Obermühlner (MIT License)
   galta/parent-js/js/src/main/java/org/monflabs/galtajs/external/ch_obermuhlner_math_big
 - Mozilla Rhino number conversion (Mozilla Public License 2.0, see LICENSE.txt in that folder)

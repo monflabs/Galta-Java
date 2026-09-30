@@ -71,6 +71,12 @@ First public release: Galta is published to Maven Central under the
   used to accept (or reject only when it ran) is now a `SyntaxError`. The
   test262 harness checks negative tests strictly (expected error type and
   phase); the remaining gaps are listed in the Known ECMAScript Gaps page.
+- Regular expressions: the customized Joni engine is merged into the core `js`
+  module and remains the default (`RegExpEngineJoni`); the separate
+  `js-regexp-joni-custom` module and `RegExpEngineJoniCustom` are removed, and
+  the stock `org.jruby.joni:joni` artifact is no longer referenced. Non-unicode
+  patterns now use the fixed-width fast path (char reads, `String.indexOf`
+  searches) and `test()` no longer builds capture regions.
 - Modules: a missing export is a `SyntaxError`, a rejected top-level `await` is
   reported, and modules waiting on an async dependency run in the
   specification's order.

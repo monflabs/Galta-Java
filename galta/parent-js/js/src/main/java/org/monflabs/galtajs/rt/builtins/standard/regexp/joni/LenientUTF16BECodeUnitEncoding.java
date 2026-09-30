@@ -59,6 +59,16 @@ public final class LenientUTF16BECodeUnitEncoding extends UnicodeEncoding {
 		return end - p >= 2 ? 2 : missing(1);
 	}
 
+	// This encoding always advances by 2 bytes per character (see length()
+	// above - a raw UTF-16 code-unit sequence with no pair-combining). This
+	// flag lets ByteCodeMachine/Matcher/Search fast-path the per-position
+	// scan (replacing `s += enc.length(bytes, s, end)` with `s += 2`) - see
+	// Encoding.isFixedWidth2() for the full contract.
+	@Override
+	public boolean isFixedWidth2() {
+		return true;
+	}
+
 	@Override
 	public int mbcToCode(byte[] bytes, int p, int end) {
 		return (bytes[p] & 0xff) * 256 + (bytes[p + 1] & 0xff);

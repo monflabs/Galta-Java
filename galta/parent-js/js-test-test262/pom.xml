@@ -35,10 +35,6 @@
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>js</artifactId>
 		</dependency>
-		<dependency>
-			<groupId>org.monflabs.galta</groupId>
-			<artifactId>js-regexp-joni-custom</artifactId>
-		</dependency>
 		
 		<dependency>
 			<groupId>junit</groupId>

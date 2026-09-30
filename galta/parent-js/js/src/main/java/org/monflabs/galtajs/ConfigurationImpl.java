@@ -25,7 +25,6 @@ import org.monflabs.galtajs.modules.JSModuleResolver;
 import org.monflabs.galtajs.optimizer.ScriptOptimizer;
 import org.monflabs.galtajs.rt.builtins.standard.regexp.RegExp;
 import org.monflabs.galtajs.rt.builtins.standard.regexp.RegExpEngine;
-import org.monflabs.galtajs.rt.builtins.standard.regexp.jdk.RegExpEngineJdkJavascript;
 import org.monflabs.galtajs.rt.builtins.standard.regexp.joni.RegExpEngineJoni;
 
 
@@ -36,16 +35,9 @@ import org.monflabs.galtajs.rt.builtins.standard.regexp.joni.RegExpEngineJoni;
 public final class ConfigurationImpl implements JSConfiguration {
 	
 	// Default values
-	private static BiFunction<JSEnvironment,RegExp,RegExpEngine> defaultRegExpEngineFactory;
-	static {
-		// Reg exp factory
-		try {
-			ConfigurationImpl.class.getClassLoader().loadClass("org.monflabs.galtajs.external.org_joni.Regex");
-			defaultRegExpEngineFactory = RegExpEngineJoni.factory();
-		} catch(Exception e) {
-			defaultRegExpEngineFactory = RegExpEngineJdkJavascript.factory();
-		}
-	}
+	// The customized Joni copy is part of this module, so it is always the
+	// default; RegExpEngineJdkJavascript is an explicit opt-in.
+	private static final BiFunction<JSEnvironment,RegExp,RegExpEngine> defaultRegExpEngineFactory = RegExpEngineJoni.factory();
 	
 	
 	

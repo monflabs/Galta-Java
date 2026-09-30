@@ -234,13 +234,6 @@
 				    <version>15.7</version>
 				</dependency>
 
-				<!-- https://mvnrepository.com/artifact/org.jruby.joni/joni -->
-				<dependency>
-	    			<groupId>org.jruby.joni</groupId>
-	    			<artifactId>joni</artifactId>
-	    			<version>2.2.7</version>
-				</dependency>
-			
 				<!--
 					Database
 				-->

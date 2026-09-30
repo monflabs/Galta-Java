@@ -286,7 +286,6 @@ profile. The two lists must be kept in sync when a module is added.
 | `js-test-test262`, `js-test-rhino`, `js-test-suite`, `js-transpiler-maven-tests` | compliance and integration suites |
 | `json-performance` | benchmarks |
 | `js-library-v8` | test-only V8 (Javet) harness |
-| `js-regexp-joni-custom` | experimental regular expression engine |
 | `js-all` | fat jar, built locally (`target/galtajs-all.jar`) |
 | `js-playground-cheerpj` | browser build of the playground |
 | `js-precompiled-typescript` | not generated yet (its transpiler step is disabled) |

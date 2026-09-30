@@ -454,7 +454,14 @@ public final class Regex {
         // fixed-width-2 encodings (UTF-16BE code-unit view) and only when
         // no case-folding is in play (the intrinsic is case-sensitive).
         if (enc.isFixedWidth2() && e.ignoreCase == 0 && exactEnd - exactP >= 2 && ((exactEnd - exactP) & 1) == 0) {
-            stringExact = new String(exact, exactP, exactEnd - exactP, java.nio.charset.StandardCharsets.UTF_16BE);
+            // Decoded by hand, not with StandardCharsets.UTF_16BE: that codec
+            // replaces a lone surrogate with U+FFFD, so a lone-surrogate
+            // needle would never be found by indexOf().
+            char[] needle = new char[(exactEnd - exactP) >> 1];
+            for (int i = 0; i < needle.length; i++) {
+                needle[i] = (char)(((exact[exactP + 2 * i] & 0xff) << 8) | (exact[exactP + 2 * i + 1] & 0xff));
+            }
+            stringExact = new String(needle);
         } else {
             stringExact = null;
         }

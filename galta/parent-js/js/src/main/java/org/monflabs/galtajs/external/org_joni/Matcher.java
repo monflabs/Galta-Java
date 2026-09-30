@@ -42,7 +42,7 @@ public abstract class Matcher extends IntHolder {
     // Optional char[] sidecar: when non-null, holds the SAME sequence as
     // `bytes` but as raw UTF-16 code units (chars[i] == the 2-byte value at
     // bytes[2i..2i+1] read big-endian). Populated by callers that already
-    // hold the subject as a Java String (GaltaJS's RegExpEngineJoniCustom),
+    // hold the subject as a Java String (GaltaJS's RegExpEngineJoni),
     // exclusively for encodings whose length() always returns 2 - i.e.
     // Encoding.isFixedWidth2() == true. When set, hot opcodes can read a
     // single char at `chars[s >> 1]` instead of reconstructing it from two

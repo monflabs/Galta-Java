@@ -16,7 +16,6 @@
 	<modules>
 		<module>js</module>
 		<module>js-all</module>
-		<module>js-regexp-joni-custom</module>
 		<module>js-debugger</module>
 		<module>js-transpiler-maven</module>
 		<module>js-transpiler-maven-tests</module>

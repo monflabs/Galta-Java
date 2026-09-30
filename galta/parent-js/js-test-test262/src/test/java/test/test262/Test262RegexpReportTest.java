@@ -20,14 +20,13 @@ import org.monflabs.galtajs.rt.builtins.standard.regexp.RegExp;
 import org.monflabs.galtajs.rt.builtins.standard.regexp.RegExpEngine;
 import org.monflabs.galtajs.rt.builtins.standard.regexp.jdk.RegExpEngineJdkJavascript;
 import org.monflabs.galtajs.rt.builtins.standard.regexp.joni.RegExpEngineJoni;
-import org.monflabs.galtajs.rt.builtins.standard.regexp.joni_custom.RegExpEngineJoniCustom;
 import org.monflabs.galtajs.rt.builtins.standard.StandardLibrary;
 
 import org.monflabs.galtajs.test.test262.GlobalTest262Environment;
 
 /**
  * Runs every test262 test whose relative path contains "regexp" (case-insensitive)
- * against all three regex engines (JDK, Joni external, JoniCustom) and writes
+ * against both regex engines (JDK, Joni) and writes
  * a markdown pass/fail report to {@code target/regexp-test262-report.md}.
  *
  * The test itself passes as long as the report is produced - it does NOT fail
@@ -43,7 +42,6 @@ public class Test262RegexpReportTest extends Test262BaseTest {
 	static {
 		ENGINES.put("JDK", RegExpEngineJdkJavascript.factory());
 		ENGINES.put("Joni", RegExpEngineJoni.factory());
-		ENGINES.put("JoniCustom", RegExpEngineJoniCustom.factory());
 	}
 
 	// The regex-engine picked up by createEnvironment() for the current single-file
