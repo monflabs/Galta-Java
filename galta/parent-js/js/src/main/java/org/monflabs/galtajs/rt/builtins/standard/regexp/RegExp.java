@@ -33,6 +33,7 @@ import org.monflabs.util.StringUtil;
 public class RegExp extends NativeObject {
 
     private RegExpEngine regExpEngine;
+    private RegExpConstructor legacyConstructor;
     private String source;
     private String flags;
 
@@ -299,6 +300,26 @@ public class RegExp extends NativeObject {
     	this.flags = validated.flags;
     	this.regExpEngine = env.createRegExpEngine(this);
     	setLastIndex(0);
+    }
+
+    /**
+     * Records a successful match for the legacy static properties
+     * (RegExp.$1-$9, input, lastMatch, lastParen, leftContext, rightContext).
+     * Called by the engines on every successful match.
+     * @param subject the matched string
+     * @param spans [start, end] of the whole match then of each capture, in
+     *        UTF-16 code units, -1 for a capture that did not participate;
+     *        owned by the callee afterwards
+     */
+    public void updateLegacyStaticProperties(String subject, int[] spans) {
+    	RegExpConstructor ctor = legacyConstructor;
+    	if(ctor==null) {
+    		if(!(getEnvironment().getStandardObjects().getConstructor(RegExpConstructor.CLASSNAME) instanceof RegExpConstructor c)) {
+    			return;
+    		}
+    		legacyConstructor = ctor = c;
+    	}
+    	ctor.updateLegacyStaticProperties(subject, spans);
     }
 
     public boolean test(JSRuntimeContext context, String str) {

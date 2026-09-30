@@ -51,6 +51,50 @@ try {
 
 Both engines handle supplementary characters as single code points in `u` mode (`/^.$/u.test('\u{1F4A9}')` is `true`; `testDefaultEngine`).
 
+## Pattern modifiers
+
+The Joni engine implements the ES2025 pattern modifiers: `(?i:...)`, `(?m:...)` and `(?s:...)` turn a flag on for a group, `(?-i:...)` turns it off.
+
+Sample: `doc_examples/RegExpExamples.java` (`testPatternModifiers`)
+
+```js
+/a(?i:b)c/.test('aBc');   // true
+/a(?i:b)c/.test('aBC');   // false: only the group ignores case
+/(?-i:a)b/i.test('aB');   // true
+```
+
+## Early errors
+
+A pattern the specification forbids is a `SyntaxError`, from the `RegExp` constructor and, for a literal, when the script is parsed. With the Joni engine this includes the rules that are easy to miss:
+
+- Unicode property names and values are exact: `\p{Lu}`, `\p{Lowercase_Letter}`, `\p{Script=Greek}` or `\p{sc=Grek}`, but not `\p{lu}`, `\p{ Lu }`, `\p{InGreek}`, a script without `Script=` (`\p{Greek}`) or a property ECMA-262 does not list (`\p{Other_Alphabetic}`).
+- In `u` mode a class escape (`\d`, `\p{...}`) cannot be a range endpoint (`[\p{Hex}-z]`).
+- In `v` mode the characters `( ) [ ] { } / - \ |` must be escaped inside a class, and doubled punctuators (`&&`, `!!`, `##`, ...) are reserved.
+- A lookbehind cannot be quantified (`(?<=a)?`).
+- Once a pattern has a named group, `\k` must be followed by `<name>`.
+
+Sample: `doc_examples/RegExpExamples.java` (`testPropertyNamesAreExact`)
+
+```js
+/\p{Script=Greek}/u.test('α');   // true
+new RegExp('\\p{Greek}', 'u');     // SyntaxError
+new RegExp('\\p{lu}', 'u');        // SyntaxError
+```
+
+## Legacy static properties
+
+`RegExp.$1` to `RegExp.$9`, `RegExp.input` (`$_`), `lastMatch` (`$&`), `lastParen` (`$+`), `leftContext` (``$` ``) and `rightContext` (`$'`) describe the last successful match of any regular expression in the environment, whatever the operation (`exec`, `test`, `match`, `replace`, `search`, `split`), with both engines. They are the web-legacy properties from the "legacy RegExp features" proposal. `input` is writable; the others are read-only.
+
+Sample: `doc_examples/RegExpExamples.java` (`testLegacyStaticProperties`)
+
+```js
+'Released 2026-09'.replace(/(\d{4})-(\d{2})/, '$2/$1');
+RegExp.$1;           // "2026"
+RegExp.$2;           // "09"
+RegExp.lastMatch;    // "2026-09"
+RegExp.leftContext;  // "Released "
+```
+
 ## Compliance and performance (measured snapshot)
 
 The numbers below come from an earlier run of every test262 file whose path contains `regexp` (excluding `intl402/`, `staging/`, the harness and fixtures) in interpreted mode, one engine at a time, when a separate customized Joni engine still existed (it has since been merged into `RegExpEngineJoni`). Reproduce with `mvn test -pl parent-js/js-test-test262 -Dtest=Test262RegexpReportTest`; the per-file matrix is written to `target/regexp-test262-report.md`. The absolute counts drift as gaps get fixed (the `v` flag, for instance, has been implemented on Joni since), so treat them as an order of magnitude.
@@ -78,7 +122,7 @@ For typical validation, parsing and extraction code the JDK engine behaves ident
 
 ## Known gaps of the Joni engine
 
-Joni has no native variable-length lookbehind (`(?<=a|abc)`); GaltaJS emulates it by reverse-scanning a separately compiled fragment (`LookbehindReversal`), so the feature works. The RegExp "modifiers" proposal (`(?i:...)` inline flag groups) is not implemented on any engine. Remaining deviations are tracked in [Known ECMAScript Gaps](/GaltaJS/KnownGaps).
+Joni has no native variable-length lookbehind (`(?<=a|abc)`); GaltaJS emulates it by reverse-scanning a separately compiled fragment (`LookbehindReversal`), so the feature works. Remaining deviations are tracked in [Known ECMAScript Gaps](/GaltaJS/KnownGaps).
 
 ## Choosing
 

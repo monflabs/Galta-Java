@@ -17,7 +17,7 @@ Rules for keeping it accurate:
   `docs/GaltaJS/Architecture/Notes/Test262KnownGapsHistory.md`.
 - Every `Test262BaseTest.FILTER` / `TRANSPILER_ONLY_FILTER` entry must be
   explained here. Since 2026-09-29 `FILTER` lists the negative tests of
-  "Early errors not reported at parse time" below (203 files, grouped by
+  "Early errors not reported at parse time" below (111 files, grouped by
   cause in the same order); `TRANSPILER_ONLY_FILTER` is empty. Remove a file
   from `FILTER` as soon as its early error is implemented.
 - Snippets show the current (non-conformant) behavior next to what the spec
@@ -27,7 +27,7 @@ Rules for keeping it accurate:
 ## Current test262 status
 
 Re-verified 2026-09-29 with the strict negative-test harness (expected
-error type and phase), the 203-file `FILTER` above in place: interpreted
+error type and phase), the 111-file `FILTER` above in place: interpreted
 over the whole suite, optimizer and transpiled per top-level directory
 (`annexB`, `language`, `built-ins`), Maven 3.9.9, JDK 21 (see "How to
 regenerate" below for the commands):
@@ -93,31 +93,11 @@ guard throwing at run time, counted as a pass). The strict check exposed
 2806 files; most were fixed (identifier escapes, assignment targets,
 patterns, RegExp literals, `super`/`new.target`/`arguments` contexts,
 declarations in statement position, redeclarations, labels, class element
-rules, numeric separators, string escapes...). The 203 below remain, all in
+rules, numeric separators, string escapes, RegExp pattern syntax...). The
+111 below remain, all in
 `FILTER`. In each group the engine accepts the code (or reports it only
 when it runs); running the file with `-Dtest262.stripDoNotEvaluate=true`
 shows which.
-
-### RegExp pattern early errors the regexp engine does not report (92 files)
-
-The pattern of a RegExp literal is now validated at parse time, but only
-as strictly as the regexp engine itself (`joni`, customized), which accepts
-some patterns the spec forbids: quantified lookbehinds, `\k` without a
-group name in a non-`u` pattern that has named groups, `\p{...}` with loose
-matching (`\p{ lowercase }`), unsupported binary properties
-(`\p{Other_Alphabetic}`) or as a class range bound (`[--\p{Hex}]`), and the
-characters `v` mode reserves (`/[(]/v`).
-
-```js
-/.(?<=.)?/;          // spec: SyntaxError -- GaltaJS: accepted
-new RegExp("[(]", "v"); // spec: SyntaxError -- GaltaJS: accepted
-```
-
-Files: `built-ins/RegExp/property-escapes/` (55: `loose-matching-*`,
-`unsupported-binary-property-*`, `character-class-range-*`,
-`grammar-extension-In-prefix-*`), `built-ins/RegExp/prototype/unicodeSets/
-breaking-change-from-u-to-v-*` (27 of 28), `language/literals/regexp/` (10:
-`*-lookbehind.js`, `named-groups/invalid-incomplete-groupname{,-6}.js`).
 
 ### ClassHeritage early errors (16 files)
 
@@ -217,24 +197,6 @@ block: `language/statements/class/static-init-invalid-{return,label-dup}.js`.
 | A comma expression after `of` (`for (x of [], [])`), `for (async of ...)` | `language/statements/for-of/head-{decl,expr,var}-no-expr.js`, `head-lhs-async-invalid.js` |
 | `let` then a line break then `let` (a declaration binding `let`) | `language/statements/let/syntax/let-let-declaration-*split-across-two-lines.js` |
 | A function declared in a catch block with the catch parameter's name | `language/statements/try/early-catch-function.js` |
-
-## Not implemented (separate features, not conformance failures)
-
-### RegExp Annex B legacy static properties never track a match
-
-`RegExp.$1`-`$9`, `input`, `lastMatch`, `lastParen`, `leftContext`,
-`rightContext` exist with the right accessor shape and default to `""`, but
-no `exec()`/`match()`/`replace()`/`split()` call updates them. This property
-set is no longer in core ECMA-262 (it lives in the separate legacy-features
-proposal); test262's `annexB/built-ins/RegExp/legacy-accessors/*` files only
-check the accessor shape, so all of them pass and none would flip. A natural
-hook exists in `RegExp.java`'s delegating methods (where all three regex
-engines converge), plus `RegExpPrototype`'s `Symbol.split` fast path.
-
-```js
-/(a)(b)/.exec("ab");
-RegExp.$1; // legacy proposal: "a" -- GaltaJS: ""
-```
 
 ## Performance (not conformance)
 

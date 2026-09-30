@@ -32,21 +32,19 @@ public class RegExpConstructor extends BaseStandardConstructor {
 
 	public static final String CLASSNAME = "RegExp";
 
-	// Annex B.2.2 legacy static properties ([[RegExpInput]], [[RegExpLastMatch]],
-	// [[RegExpLastParen]], [[RegExpLeftContext]], [[RegExpRightContext]],
-	// [[RegExpParen1]]..[[RegExpParen9]]) - default to "" per spec. NOT wired
-	// to the actual regex engines' exec/match/replace/split (a real match
-	// never updates these yet - see docs/GaltaJS/KnownGaps.md); only the
-	// accessor SHAPE (get/set functions, SameValue(%RegExp%,this) receiver
-	// check, enumerable:false/configurable:true) is implemented, matching
-	// test262's legacy-accessors/* coverage (prop-desc/this-*-constructor.js -
-	// none of which perform an actual match).
+	// Legacy static properties (the "legacy RegExp features" proposal, once
+	// Annex B): [[RegExpInput]], [[RegExpLastMatch]], [[RegExpLastParen]],
+	// [[RegExpLeftContext]], [[RegExpRightContext]], [[RegExpParen1-9]], ""
+	// until the first match. Every successful match of a RegExp created in
+	// this environment calls updateLegacyStaticProperties() (see
+	// RegExp.updateLegacyStaticProperties()). The match is kept as the
+	// subject plus its capture spans and the strings are only built when an
+	// accessor reads them, so a match costs one small array copy.
 	private String legacyInput = "";
-	private String legacyLastMatch = "";
-	private String legacyLastParen = "";
-	private String legacyLeftContext = "";
-	private String legacyRightContext = "";
-	private String[] legacyParens = new String[]{"","","","","","","","",""};
+	private String legacySubject = "";
+	// [start, end] of the whole match, then of each capture (-1 when the
+	// capture did not participate), in UTF-16 code units
+	private int[] legacySpans;
 
 	public RegExpConstructor(JSEnvironment env) {
 		super(env,CLASSNAME,RegExpPrototype.get(env),2);
@@ -61,27 +59,55 @@ public class RegExpConstructor extends BaseStandardConstructor {
 		setOwnProperty("input", true, false, inputGetter, inputSetter);
 		setOwnProperty("$_", true, false, inputGetter, inputSetter);
 
-		BaseGetter.Getter lastMatchGetter = (base,key) -> { requireSelf(base); return legacyLastMatch; };
+		BaseGetter.Getter lastMatchGetter = (base,key) -> { requireSelf(base); return legacySpan(0); };
 		setOwnProperty("lastMatch", true, false, lastMatchGetter, null);
 		setOwnProperty("$&", true, false, lastMatchGetter, null);
 
-		BaseGetter.Getter lastParenGetter = (base,key) -> { requireSelf(base); return legacyLastParen; };
+		BaseGetter.Getter lastParenGetter = (base,key) -> {
+			requireSelf(base);
+			int n = legacySpans==null ? 0 : legacySpans.length/2 - 1;
+			return n>0 ? legacySpan(n) : "";
+		};
 		setOwnProperty("lastParen", true, false, lastParenGetter, null);
 		setOwnProperty("$+", true, false, lastParenGetter, null);
 
-		BaseGetter.Getter leftContextGetter = (base,key) -> { requireSelf(base); return legacyLeftContext; };
+		BaseGetter.Getter leftContextGetter = (base,key) -> {
+			requireSelf(base);
+			return legacySpans==null ? "" : legacySubject.substring(0,legacySpans[0]);
+		};
 		setOwnProperty("leftContext", true, false, leftContextGetter, null);
 		setOwnProperty("$`", true, false, leftContextGetter, null);
 
-		BaseGetter.Getter rightContextGetter = (base,key) -> { requireSelf(base); return legacyRightContext; };
+		BaseGetter.Getter rightContextGetter = (base,key) -> {
+			requireSelf(base);
+			return legacySpans==null ? "" : legacySubject.substring(legacySpans[1]);
+		};
 		setOwnProperty("rightContext", true, false, rightContextGetter, null);
 		setOwnProperty("$'", true, false, rightContextGetter, null);
 
 		for(int i=0; i<9; i++) {
 			final int idx = i;
-			BaseGetter.Getter parenGetter = (base,key) -> { requireSelf(base); return legacyParens[idx]; };
+			BaseGetter.Getter parenGetter = (base,key) -> { requireSelf(base); return legacySpan(idx+1); };
 			setOwnProperty("$"+(i+1), true, false, parenGetter, null);
 		}
+	}
+
+	// UpdateLegacyRegExpStaticProperties(C, S, startIndex, endIndex,
+	// capturedValues). Takes ownership of `spans`.
+	public void updateLegacyStaticProperties(String subject, int[] spans) {
+		this.legacyInput = subject;
+		this.legacySubject = subject;
+		this.legacySpans = spans;
+	}
+
+	// The text of span `group` (0 = the whole match), "" if there is none or
+	// the capture did not participate (an undefined capturedValue is "").
+	private String legacySpan(int group) {
+		int[] spans = legacySpans;
+		if(spans==null || 2*group+1>=spans.length || spans[2*group]<0) {
+			return "";
+		}
+		return legacySubject.substring(spans[2*group],spans[2*group+1]);
 	}
 
 	// GetLegacyRegExpStaticProperty/SetLegacyRegExpStaticProperty's shared

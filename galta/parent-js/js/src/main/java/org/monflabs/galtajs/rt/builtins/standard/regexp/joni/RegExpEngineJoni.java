@@ -303,9 +303,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 
 		String source = regExp.getSource();
 		validateDuplicateGroupNames(source);
-		if (regExp.isUnicode() || regExp.isUnicodeSets()) {
-			validateNoQuantifiableAssertions(source);
-		}
+		validateNoQuantifiableAssertions(source, regExp.isUnicode() || regExp.isUnicodeSets());
 		if (regExp.isUnicode()) {
 			// "v" mode is excluded: its character classes go through
 			// VClassParser's own separate grammar entirely (see the "["
@@ -1602,14 +1600,15 @@ public class RegExpEngineJoni implements RegExpEngine {
 	// "(?!...)" directly followed by a quantifier, e.g. "(?=.)*") is a
 	// sloppy-mode-only Annex B extension - under the "u"/"v" flag it must be
 	// an early SyntaxError instead (confirmed via
-	// unicode_restricted_quantifiable_assertion.js). Note lookbehind
-	// ("(?<=...)"/"(?<!...)") is excluded entirely: it's never quantifiable,
-	// in EITHER mode - that's the base Term grammar, not part of the Annex B
-	// extension being restricted here. Joni itself already accepts the
-	// syntax unconditionally (it's how the sloppy-mode case keeps working,
-	// e.g. lookahead-quantifier-match-groups.js), so this is purely an
-	// extra source-level rejection, not a translation change.
-	private void validateNoQuantifiableAssertions(String source) {
+	// unicode_restricted_quantifiable_assertion.js). A lookbehind
+	// ("(?<=...)"/"(?<!...)") is never quantifiable, in EITHER mode - that's
+	// the base Term grammar, not part of the Annex B extension - so it is
+	// checked regardless of unicodeMode (e.g. "/.(?<=.)?/" is a SyntaxError).
+	// Joni itself accepts both syntaxes unconditionally (it's how the
+	// sloppy-mode lookahead case keeps working, e.g. lookahead-quantifier-
+	// match-groups.js), so this is purely an extra source-level rejection,
+	// not a translation change.
+	private void validateNoQuantifiableAssertions(String source, boolean unicodeMode) {
 		int len = source.length();
 		boolean inClass = false;
 		for (int i = 0; i < len; i++) {
@@ -1625,7 +1624,9 @@ public class RegExpEngineJoni implements RegExpEngine {
 			if (c == '[') {
 				inClass = true;
 			} else if (c == '(' && i + 2 < len && source.charAt(i + 1) == '?'
-					&& (source.charAt(i + 2) == '=' || source.charAt(i + 2) == '!')) {
+					&& ((unicodeMode && (source.charAt(i + 2) == '=' || source.charAt(i + 2) == '!'))
+						|| (i + 3 < len && source.charAt(i + 2) == '<'
+							&& (source.charAt(i + 3) == '=' || source.charAt(i + 3) == '!')))) {
 				int close;
 				try {
 					close = LookbehindReversal.scanGroup(source, i);
@@ -1866,9 +1867,10 @@ public class RegExpEngineJoni implements RegExpEngine {
 	// not a leading/trailing literal dash), is only valid via Annex B's
 	// non-unicode leniency (e.g. legacy "[\d-a]") - under the "u" flag it's
 	// a required SyntaxError instead (confirmed via
-	// unicode_restricted_character_class_escape.js). Only these 6 shorthand
-	// escapes are covered - a Unicode property escape (\p{...}/\P{...})
-	// adjacent to "-" is a separate, not-yet-investigated case.
+	// unicode_restricted_character_class_escape.js). A Unicode property
+	// escape (\p{...}/\P{...}) is a CharacterClassEscape too, so it is
+	// rejected the same way on either side of the "-" (e.g. "[\p{Hex}-a]",
+	// "[--\p{Hex}]").
 	private void validateNoClassEscapeInRange(String source) {
 		int len = source.length();
 		boolean inCC = false;
@@ -1892,15 +1894,30 @@ public class RegExpEngineJoni implements RegExpEngine {
 				continue;
 			}
 			if (c == '-' && i > classStart && i + 1 < len && source.charAt(i + 1) != ']') {
-				boolean leadingEscape = i >= 2 && source.charAt(i - 2) == '\\'
-						&& isClassEscapeLetter(source.charAt(i - 1));
+				boolean leadingEscape = (i >= 2 && source.charAt(i - 2) == '\\'
+						&& isClassEscapeLetter(source.charAt(i - 1)))
+						|| endsWithPropertyEscape(source, i);
 				boolean trailingEscape = i + 2 < len && source.charAt(i + 1) == '\\'
-						&& isClassEscapeLetter(source.charAt(i + 2));
+						&& (isClassEscapeLetter(source.charAt(i + 2))
+							|| source.charAt(i + 2) == 'p' || source.charAt(i + 2) == 'P');
 				if (leadingEscape || trailingEscape) {
 					throw RuntimeUtil.syntaxError("Invalid character class range containing a CharacterClassEscape");
 				}
 			}
 		}
+	}
+
+	// True iff the class atom ending just before `end` is a "\p{...}"/
+	// "\P{...}" property escape (its backslash not itself escaped).
+	private static boolean endsWithPropertyEscape(String source, int end) {
+		if (end < 1 || source.charAt(end - 1) != '}') return false;
+		int brace = source.lastIndexOf('{', end - 1);
+		if (brace < 2 || source.indexOf('}', brace) != end - 1) return false;
+		char p = source.charAt(brace - 1);
+		if ((p != 'p' && p != 'P') || source.charAt(brace - 2) != '\\') return false;
+		int backslashes = 0;
+		for (int k = brace - 2; k >= 0 && source.charAt(k) == '\\'; k--) backslashes++;
+		return (backslashes & 1) == 1;
 	}
 
 	private static boolean isClassEscapeLetter(char c) {
@@ -2269,12 +2286,14 @@ public class RegExpEngineJoni implements RegExpEngine {
 							result.append('k');
 							i++;
 						} else {
-							if (!validNamedBackref && unicodeMode) {
+							if (!validNamedBackref) {
 								// Same story as \c above: \k not followed by a
 								// GroupName's opening "<" is an early SyntaxError in
-								// unicode mode - isJsRegexEscape() below would
-								// otherwise let it fall through as an unchecked
-								// passthrough.
+								// unicode mode, and in a non-unicode pattern that
+								// has a named group (Annex B's IdentityEscape
+								// excludes 'k' there) - isJsRegexEscape() below
+								// would otherwise let it fall through as an
+								// unchecked passthrough.
 								throw RuntimeUtil.syntaxError("Invalid escape sequence: \\k");
 							}
 							result.append('\\').append(next);
@@ -2476,23 +2495,25 @@ public class RegExpEngineJoni implements RegExpEngine {
 							} else {
 								// A binary-property-of-strings name (\p{RGI_Emoji},
 								// \p{Basic_Emoji}, ...) is only meaningful as a
-								// standalone atom under the "v" flag - u-mode falls
-								// straight through to the Joni-passthrough branch
-								// below, which already correctly rejects it (Joni
-								// doesn't recognize the name either) exactly as it
-								// did before this branch existed, preserving
-								// Basic_Emoji-negative-u.js's expected SyntaxError.
+								// standalone atom under the "v" flag.
 								String stringPropertyFragment = regExp.isUnicodeSets()
 										? translateStringPropertyEscape(propExpr, negated)
 										: null;
 								if (stringPropertyFragment != null) {
 									result.append(stringPropertyFragment);
 								} else {
-									String joniProp = translatePropertyForJoni(propExpr);
-									if (joniProp == null) {
-										throw RuntimeUtil.syntaxError("Invalid Unicode property escape: \\{0}'{'{1}'}'", String.valueOf(next), propExpr);
-									}
-									result.append(negated ? "\\P{" : "\\p{").append(joniProp).append('}');
+									// The data table holds every property name and
+									// value ECMA-262 allows (its tables of General
+									// Category values, scripts and binary
+									// properties, with their aliases), matched
+									// exactly: anything else - loose matching
+									// ("\p{ Lu }", "\p{lu}"), an "In"/"Is" prefix,
+									// a script without "Script=", a Unicode
+									// property the spec does not expose
+									// (Other_Alphabetic, Hyphen) - is an early
+									// SyntaxError, where Joni's own lookup would
+									// accept it.
+									throw RuntimeUtil.syntaxError("Invalid Unicode property escape: \\{0}'{'{1}'}'", String.valueOf(next), propExpr);
 								}
 							}
 						} else if (unicodeMode) {
@@ -2722,24 +2743,6 @@ public class RegExpEngineJoni implements RegExpEngine {
 			}
 		}
 		return result.toString();
-	}
-
-	private static String translatePropertyForJoni(String propExpr) {
-		int eqIdx = propExpr.indexOf('=');
-		if (eqIdx >= 0) {
-			String prop = propExpr.substring(0, eqIdx).trim();
-			String value = propExpr.substring(eqIdx + 1).trim();
-			switch (prop) {
-				case "General_Category": case "gc":
-				case "Script": case "sc":
-				case "Script_Extensions": case "scx":
-					return value;
-				default:
-					return null;
-			}
-		}
-		// Lone value - pass through directly to Joni (it handles Lu, Letter, Greek, Alphabetic, etc.)
-		return propExpr;
 	}
 
 	// Ground-truth codepoint data (the same unicode-properties.txt table built
@@ -3906,6 +3909,19 @@ public class RegExpEngineJoni implements RegExpEngine {
 		return Math.max(0, byteIndex) / 2;
 	}
 
+	// Reports a successful match to the legacy static properties (RegExp.$1,
+	// lastMatch, ...) - see RegExp.updateLegacyStaticProperties().
+	private void recordLegacyMatch(String str, Region region) {
+		int n = region.getNumRegs();
+		int[] spans = new int[2 * n];
+		for (int k = 0; k < n; k++) {
+			int beg = region.getBeg(k);
+			spans[2 * k] = beg < 0 ? -1 : beg / 2;
+			spans[2 * k + 1] = beg < 0 ? -1 : region.getEnd(k) / 2;
+		}
+		regExp.updateLegacyStaticProperties(str, spans);
+	}
+
 	private boolean execInternal(String str) {
 		return execInternal(str, true);
 	}
@@ -3961,9 +3977,17 @@ public class RegExpEngineJoni implements RegExpEngine {
 				lastRegion = region;
 				lastMatchStart = byteIndexToCharIndex(str, bytes, region.getBeg(0));
 				lastMatchEnd = byteIndexToCharIndex(str, bytes, region.getEnd(0));
+				recordLegacyMatch(str, region);
 			} else {
 				lastMatchStart = byteIndexToCharIndex(str, bytes, matcher.getBegin());
 				lastMatchEnd = byteIndexToCharIndex(str, bytes, matcher.getEnd());
+				// A pattern without capture groups has no Region at all
+				Region region = matcher.getRegion();
+				if (region != null) {
+					recordLegacyMatch(str, region);
+				} else {
+					regExp.updateLegacyStaticProperties(str, new int[]{lastMatchStart, lastMatchEnd});
+				}
 			}
 
 			if (global || sticky) {
@@ -4036,6 +4060,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 			lastRegion = region;
 			lastMatchStart = found.overallStart;
 			lastMatchEnd = found.overallEnd;
+			recordLegacyMatch(str, region);
 			if (global || sticky) {
 				regExp.setLastIndex(lastMatchEnd);
 			}
@@ -4578,6 +4603,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 			// Symbol.split/separator-regexp.js: "x".split(/$/) must stay
 			// ["x"], not ["x", ""]).
 			if (matchStart >= bytes.length) break;
+			recordLegacyMatch(str, region);
 
 			if (matchEnd == p) {
 				// No progress since the last split point - a no-op match,
@@ -4631,6 +4657,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 			Region region = matcher.getEagerRegion();
 			int matchStart = region.getBeg(0);
 			int matchEnd = region.getEnd(0);
+			recordLegacyMatch(str, region);
 
 			String matched = fromUtf16BEBytes(bytes, matchStart, matchEnd - matchStart);
 			a.arrayAdd(matched);
@@ -4689,6 +4716,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 				: matcher.search(0, bytes.length, Option.NONE);
 		if (searchResult >= 0) {
 			Region region = matcher.getEagerRegion();
+			recordLegacyMatch(str, region);
 			return byteIndexToCharIndex(str, bytes, region.getBeg(0));
 		}
 		return -1;

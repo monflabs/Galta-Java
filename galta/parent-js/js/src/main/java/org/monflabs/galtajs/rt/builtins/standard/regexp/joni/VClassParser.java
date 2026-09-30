@@ -334,9 +334,23 @@ final class VClassParser {
 			}
 		}
 
+		// ClassSetCharacter: a ClassSetSyntaxCharacter must be escaped, and a
+		// ClassSetReservedDoublePunctuator ("&&", "!!", "##", ...) may not
+		// appear unescaped at all ("[" and "\\" were handled above, "]" ends
+		// the class and "&&"/"--" operators are consumed by the caller).
+		if (CLASS_SET_SYNTAX_CHARACTERS.indexOf(c) >= 0) {
+			throw RuntimeUtil.syntaxError("Invalid character in a 'v'-mode character class: {0}", String.valueOf(c));
+		}
+		if (CLASS_SET_RESERVED_DOUBLE_PUNCTUATORS.indexOf(c) >= 0 && i + 1 < n && source.charAt(i + 1) == c) {
+			throw RuntimeUtil.syntaxError("Invalid set operation in a 'v'-mode character class: {0}{0}", String.valueOf(c));
+		}
+
 		int cp = source.codePointAt(i);
 		return charOperand(cp, i + Character.charCount(cp));
 	}
+
+	private static final String CLASS_SET_SYNTAX_CHARACTERS = "(){}/-|";
+	private static final String CLASS_SET_RESERVED_DOUBLE_PUNCTUATORS = "&!#$%*+,.:;<=>?@^`~";
 
 	private Operand parsePropertyEscape(String source, int i, char next) {
 		int n = source.length();

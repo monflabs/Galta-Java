@@ -77,6 +77,12 @@ First public release: Galta is published to Maven Central under the
   the stock `org.jruby.joni:joni` artifact is no longer referenced. Non-unicode
   patterns now use the fixed-width fast path (char reads, `String.indexOf`
   searches) and `test()` no longer builds capture regions.
+- Regular expressions now report every pattern early error test262 checks:
+  exact Unicode property names (`\p{lu}`, `\p{Greek}`, `\p{Other_Alphabetic}`
+  are `SyntaxError`s), class escapes as `u`-mode range endpoints, the `v`-mode
+  reserved class characters, quantified lookbehinds and a bare `\k` in a
+  pattern with named groups. The legacy static properties (`RegExp.$1`-`$9`,
+  `lastMatch`, `leftContext`, ...) now track the last match.
 - Modules: a missing export is a `SyntaxError`, a rejected top-level `await` is
   reported, and modules waiting on an async dependency run in the
   specification's order.

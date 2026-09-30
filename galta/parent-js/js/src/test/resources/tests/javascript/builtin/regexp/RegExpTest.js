@@ -648,9 +648,8 @@ test('RegExp unicode property Script', function() {
     const re3 = new RegExp('\\p{sc=Cyrillic}', 'u');
     assertNotNull(re3.exec('А')); // Cyrillic A
 
-    // Lone script name
-    const re4 = new RegExp('\\p{Greek}', 'u');
-    assertNotNull(re4.exec('α'));
+    // A script name without "Script=" ("\\p{Greek}") is a SyntaxError in
+    // the spec; see RegExpJoniEarlyErrorsTest.js.
 });
 
 //
@@ -1627,4 +1626,50 @@ test('RegExp Symbol.match/matchAll/split/replace generic dispatch', function() {
     assertEquals('$1 literal', /a/[Symbol.replace]('a', '$1 literal'));
     assertEquals('a$b', /x/[Symbol.replace]('axb', '$$'));
     assertEquals('a[a|c]c', /b/[Symbol.replace]('abc', "[$`|$']"));
+});
+
+// Legacy static properties (RegExp.$1-$9, input/$_, lastMatch/$&,
+// lastParen/$+, leftContext/$`, rightContext/$') track the last successful
+// match of any RegExp, whatever the operation.
+test('RegExp legacy static properties', function() {
+    /(\d+)-(\d+)/.exec('call 555-1234 now');
+    assertEquals('555', RegExp.$1);
+    assertEquals('1234', RegExp.$2);
+    assertEquals('', RegExp.$3);
+    assertEquals('555-1234', RegExp.lastMatch);
+    assertEquals('555-1234', RegExp['$&']);
+    assertEquals('1234', RegExp.lastParen);
+    assertEquals('call ', RegExp.leftContext);
+    assertEquals(' now', RegExp.rightContext);
+    assertEquals('call 555-1234 now', RegExp.input);
+    assertEquals('call 555-1234 now', RegExp.$_);
+
+    // A failed match leaves them unchanged
+    assertNull(/zzz/.exec('abc'));
+    assertEquals('555', RegExp.$1);
+
+    // test(), including a pattern without groups
+    assertTrue(/b+/.test('abbbc'));
+    assertEquals('bbb', RegExp.lastMatch);
+    assertEquals('', RegExp.$1);
+    assertEquals('', RegExp.lastParen);
+    assertTrue(/(x)(y)?/.test('-x-'));
+    assertEquals('x', RegExp.$1);
+    assertEquals('', RegExp.$2); // a capture that did not participate is ""
+
+    // replace/match/search/split: the last match wins
+    'a1b2c3'.replace(/[a-z](\d)/g, '');
+    assertEquals('3', RegExp.$1);
+    assertEquals('c3', RegExp.lastMatch);
+    'x10y20'.match(/\d+/g);
+    assertEquals('20', RegExp.lastMatch);
+    'hello world'.search(/o\s(w)/);
+    assertEquals('w', RegExp.$1);
+    'a,b;c'.split(/([,;])/);
+    assertEquals(';', RegExp.$1);
+
+    // input is writable; the other properties are read-only accessors
+    RegExp.input = 'changed';
+    assertEquals('changed', RegExp.$_);
+    assertEquals(';', RegExp.$1);
 });

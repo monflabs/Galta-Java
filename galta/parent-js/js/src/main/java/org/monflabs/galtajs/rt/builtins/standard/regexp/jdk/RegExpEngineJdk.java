@@ -125,6 +125,7 @@ public class RegExpEngineJdk implements RegExpEngine {
            	ok = matcher.find(index);
         }
         if(ok) {
+            recordLegacyMatch(str, matcher);
             if(global || sticky) {
             	// Per RegExpBuiltinExec, lastIndex is set to the match's end
             	// index unconditionally - even for a zero-width match. The
@@ -148,6 +149,18 @@ public class RegExpEngineJdk implements RegExpEngine {
         return false;
     }
     
+    // Reports a successful match to the legacy static properties (RegExp.$1,
+    // lastMatch, ...) - see RegExp.updateLegacyStaticProperties().
+    private void recordLegacyMatch(String str, java.util.regex.MatchResult m) {
+    	int n = m.groupCount() + 1;
+    	int[] spans = new int[2 * n];
+    	for (int k = 0; k < n; k++) {
+    		spans[2 * k] = m.start(k);
+    		spans[2 * k + 1] = m.end(k);
+    	}
+    	regExp.updateLegacyStaticProperties(str, spans);
+    }
+
     @Override
 	public JSArray exec(JSRuntimeContext context, String str) {
         try {
@@ -369,6 +382,7 @@ public class RegExpEngineJdk implements RegExpEngine {
 
 
             if(ok) {
+                recordLegacyMatch(str, matcher);
                 if(global || sticky) {
                 	regExp.setLastIndex(matcher.end());
                 }
@@ -425,6 +439,7 @@ public class RegExpEngineJdk implements RegExpEngine {
             boolean brokeEarly = false;
 
             while((limit <= 0 || resultCount < limit) && m.find()) {
+            	recordLegacyMatch(str, m);
             	int start = m.start();
             	int end = m.end();
 
@@ -485,6 +500,7 @@ public class RegExpEngineJdk implements RegExpEngine {
         		Matcher m = getPattern().matcher(str);
             	JSArray a = JSArray.create(getEnvironment());
             	while(m.find()) {
+            		recordLegacyMatch(str, m);
             		a.arrayAdd(m.group());
             	}
             	return a.arrayLength()>0 ? a : null;
@@ -533,6 +549,7 @@ public class RegExpEngineJdk implements RegExpEngine {
             // RegExpEngineJoni).
             boolean ok = regExp.isSticky() ? m.lookingAt() : m.find();
             if(ok) {
+            	recordLegacyMatch(str, m);
             	return m.start();
             } else {
             	return -1;
@@ -694,6 +711,7 @@ public class RegExpEngineJdk implements RegExpEngine {
         StringBuilder result = new StringBuilder();
         int start = 0;
         while (matcher.find()) {
+            recordLegacyMatch(str, matcher);
             // copy from searchStart to matchStart
             result.append(str, start, matcher.start());
             start = matcher.end();

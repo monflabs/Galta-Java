@@ -320,6 +320,7 @@ public class GaltaJSTestSuite {
 		suite.addTestSuite(tests.javascript.builtin.regexp.RegExpJDKTest.class);
 		suite.addTestSuite(tests.javascript.builtin.regexp.RegExpJoniTest.class);
 		suite.addTestSuite(tests.javascript.builtin.regexp.RegExpJoniDuplicateNamedGroupsTest.class);
+		suite.addTestSuite(tests.javascript.builtin.regexp.RegExpJoniEarlyErrorsTest.class);
 		suite.addTestSuite(tests.javascript.builtin.regexp.RegExpJoniLoneSurrogateTest.class);
 		suite.addTestSuite(tests.javascript.builtin.regexp.RegExpJoniRepeatCaptureResetTest.class);
 		
