@@ -18,8 +18,8 @@ mvn -pl parent-js/js-test-rhino -Pfetch-externals generate-test-resources
 
 Maven surefire is configured to run only `AllEcmaTests`:
 ```bash
+# from galta/
 mvn test -pl parent-js/js-test-rhino
-# from java/
 ```
 
 **To run or debug a single test file**, edit `EcmaOneTest.TEST_FILE` and run the class:
@@ -38,12 +38,13 @@ tests/
 ├── AllEcmaInterpretedTests   # Interpreted mode only
 ├── AllEcmaInterpretedOptimizedTests  # Interpreter + optimizer
 ├── AllEcmaTranspilerTests    # Transpiler (JS→Java) mode
-└── ecma/
+├── ecma/
 │   ├── EcmaAllTest           # Runs ecma/ and ecma_2/ folders
+│   ├── EcmaAllDevelopingTest # Same, for work in progress (not in the suites)
 │   ├── EcmaOneTest           # Runs a single file (edit TEST_FILE)
-│   ├── EcmaBaseTest          # Shared logic + FILTER and FILTER_ERRORS arrays
-│   └── RhinoTestEnvironment  # JSEnvironment with Rhino-compatible libraries
+│   └── EcmaBaseTest          # Shared logic + FILTER and FILTER_ERRORS arrays
 ├── rhino/
+│   ├── RhinoTestCase         # Base of the two tests below
 │   ├── RhinoShellTest        # Rhino shell compatibility tests
 │   └── JavaPackageTest       # Java package access from scripts
 └── rhinoes6_testsrc/
@@ -52,14 +53,19 @@ tests/
     └── JsTestOneTest         # Single-file runner for ES6 tests
 ```
 
+The environment and the Rhino-specific libraries are in `org.monflabs.galtajs.test.rhino` (same test source tree).
+
 ## Test Environment
 
-`RhinoTestEnvironment` extends `JSEnvironment` and registers:
+`RhinoTestEnvironment.newBuilder()` returns a `JSEnvironment.Builder` (with `supportParseIntOctal(true)`) that registers:
 - `StandardLibrary` — standard GaltaJS stdlib
 - `UnitTestLibrary` — `assertEquals`, `assertThrows`, etc.
 - `RhinoShellLibrary` — `print`, `load`, `gc`, `readFile`
 - `RhinoTestLibrary` — Rhino-specific test helpers
 - `JavaPackageLibrary` — `java.lang.*` access from scripts
+- `JavaLibrary` — Java interop
+
+`RhinoTestEnvironment.create()` builds it and runs the `toSource()` polyfill (`polyfills/toSource.js`).
 
 The environment is built without `JSEnvironment.Builder.enableGaltaJSExtensions()`, so tests run in standard (non-GaltaJS-extended) mode.
 
