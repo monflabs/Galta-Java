@@ -264,4 +264,38 @@ public class StringUtilTest extends ProjectTestCase {
 		assertEquals(0, StringUtil.compareToIgnoreCase("ABC", "abc"));
 		assertTrue(StringUtil.compareToIgnoreCase("", "a")<0);
 	}
+
+	public void testJdkBackedHelpersKeepTheirGuards() throws Exception {
+		// Now backed by String.replace()/repeat()/stripLeading(): same results, same guards
+		assertEquals("", org.monflabs.util.StringUtil.replaceAll(null, "a", "b"));
+		assertEquals("abc", org.monflabs.util.StringUtil.replaceAll("abc", "", "x"));
+		assertEquals("xbcxbc", org.monflabs.util.StringUtil.replaceAll("abcabc", "a", "x"));
+		assertEquals("bcbc", org.monflabs.util.StringUtil.replaceAll("abcabc", "a", null));
+		assertEquals("a.b", org.monflabs.util.StringUtil.replaceAll("a*b", "*", "."));   // literal, not a regex
+		assertEquals("", org.monflabs.util.StringUtil.replaceAll(null, 'a', 'b'));
+		assertEquals("bbc", org.monflabs.util.StringUtil.replaceAll("abc", 'a', 'b').replace('a', 'b'));
+		assertEquals("00042", org.monflabs.util.StringUtil.padLeft("42", 5, '0'));
+		assertEquals("42...", org.monflabs.util.StringUtil.padRight("42", 5, '.'));
+		assertEquals("---", org.monflabs.util.StringUtil.padLeft(null, 3, '-'));
+		assertEquals("toolong", org.monflabs.util.StringUtil.padRight("toolong", 3, '-'));
+		assertEquals("x \t", org.monflabs.util.StringUtil.trimLeft(" \t\n\u2003x \t"));
+		assertNull(org.monflabs.util.StringUtil.trimLeft(null));
+		java.io.File f = java.io.File.createTempFile("fileutil", ".txt");
+		try {
+			// Malformed bytes are replaced, as with a Reader (Files.readString() would throw)
+			java.nio.file.Files.write(f.toPath(), new byte[] {'a', (byte)0xC3, 'b'});
+			assertEquals("a\ufffdb", org.monflabs.util.FileUtil.readContent(f));
+			org.monflabs.util.FileUtil.setContent(f, "\u00e9t\u00e9");
+			assertEquals("\u00e9t\u00e9", org.monflabs.util.FileUtil.readContent(f));
+			java.io.File g = java.io.File.createTempFile("fileutil", ".txt");
+			try {
+				org.monflabs.util.FileUtil.copy(f, g);
+				assertEquals("\u00e9t\u00e9", org.monflabs.util.FileUtil.readContent(g));
+			} finally {
+				g.delete();
+			}
+		} finally {
+			f.delete();
+		}
+	}
 }

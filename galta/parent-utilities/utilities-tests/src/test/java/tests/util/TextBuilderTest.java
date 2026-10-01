@@ -77,4 +77,15 @@ public class TextBuilderTest extends ProjectTestCase {
 		b.append(12).append(' ').append(34L);
 		assertEquals("12 34", b.toString());
 	}
+
+	public void testBulkAppendKeepsIndentationAndLines() throws Exception {
+		org.monflabs.util.TextBuilder t = new org.monflabs.util.TextBuilder();
+		t.incIndent();
+		t.append("a\r\nbb\n\nccc");
+		t.append("dd\n");
+		t.append("");
+		t.append("e");
+		assertEquals("  a\n  bb\n\n  cccdd\n  e", t.toString());
+		assertEquals(5, t.getCurrentLine());
+	}
 }

@@ -63,20 +63,8 @@ public class StringUtil {
     }
 
     public static final String trimLeft(String s) {
-        // Call the String method which more efficient
-        if (s!=null) {
-            int sz = s.length();
-            int st = 0;
-            while( (st<sz) && Character.isWhitespace(s.charAt(st)) ) {
-            	st++;
-            }
-            if(st>0) {
-            	return s.substring(st, sz);
-            }
-            return s;
-        } else {
-            return null;
-        }
+        // stripLeading() drops the same characters (Character.isWhitespace())
+        return s!=null ? s.stripLeading() : null;
     }
     
     public static boolean containsIgnoreCase(String str, String searchStr) {
@@ -146,17 +134,14 @@ public class StringUtil {
         if( s==null ) {
             return EMPTY_STRING_ARRAY;
         }
-        return splitString( null, 0, s, 0, sep, trim );
-    }
-    private static String[] splitString( String[] result, int count, String s, int pos, char sep, boolean trim ) {
         // Iterative (was recursive, one frame per separator - a long input overflowed the stack)
-        int n = count+1;
-        for( int p=s.indexOf(sep,pos); p>=0; p=s.indexOf(sep,p+1) ) {
+        int n = 1;
+        for( int p=s.indexOf(sep); p>=0; p=s.indexOf(sep,p+1) ) {
             n++;
         }
-        result = new String[n];
-        int i = count;
-        int start = pos;
+        String[] result = new String[n];
+        int i = 0;
+        int start = 0;
         for(;;) {
             int newPos = s.indexOf(sep,start);
             String part = newPos>=0 ? s.substring(start,newPos) : s.substring(start);
@@ -262,23 +247,8 @@ public class StringUtil {
 		if (isEmpty(value)) {
 			return source;
 		}
-		if (replace == null) {
-			replace = "";
-		}
-		int idx = source.indexOf(value);
-		if (idx >= 0) {
-			StringBuilder b = new StringBuilder(source.length()+64);
-			b.append(source, 0, idx);
-			int next;
-			do {
-				b.append(replace);
-				next = idx + value.length();
-				idx = source.indexOf(value, next);
-				b.append(source, next, idx >= 0 ? idx : source.length());
-			} while (idx >= 0);
-			return b.toString();
-		}
-		return source;
+		// String.replace(CharSequence,CharSequence) is literal (no regular expression)
+		return source.replace(value, replace != null ? replace : "");
 	}
 	
 	public static final String replaceFirst(String source, char value, char replace) {
@@ -301,20 +271,7 @@ public class StringUtil {
 		if (isEmpty(source)) {
 			return "";
 		}
-		int idx = source.indexOf(value);
-		if (idx >= 0) {
-			StringBuilder b = new StringBuilder(source.length());
-			b.append(source, 0, idx);
-			int next;
-			do {
-				b.append(replace);
-				next = idx + 1;
-				idx = source.indexOf(value, next);
-				b.append(source, next, idx >= 0 ? idx : source.length());
-			} while (idx >= 0);
-			return b.toString();
-		}
-		return source;
+		return source.replace(value, replace);
 	}
 	
 	public static String normalizeLineBreaks(String s) {
@@ -334,13 +291,7 @@ public class StringUtil {
     	}
     	int slen = s.length();
     	if(slen<len) {
-    		StringBuilder b = new StringBuilder(len);
-    		int count = len-slen;
-    		for(int i=0; i<count; i++) {
-    			b.append(c);
-    		}
-    		b.append(s);
-    		return b.toString();
+    		return String.valueOf(c).repeat(len-slen).concat(s);
     	}
     	return s;
     }
@@ -350,14 +301,8 @@ public class StringUtil {
     		s = "";
     	}
     	int slen = s.length();
-    	if(s.length()<len) {
-    		StringBuilder b = new StringBuilder(len);
-    		b.append(s);
-    		int count = len-slen;
-    		for(int i=0; i<count; i++) {
-    			b.append(c);
-    		}
-    		return b.toString();
+    	if(slen<len) {
+    		return s.concat(String.valueOf(c).repeat(len-slen));
     	}
     	return s;
     }

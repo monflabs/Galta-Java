@@ -24,95 +24,18 @@ import java.math.BigInteger;
 public abstract class TypeUtil {
 	
 	//
-	// Number conversion
-	// Based on the JavaScript specification
-	// Are these needed?? Should be removed!!
+	// Number conversion: the Java narrowing conversions (used by GaltaJS)
 	//
 	public static byte toByte(Number n) {
-		// Not needed
-//		if(n instanceof Double d) {
-//			if(d.isNaN()) {
-//				return 0;
-//			}
-//			if(d.isInfinite()) {
-//				return n.doubleValue()==Double.NEGATIVE_INFINITY ? Byte.MIN_VALUE : Byte.MAX_VALUE;
-//			}
-//			return d.byteValue();
-//		}
-//		if(n instanceof Float f) {
-//			if(f.isNaN()) {
-//				return 0;
-//			}
-//			if(f.isInfinite()) {
-//				return n.doubleValue()==Double.NEGATIVE_INFINITY ? Byte.MIN_VALUE : Byte.MAX_VALUE;
-//			}
-//			return f.byteValue();
-//		}
 		return n.byteValue();
 	}
 	public static short toShort(Number n) {
-//		if(n instanceof Double d) {
-//			if(d.isNaN()) {
-//				return 0;
-//			}
-//			if(d.isInfinite()) {
-//				return n.doubleValue()==Double.NEGATIVE_INFINITY ? Short.MIN_VALUE : Short.MAX_VALUE;
-//			}
-//			return d.shortValue();
-//		}
-//		if(n instanceof Float f) {
-//			if(f.isNaN()) {
-//				return 0;
-//			}
-//			if(f.isInfinite()) {
-//				return n.doubleValue()==Double.NEGATIVE_INFINITY ? Short.MIN_VALUE : Short.MAX_VALUE;
-//			}
-//			return f.shortValue();
-//		}
 		return n.shortValue();
 	}
 	public static int toInt(Number n) {
-		// Do we need this?		
-//		if(n instanceof Double d) {
-//			if(d.isNaN()) {
-//				return 0;
-//			}
-//			if(d.isInfinite()) {
-//				return n.doubleValue()==Double.NEGATIVE_INFINITY ? Integer.MIN_VALUE : Integer.MAX_VALUE;
-//			}
-//			return d.intValue();
-//		}
-//		if(n instanceof Float f) {
-//			if(f.isNaN()) {
-//				return 0;
-//			}
-//			if(f.isInfinite()) {
-//				return n.doubleValue()==Double.NEGATIVE_INFINITY ? Integer.MIN_VALUE : Integer.MAX_VALUE;
-//			}
-//			return f.intValue();
-//		}
 		return n.intValue();
 	}
 	public static long toLong(Number n) {
-		// Do we need this?		
-//		if(n instanceof Double d) {
-//			if(d.isNaN()) {
-//				return 0;
-//			}
-//			if(d.isInfinite()) {
-//				return n.doubleValue()==Double.NEGATIVE_INFINITY ? Long.MIN_VALUE : Long.MAX_VALUE;
-//			}
-//			return d.longValue();
-//		}
-//		if(n instanceof Float f) {
-//			if(f.isNaN()) {
-//				return 0;
-//			}
-//			if(f.isInfinite()) {
-//				return n.doubleValue()==Double.NEGATIVE_INFINITY ? Long.MIN_VALUE : Long.MAX_VALUE;
-//			}
-//			return f.longValue();
-//		}
 		return n.longValue();
 	}
 	public static float toFloat(Number n) {

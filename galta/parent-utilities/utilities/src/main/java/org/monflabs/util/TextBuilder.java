@@ -101,11 +101,32 @@ public class TextBuilder implements CharSequence {
 	}
 	
 	public TextBuilder append(CharSequence seq) {
+		// The runs between line breaks are appended in bulk (it used to be char by char)
 		int length = seq.length();
+		int start = 0;
 		for(int i=0; i<length; i++) {
-			append(seq.charAt(i));
+			char c = seq.charAt(i);
+			if(c=='\n' || c=='\r') {
+				appendRun(seq, start, i);
+				append(c);
+				start = i+1;
+			}
 		}
+		appendRun(seq, start, length);
 		return this;
+	}
+
+	// A run without line breaks
+	private void appendRun(CharSequence seq, int start, int end) {
+		if(start<end) {
+			if(nl) {
+				for(int i=0; i<indent; i++) {
+					b.append(INDENT_SPACES);
+				}
+				nl = false;
+			}
+			b.append(seq, start, end);
+		}
 	}
 	
 	public TextBuilder append(String content, Object...params) {

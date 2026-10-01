@@ -23,93 +23,6 @@ import java.io.PrintStream;
  */ 
 public class Console {
 
-/*	
-	private static class SysoutOutputStream extends OutputStream {
-	    @Override
-		public void write(int b) throws IOException {
-	    	outStream().write(b);
-	    }
-	    @Override
-		public void write(byte b[]) throws IOException {
-	    	outStream().write(b);
-	    }
-	    @Override
-		public void write(byte b[], int off, int len) throws IOException {
-	    	outStream().write(b,off,len);
-	    }
-	    @Override
-		public void flush() throws IOException {
-	    	outStream().flush();
-	    }
-	    @Override
-		public void close() throws IOException {
-	    	outStream().close();
-	    }
-	}
-	private static class SysoutInputStream extends InputStream {
-	    @Override
-		public int read() throws IOException {
-	    	return inStream().read();
-	    }
-	    @Override
-		public int read(byte b[]) throws IOException {
-	    	return inStream().read(b);
-	    }
-	    @Override
-		public int read(byte b[], int off, int len) throws IOException {
-	    	return inStream().read(b,off,len);
-	    }
-	    @Override
-		public byte[] readAllBytes() throws IOException {
-	    	return inStream().readAllBytes();
-	    }
-	    @Override
-		public byte[] readNBytes(int len) throws IOException {
-	    	return inStream().readNBytes(len);
-	    }
-	    @Override
-		public int readNBytes(byte[] b, int off, int len) throws IOException {
-	    	return inStream().readNBytes(b,off,len);
-	    }
-	    @Override
-		public long skip(long n) throws IOException {
-	    	return inStream().skip(n);
-	    }
-	    @Override
-		public void skipNBytes(long n) throws IOException {
-	    	inStream().skipNBytes(n);
-	    }
-	    @Override
-		public int available() throws IOException {
-	    	return inStream().available();
-	    }
-	    @Override
-		public void close() throws IOException {
-	    	inStream().close();
-	    }
-	    @Override
-		public void mark(int readlimit) {
-	    	inStream().mark(readlimit);
-	    }
-	    @Override
-		public void reset() throws IOException {
-	    	inStream().reset();
-	    }
-	    @Override
-		public boolean markSupported() {
-	    	return inStream().markSupported();
-	    }
-	    @Override
-		public long transferTo(OutputStream out) throws IOException {
-	    	return inStream().transferTo(out);
-	    }
-	}
-
-	private static PrintWriter writerOut = new PrintWriter(new OutputStreamWriter(new SysoutOutputStream()));
-	private static PrintWriter writerErr = new PrintWriter(new OutputStreamWriter(new SysoutOutputStream()));
-	private static InputStreamReader readerIn = new InputStreamReader(new SysoutInputStream());
-*/	
-	
 	
 	public static final void rawLog(String s) {
 		System.out.println(s);
@@ -137,17 +50,6 @@ public class Console {
 		return System.err;
 	}
 
-/*	
-	public static Reader inReader() {
-		return readerIn;
-	}
-	public static PrintWriter outWriter() {
-		return writerOut;
-	}
-	public static PrintWriter errWriter() {
-		return writerErr;
-	}
-*/	
 	
 	public static void log(String msg) {
 		rawLog(msg);

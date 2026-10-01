@@ -175,11 +175,9 @@ public class PathUtil {
         if( s==null ) {
             return StringUtil.EMPTY_STRING_ARRAY;
         }
-        return splitString( null, 0, s, 0 );
-    }
-    // Iterative: the recursive version used one stack frame per path segment
-    private String[] splitString( String[] result, int count, String s, int pos) {
+        // Iterative: the recursive version used one stack frame per path segment
         java.util.ArrayList<String> parts = new java.util.ArrayList<>();
+        int pos = 0;
         int newPos;
         while( (newPos=firstSeparator(s, pos))>=0 ) {
             parts.add( s.substring( pos, newPos ) );

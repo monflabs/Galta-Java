@@ -21,9 +21,13 @@ import java.util.stream.Stream;
 public final class StreamUtil {
 	private StreamUtil() {}
 	
+    /**
+     * @deprecated the same as {@link ExceptionUtil.ThrowingFunction}, which
+     * {@link #usingWihException} accepts
+     */
+    @Deprecated
     @FunctionalInterface
-    public interface ThrowingFunction<T, R, E extends Exception> {
-        R apply(T t) throws E;
+    public interface ThrowingFunction<T, R, E extends Exception> extends ExceptionUtil.ThrowingFunction<T, R, E> {
     }
     
     
@@ -32,7 +36,7 @@ public final class StreamUtil {
             return fn.apply(stream);
         }
     }
-    public static <T, R, E extends Exception> R usingWihException(Stream<T> stream, ThrowingFunction<? super Stream<T>, ? extends R, E> fn) throws E {
+    public static <T, R, E extends Exception> R usingWihException(Stream<T> stream, ExceptionUtil.ThrowingFunction<? super Stream<T>, ? extends R, E> fn) throws E {
         try (stream) {
             return fn.apply(stream);
         }

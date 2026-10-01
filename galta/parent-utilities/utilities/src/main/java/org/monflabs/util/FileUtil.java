@@ -16,12 +16,8 @@
 package org.monflabs.util;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.io.Writer;
@@ -79,44 +75,36 @@ public class FileUtil {
 	}	
 	
 	public static String readContent(File file) {
-		try(Reader r = new FileReader(file,StandardCharsets.UTF_8)) {
-			return IOStreamUtil.readContent(r);
-		} catch(IOException ex) {
-			throw new ForwardRuntimeException(ex, "Error while reading file {0}", file.getPath());
-		}    
+		return readContent(file, StandardCharsets.UTF_8);
 	}
+	// Not Files.readString(): it throws on malformed input, where a Reader (and new
+	// String()) replaces it
 	public static String readContent(File file, Charset cs) {
-		try(Reader r = new FileReader(file,cs)) {
-			return IOStreamUtil.readContent(r);
+		try {
+			return new String(Files.readAllBytes(file.toPath()), cs);
 		} catch(IOException ex) {
 			throw new ForwardRuntimeException(ex, "Error while reading file {0}", file.getPath());
-		}    
+		}
 	}
-	
+
 	public static void setContent(File file, String content) {
-		try(Writer w = new FileWriter(file,StandardCharsets.UTF_8)) {
-			w.write(content);
-		} catch(IOException ex) {
-			throw new ForwardRuntimeException(ex, "Error while writing into file {0}", file.getPath());
-		}
+		setContent(file, content, StandardCharsets.UTF_8);
 	}
+	// Not Files.writeString(): it throws on unmappable characters, where a Writer (and
+	// getBytes()) replaces them
 	public static void setContent(File file, String content, Charset cs) {
-		try(Writer w = new FileWriter(file,cs)) {
-			w.write(content);
+		try {
+			Files.write(file.toPath(), content.getBytes(cs));
 		} catch(IOException ex) {
 			throw new ForwardRuntimeException(ex, "Error while writing into file {0}", file.getPath());
 		}
 	}
-	
+
+	// Through an output stream rather than Files.copy(Path,Path): that one would replace
+	// a link or an empty directory at the target instead of writing into the file
 	public static void copy(File src, File tgt) {
-		byte[] buf = new byte[4096];
 		try(OutputStream os = new FileOutputStream(tgt)) {
-			try(InputStream is = new FileInputStream(src)) {
-				int len;
-				while( (len=is.read(buf)) >0 ) {
-					os.write(buf,0,len);
-				}
-			}
+			Files.copy(src.toPath(), os);
 		} catch(IOException ex) {
 			throw new ForwardRuntimeException(ex, "Error while copy file {0} to {1}", src.getPath(), tgt.getPath());
 		}

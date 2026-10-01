@@ -60,7 +60,7 @@ public class Properties {
 		return props;
 	}
 
-	public Object has(String name) {
+	public boolean has(String name) {
 		if(props.containsKey(name)) {
 			return true;
 		}

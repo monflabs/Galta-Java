@@ -34,46 +34,32 @@ import java.util.function.Supplier;
 public final class _ScopedValue<T> {
 	
 	public static class Carrier<T> {
-        _ScopedValue<T> key;
-        T value;
+        private final _ScopedValue<T> key;
+        private final T value;
 		Carrier(_ScopedValue<T> key, T value) {
 			this.key = key;
 			this.value = value;
 		}
         public void run(Runnable op) {
-        	ThreadLocal<T> t = key.threadLocal;
-    		T old = t.get();
-    		t.set(value);
-    		try {
-    			op.run();
-    		} finally {
-    			if(old!=null) {
-    				t.set(old);
-    			} else {
-    				t.remove();
-    			}
-    		}
-        }        
+        	with(() -> {
+        		op.run();
+        		return null;
+        	});
+        }
         public <R> R get(Supplier<? extends R> op) {
-        	ThreadLocal<T> t = key.threadLocal;
-    		T old = t.get();
-    		t.set(value);
-    		try {
-    			return op.get();
-    		} finally {
-    			if(old!=null) {
-    				t.set(old);
-    			} else {
-    				t.remove();
-    			}
-    		}
+        	return with(op::get);
         }
         public <R> R call(Callable<? extends R> op) throws Exception {
+        	return with(op::call);
+        }
+
+        // Binds the value for the duration of op, and restores the previous one afterwards
+        private <R, E extends Exception> R with(Op<? extends R, E> op) throws E {
         	ThreadLocal<T> t = key.threadLocal;
     		T old = t.get();
     		t.set(value);
     		try {
-    			return op.call();
+    			return op.apply();
     		} finally {
     			if(old!=null) {
     				t.set(old);
@@ -83,7 +69,12 @@ public final class _ScopedValue<T> {
     		}
         }
 	}
-	
+
+	@FunctionalInterface
+	private interface Op<R, E extends Exception> {
+		R apply() throws E;
+	}
+
 	public static <T> _ScopedValue<T> newInstance() {
 		return new _ScopedValue<T>();
 	}
@@ -92,8 +83,7 @@ public final class _ScopedValue<T> {
         return new Carrier<>(key, value);
 	}
 
-	//private ThreadLocal<T> threadLocal = new ThreadLocal<>();
-	private InheritableThreadLocal<T> threadLocal = new InheritableThreadLocal<>();
+	private final InheritableThreadLocal<T> threadLocal = new InheritableThreadLocal<>();
 	
 	public T get() {
 		return threadLocal.get();

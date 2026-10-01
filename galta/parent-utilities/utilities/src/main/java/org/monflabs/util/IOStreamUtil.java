@@ -15,13 +15,13 @@
  */
 package org.monflabs.util;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
+import java.io.StringWriter;
 import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -51,13 +51,7 @@ public class IOStreamUtil {
 	// renamne methods here!!
     
     public static byte[] readBytes(InputStream in) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        byte[] data = new byte[8192];
-        int nRead;
-        while ((nRead = in.read(data, 0, data.length)) != -1) {
-            buffer.write(data, 0, nRead);
-        }
-        return buffer.toByteArray();
+        return in.readAllBytes();
     }
 	
 	
@@ -69,13 +63,9 @@ public class IOStreamUtil {
 		return readContent(r);
 	}
 	public static String readContent(Reader r) throws IOException {
-		StringBuilder sb  = new StringBuilder(2048);
-		char[] c = new char[8192];
-		int count;
-		while((count=r.read(c))>=0) {
-			sb.append(c, 0, count);
-		}
-		return sb.toString();
+		StringWriter w = new StringWriter(2048);
+		r.transferTo(w);
+		return w.toString();
 	}
 	
 	
