@@ -1,5 +1,7 @@
 package doc_examples.jsonschema;
 
+import static org.junit.Assert.assertThrows;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -161,13 +163,21 @@ public class JsonSchemaExamples extends ProjectTestCase {
 
 	public void testMissingSchemaAcceptsEverything() throws Exception {
 		Path dir = Files.createTempDirectory("galta-schema");
-		// jsonschemafriend logs a warning and uses a schema that permits everything
-		JsonSchema missing = JsonSchemaFactory.get().getJsonSchema(dir.resolve("nope.json").toUri());
+		// Fail closed: a schema that cannot be loaded is an error...
+		assertThrows(JsonException.class, () -> JsonSchemaFactory.get().getJsonSchema(dir.resolve("nope.json").toUri()));
+		// ... as is a $ref to a missing document, or to nothing
+		JsonObject withRef = JsonObject.parse(
+				"{ \"properties\": { \"a\": { \"$ref\": \"" + dir.resolve("gone.json").toUri() + "\" } } }");
+		assertThrows(JsonException.class, () -> JsonSchemaFactory.get().getJsonSchema(withRef));
+		assertThrows(JsonException.class, () -> JsonSchemaFactory.get().getJsonSchema(JsonObject.parse(
+				"{ \"properties\": { \"a\": { \"$ref\": \"#/$defs/nope\" } } }")));
+
+		// Opt-out: jsonschemafriend logs a warning and uses a schema that permits everything
+		JsonSchemaFactory lenient = new JsonSchemaFactory();
+		lenient.setFailOnUnresolvedReferences(false);
+		JsonSchema missing = lenient.getJsonSchema(dir.resolve("nope.json").toUri());
 		missing.validate(JsonObject.of("any", "thing"));
-		// Same for a $ref to a missing document
-		JsonSchema withRef = JsonSchemaFactory.get().getJsonSchema(JsonObject.parse(
-				"{ \"properties\": { \"a\": { \"$ref\": \"" + dir.resolve("gone.json").toUri() + "\" } } }"));
-		withRef.validate(JsonObject.of("a", 42));
+		lenient.getJsonSchema(withRef).validate(JsonObject.of("a", 42));
 
 		try {
 			JsonSchemaFactory.get().getJsonSchema("not a uri");

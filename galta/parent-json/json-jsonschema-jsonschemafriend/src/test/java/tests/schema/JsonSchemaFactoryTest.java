@@ -138,8 +138,7 @@ public class JsonSchemaFactoryTest extends ProjectTestCase {
 			org.junit.Assert.assertThrows(JsonException.class, () -> open.validate(JsonObject.parse("{\"name\":\"ab\"}")));
 			// A restricted factory does not read it
 			JsonSchemaFactory restricted = new JsonSchemaFactory(JsonSchemaFactory.NO_LOADING);
-			JsonSchema closed = restricted.getJsonSchema(JsonObject.parse(schema));
-			closed.validate(JsonObject.parse("{\"name\":\"ab\"}"));
+			org.junit.Assert.assertThrows(JsonException.class, () -> restricted.getJsonSchema(JsonObject.parse(schema)));
 			// Local references still work
 			JsonSchema local = restricted.getJsonSchema(JsonObject.parse(SCHEMA));
 			local.validate(JsonObject.parse(VALID));
@@ -147,5 +146,32 @@ public class JsonSchemaFactoryTest extends ProjectTestCase {
 		} finally {
 			org.monflabs.util.path.FilesUtil.deleteRecursively(dir);
 		}
+		}
+	}
+
+	// Fail closed: an unresolvable reference used to validate everything
+	public void testUnresolvableReferencesFailClosed() throws Exception {
+		JsonSchemaFactory noLoad = new JsonSchemaFactory(JsonSchemaFactory.NO_LOADING);
+		JsonObject remote = JsonObject.parse("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"a\":{\"$ref\":\"https://example.invalid/s.json\"}}}");
+		try {
+			noLoad.getJsonSchema(remote);
+			fail("unresolvable remote $ref accepted");
+		} catch(JsonException expected) {
+		}
+		// The local schemas still work without loading
+		noLoad.getJsonSchema(JsonObject.parse(SCHEMA)).validate(JsonObject.parse(VALID));
+		// A failed URI load is not cached as a permissive schema
+		java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("galta-schema");
+		java.net.URI missing = dir.resolve("missing.json").toUri();
+		JsonSchemaFactory f = new JsonSchemaFactory();
+		for(int i=0; i<2; i++) {
+			try {
+				f.getJsonSchema(missing);
+				fail("missing schema accepted");
+			} catch(JsonException expected) {
+			}
+		}
+		java.nio.file.Files.writeString(dir.resolve("missing.json"), "{\"type\":\"string\"}");
+		f.getJsonSchema(missing).validate("ok");
 	}
 }
