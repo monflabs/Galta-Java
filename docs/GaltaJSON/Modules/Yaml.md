@@ -157,11 +157,11 @@ o.get("merged");                        // -> {"<<":{"x":1},"y":2}
 | `setMaxAliasesForCollections(int)` | 50 | More aliases to collections are rejected. |
 | `setMaxExpandedSize(long)` | 10&nbsp;000&nbsp;000 | The number of values once the aliases are expanded. A few nested aliases are enough to make a tiny document expand to billions of values ("billion laughs") when it is later copied or stringified (to JSON, whose output has no aliases), so such a document is rejected when parsed. |
 
-Sample: `tests/yaml/SnakeYamlSafetyTest.java` (`testAliasAmplificationIsRejected`, `testCodePointLimit`)
+Sample: `doc_examples/yaml/YamlExamples.java` (`testLimits`)
 
 ```java
 SnakeYaml.Options options = new SnakeYaml.Options()
-        .setCodePointLimit(20 * 1024 * 1024)
-        .setMaxExpandedSize(100_000_000L);
-Object value = SnakeYaml.parse(JsonFactory.get(), bigYaml, options);
+        .setCodePointLimit(1024)          // 1 KB at most
+        .setMaxExpandedSize(1000);
+SnakeYaml.parse(JsonFactory.get(), "text: " + "x".repeat(2000), options);   // JsonException: too large
 ```

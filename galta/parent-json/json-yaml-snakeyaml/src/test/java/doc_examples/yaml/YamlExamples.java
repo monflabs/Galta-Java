@@ -154,4 +154,17 @@ public class YamlExamples extends ProjectTestCase {
 				.build();
 		assertEquals("{a: 1, b: [x, y]}\n", SnakeYaml.stringify(JsonObject.of("a", 1, "b", JsonArray.of("x", "y")), flow));
 	}
+
+	public void testLimits() throws Exception {
+		SnakeYaml.Options options = new SnakeYaml.Options()
+				.setCodePointLimit(1024)          // 1 KB at most
+				.setMaxExpandedSize(1000);
+		try {
+			SnakeYaml.parse(org.monflabs.json.JsonFactory.get(), "text: " + "x".repeat(2000), options);
+			fail();
+		} catch(org.monflabs.json.JsonException e) {
+			// too large
+		}
+		assertNotNull(SnakeYaml.parse(org.monflabs.json.JsonFactory.get(), "text: " + "x".repeat(500), options));
+	}
 }
