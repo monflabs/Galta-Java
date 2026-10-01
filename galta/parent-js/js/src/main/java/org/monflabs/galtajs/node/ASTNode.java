@@ -449,6 +449,8 @@ public abstract class ASTNode implements INode {
 
     private void computePositions() {
         // Must be a non terminal node
+    	int explicitEndLine = endLine;
+    	int explicitEndCol = endCol;
     	int childCount = getChildCount();
     	boolean first = true;
     	for(int i=0; i<childCount; i++) {
@@ -475,6 +477,11 @@ public abstract class ASTNode implements INode {
 		            }
 	    		}
     		}
+    	}
+    	// An end set explicitly (endToken()) is kept when only the begin had to be computed
+    	if(explicitEndLine>0) {
+    		this.endLine = explicitEndLine;
+    		this.endCol = explicitEndCol;
     	}
     }
 

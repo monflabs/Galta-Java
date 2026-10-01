@@ -196,7 +196,7 @@ loop:		while(true) {
 		}
 
 		if(StringUtil.isNotEmpty(label)) {
-			b.println("{0}:", label);
+			b.println("{0}:", ILabeledNode.javaLabel(label));
 		}
 
 		b.println("while({0}) {", JSTranspiler.asBooleanCondition(whileContext, testNode));

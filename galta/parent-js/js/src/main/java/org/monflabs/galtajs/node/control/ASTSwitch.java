@@ -277,7 +277,7 @@ loop:       for( int i=matchIndex; i<count; i++ ) {
         }
 
 		if(StringUtil.isNotEmpty(label)) {
-			b.println("{0}:", label);
+			b.println("{0}:", ILabeledNode.javaLabel(label));
 		}
 
 		b.println("switch(index{0}) {",unid);

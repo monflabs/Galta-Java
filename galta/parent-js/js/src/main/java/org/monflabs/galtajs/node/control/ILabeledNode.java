@@ -25,4 +25,12 @@ public interface ILabeledNode {
 	public String getLabel();
 
 	public void setLabel(String label);
+
+	/**
+	 * The label as written in the transpiled Java code: a JavaScript label can be
+	 * a Java keyword ("static", "int", ...), which is then prefixed with "$".
+	 */
+	public static String javaLabel(String label) {
+		return javax.lang.model.SourceVersion.isKeyword(label) ? "$"+label : label;
+	}
 }

@@ -279,7 +279,7 @@ public class ASTArrayLiteral extends ASTContainerLiteral {
 					return;
 				} else if(varNode instanceof ASTContainerLiteral cl) {
 					Object value = array.getProperty(index,RuntimeUtil.NOT_AVAILABLE);
-					if(value==RuntimeUtil.NOT_AVAILABLE) {
+					if(value==RuntimeUtil.NOT_AVAILABLE || value==RuntimeUtil.UNDEFINED) {
 						ASTNode exprNode = as.getRightNode();
 						if(exprNode!=null) {
 							value = exprNode.evaluateValue(context,result);
@@ -317,16 +317,11 @@ public class ASTArrayLiteral extends ASTContainerLiteral {
 				return;
 			} else if(node instanceof ASTAssign as) {
 				ASTNode varNode = as.getLeftNode();
-				Object value = state.step();
-				if(value==RuntimeUtil.NOT_AVAILABLE || value==RuntimeUtil.UNDEFINED) {
-					ASTNode exprNode = as.getRightNode();
-					value = exprNode.evaluateValue(context,result);
-				}
 				if(varNode instanceof ASTIdentifier id) {
-					variableFactory.accept(id.getId(), value);
+					variableFactory.accept(id.getId(), stepValue(context, state, as.getRightNode(), result));
 					return;
 				} else if(varNode instanceof ASTContainerLiteral cl) {
-					cl.assign(context, variableFactory, value, result, isAssignmentContext);
+					cl.assign(context, variableFactory, stepValue(context, state, as.getRightNode(), result), result, isAssignmentContext);
 					return;
 				} else if(isAssignmentContext) {
 					// DestructuringAssignmentTarget Initializer, target NOT an
@@ -335,7 +330,7 @@ public class ASTArrayLiteral extends ASTContainerLiteral {
 					// target here (AssignmentElement, unlike BindingElement,
 					// allows any DestructuringAssignmentTarget - confirmed via
 					// dstr/array-elem-put-obj-literal-prop-ref-init.js).
-					varNode.evaluateAssign(context, value, null, result, null);
+					assignTarget(context, varNode, state, as.getRightNode(), result);
 					return;
 				} else {
 					throw fillInStackTrace(RuntimeUtil.syntaxError("Invalid destructuration syntax"));
@@ -362,35 +357,40 @@ public class ASTArrayLiteral extends ASTContainerLiteral {
 				// after the throw). Reuse the same resolveReference() two-
 				// phase API already used by plain assignment (ASTAssign)
 				// for this exact ordering reason.
-				if(node instanceof ASTArrayMember arrayMember && arrayMember.canResolveReference()) {
-					ASTArrayMember.ResolvedReference ref = arrayMember.resolveReference(context, result);
-					Object value = state.step();
-					if(value==RuntimeUtil.NOT_AVAILABLE) {
-						value = RuntimeUtil.UNDEFINED;
-					}
-					if(ref!=null) {
-						arrayMember.assignToResolved(context, ref, value, null, result, null);
-					}
-					return;
-				} else if(node instanceof ASTMember member && member.canResolveReference()) {
-					ASTMember.ResolvedReference ref = member.resolveReference(context, result);
-					Object value = state.step();
-					if(value==RuntimeUtil.NOT_AVAILABLE) {
-						value = RuntimeUtil.UNDEFINED;
-					}
-					if(ref!=null) {
-						member.writeProperty(context.getEnvironment(), ref.base(), value, context);
-					}
-					return;
-				}
-				Object value = state.step();
-				if(value==RuntimeUtil.NOT_AVAILABLE) {
-					value = RuntimeUtil.UNDEFINED;
-				}
-				node.evaluateAssign(context, value, null, result, null);
+				assignTarget(context, node, state, null, result);
 				return;
 			} else {
 				throw fillInStackTrace(RuntimeUtil.syntaxError("Invalid destructuration syntax"));
+			}
+		}
+		// The next iterator value, or the initializer's value when it is undefined
+		private static Object stepValue(JSInterpretedRuntimeContext context, IteratorState state, ASTNode initializer, JSResult result) {
+			Object value = state.step();
+			if(value==RuntimeUtil.NOT_AVAILABLE) {
+				value = RuntimeUtil.UNDEFINED;
+			}
+			if(value==RuntimeUtil.UNDEFINED && initializer!=null) {
+				value = initializer.evaluateValue(context,result);
+			}
+			return value;
+		}
+		// AssignmentElement whose target is not a pattern: the target's reference is
+		// resolved before the iterator is stepped (and before the initializer runs).
+		private static void assignTarget(JSInterpretedRuntimeContext context, ASTNode target, IteratorState state, ASTNode initializer, JSResult result) {
+			if(target instanceof ASTArrayMember arrayMember && arrayMember.canResolveReference()) {
+				ASTArrayMember.ResolvedReference ref = arrayMember.resolveReference(context, result);
+				Object value = stepValue(context, state, initializer, result);
+				if(ref!=null) {
+					arrayMember.assignToResolved(context, ref, value, null, result, null);
+				}
+			} else if(target instanceof ASTMember member && member.canResolveReference()) {
+				ASTMember.ResolvedReference ref = member.resolveReference(context, result);
+				Object value = stepValue(context, state, initializer, result);
+				if(ref!=null) {
+					member.writeProperty(context.getEnvironment(), ref.base(), value, context);
+				}
+			} else {
+				target.evaluateAssign(context, stepValue(context, state, initializer, result), null, result, null);
 			}
 		}
 		@Override
@@ -484,6 +484,10 @@ public class ASTArrayLiteral extends ASTContainerLiteral {
 			if(node instanceof ASTAssign as) {
 				ASTNode varNode = as.getLeftNode();
 				ASTNode exprNode = as.getRightNode();
+				if(!(varNode instanceof ASTIdentifier) && !(varNode instanceof ASTContainerLiteral)
+						&& transpileJavaMemberTargetAssign(jsContext, b, itVar, varNode, exprNode)) {
+					return;
+				}
 				String v = jsContext.generateUniqueId("v");
 				b.println("Object {0} = {1}.step();", v, itVar);
 				b.println("if({0}==NOT_AVAILABLE || {0}==UNDEFINED) {0} = {1};", v, JSTranspiler.asValue(jsContext,exprNode));
@@ -527,23 +531,35 @@ public class ASTArrayLiteral extends ASTContainerLiteral {
 			// treatment (matching the interpreter, which only special-cases
 			// those two) - anything else falls through to the plain
 			// step-then-write fallback below, unaffected.
-			if(node instanceof ASTArrayMember am && am.canResolveReference()) {
+			if(transpileJavaMemberTargetAssign(jsContext, b, itVar, node, null)) {
+				return;
+			}
+			// Any other assignment-target-capable expression with no default
+			// (e.g. the `{}[yield]` MemberExpression target in test262
+			// S11.13.2-shaped for-of/dstr tests) - same ASSIGNMENT-context-
+			// only reasoning as above.
+			String v = jsContext.generateUniqueId("v");
+			b.println("Object {0} = {1}.step();", v, itVar);
+			b.println("if({0}==NOT_AVAILABLE) {0} = UNDEFINED;", v);
+			leafBinder.accept(node, v);
+		}
+		// A member target (base[key] or base.name), with an optional default:
+		// its reference is resolved before the iterator is stepped (see above).
+		// Returns false when the target is not such a member.
+		private static boolean transpileJavaMemberTargetAssign(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, String itVar, ASTNode target, ASTNode defaultValue) {
+			if(target instanceof ASTArrayMember am && am.canResolveReference()) {
 				String baseVar = jsContext.generateUniqueId("base");
 				String keyVar = jsContext.generateUniqueId("key");
 				b.println("Object {0} = {1};", baseVar, JSTranspiler.asValue(jsContext, am.getNode()));
 				b.println("Object {0} = {1};", keyVar, JSTranspiler.asValue(jsContext, am.getUniqueIndex()));
-				String v = jsContext.generateUniqueId("v");
-				b.println("Object {0} = {1}.step();", v, itVar);
-				b.println("if({0}==NOT_AVAILABLE) {0} = UNDEFINED;", v);
+				String v = transpileJavaStepValue(jsContext, b, itVar, defaultValue);
 				b.println("assign({0},toPropertyKeyChecked({1},{0},{2}),{3});", baseVar, JSTranspiler.MAIN_ENVIRONMENT, keyVar, v);
-				return;
+				return true;
 			}
-			if(node instanceof ASTMember m && m.canResolveReference()) {
+			if(target instanceof ASTMember m && m.canResolveReference()) {
 				String baseVar = jsContext.generateUniqueId("base");
 				b.println("Object {0} = requireNonNullMemberBase({1},{2});", baseVar, JSTranspiler.asValue(jsContext, m.getNode()), ASTLiteral.encodeString(m.getMemberName()));
-				String v = jsContext.generateUniqueId("v");
-				b.println("Object {0} = {1}.step();", v, itVar);
-				b.println("if({0}==NOT_AVAILABLE) {0} = UNDEFINED;", v);
+				String v = transpileJavaStepValue(jsContext, b, itVar, defaultValue);
 				// Private (#name) targets resolve their PrivateName through
 				// the current context and must go through PrivateFieldSet's
 				// "already exists" check (RuntimeUtil.setPrivateField, via
@@ -559,16 +575,20 @@ public class ASTArrayLiteral extends ASTContainerLiteral {
 				} else {
 					b.println("assign({0},{1},{2});", baseVar, ASTLiteral.encodeString(m.getMemberName()), v);
 				}
-				return;
+				return true;
 			}
-			// Any other assignment-target-capable expression with no default
-			// (e.g. the `{}[yield]` MemberExpression target in test262
-			// S11.13.2-shaped for-of/dstr tests) - same ASSIGNMENT-context-
-			// only reasoning as above.
+			return false;
+		}
+		// Steps the iterator into a new variable, applying the default (if any) to undefined
+		private static String transpileJavaStepValue(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, String itVar, ASTNode defaultValue) {
 			String v = jsContext.generateUniqueId("v");
 			b.println("Object {0} = {1}.step();", v, itVar);
-			b.println("if({0}==NOT_AVAILABLE) {0} = UNDEFINED;", v);
-			leafBinder.accept(node, v);
+			if(defaultValue!=null) {
+				b.println("if({0}==NOT_AVAILABLE || {0}==UNDEFINED) {0} = {1};", v, JSTranspiler.asValue(jsContext,defaultValue));
+			} else {
+				b.println("if({0}==NOT_AVAILABLE) {0} = UNDEFINED;", v);
+			}
+			return v;
 		}
 
 	    @Override

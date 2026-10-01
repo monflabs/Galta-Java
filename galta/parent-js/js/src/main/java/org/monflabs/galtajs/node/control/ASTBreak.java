@@ -73,7 +73,7 @@ public class ASTBreak extends ASTNode {
     	if(StringUtil.isEmpty(label)) {
     		b.println("break;");
     	} else {
-    		b.println("break {0};", label);
+    		b.println("break {0};", ILabeledNode.javaLabel(label));
     	}
     }
 

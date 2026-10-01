@@ -1178,9 +1178,10 @@ public class ASTIdentifier extends ASTNode implements IVarDeclarator {
     		}
     		case EQUALS_AND -> {
     			VariableDef varDef = varAccessor.getVariableDef();
-    			if(varDef!=null ) { 
+    			if(varDef!=null ) {
+    				// Logical assignment: only written (a const only rejected) when not short-circuited
     				String ve = tdzGuardedRead(varDef);
-    				return varAccessor.setValue(StringFormat.format("and({0},()->{1})",ve,rightValue)); 
+    				return StringFormat.format("identity(toBoolean({0}) ? ({1}) : {0})",ve,varAccessor.setValue(rightValue));
     			}
 	    		return StringFormat.format("assignAnd({0},()->{1})",varAccessor.getAccessor(),rightValue);
     		}
@@ -1242,17 +1243,17 @@ public class ASTIdentifier extends ASTNode implements IVarDeclarator {
     		}
     		case EQUALS_NULLCOALESCING -> {
     			VariableDef varDef = varAccessor.getVariableDef();
-    			if(varDef!=null ) { 
+    			if(varDef!=null ) {
     				String ve = tdzGuardedRead(varDef);
-    				return varAccessor.setValue(StringFormat.format("nullCoalescing({0},()->{1})",ve,rightValue)); 
+    				return StringFormat.format("identity(isNullOrUndefined({0}) ? ({1}) : {0})",ve,varAccessor.setValue(rightValue));
     			}
 	    		return StringFormat.format("assignNullCoalescing({0},()->{1})",varAccessor.getAccessor(),rightValue);
     		}
     		case EQUALS_OR -> {
     			VariableDef varDef = varAccessor.getVariableDef();
-    			if(varDef!=null ) { 
+    			if(varDef!=null ) {
     				String ve = tdzGuardedRead(varDef);
-    				return varAccessor.setValue(StringFormat.format("or({0},()->{1})",ve,rightValue)); 
+    				return StringFormat.format("identity(toBoolean({0}) ? {0} : ({1}))",ve,varAccessor.setValue(rightValue));
     			}
 	    		return StringFormat.format("assignOr({0},()->{1})",varAccessor.getAccessor(),rightValue);
     		}

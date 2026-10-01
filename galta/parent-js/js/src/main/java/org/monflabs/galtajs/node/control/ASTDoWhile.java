@@ -194,7 +194,7 @@ loop:		while(true) {
 		}
 
 		if(StringUtil.isNotEmpty(label)) {
-			b.println("{0}:", label);
+			b.println("{0}:", ILabeledNode.javaLabel(label));
 		}
 
 		// The body is wrapped in "if(true)": for javac an if statement can

@@ -204,12 +204,15 @@ public class ASTFor extends ASTVarContainer implements ILabeledNode, DebuggableN
 	// for/dstr/*-init-fn-name-class.js family). initNode.getDeclaredVariables()
 	// walks ONLY the declaration's own binding pattern, correctly excluding
 	// any nested construct's incidental registrations - computed once and
-	// cached, same as the AST facts above/below it.
-	private java.util.List<VariableDef> loopDeclaredVariables;
+	// cached, same as the AST facts above/below it. The AST node is shared by
+	// every thread running the script: the lazily computed caches are volatile
+	// and only published once fully built.
+	private volatile java.util.List<VariableDef> loopDeclaredVariables;
 	private java.util.List<VariableDef> getLoopDeclaredVariables() {
-		if(loopDeclaredVariables==null) {
+		java.util.List<VariableDef> vars = loopDeclaredVariables;
+		if(vars==null) {
 			if(!hasDeclaredVariables() || !(initNode instanceof ASTVariableDecl decl)) {
-				loopDeclaredVariables = java.util.Collections.emptyList();
+				vars = java.util.Collections.emptyList();
 			} else {
 				java.util.List<VariableDef> result = new java.util.ArrayList<>();
 				for(String name: decl.getDeclaredVariables()) {
@@ -218,10 +221,11 @@ public class ASTFor extends ASTVarContainer implements ILabeledNode, DebuggableN
 						result.add(v);
 					}
 				}
-				loopDeclaredVariables = result;
+				vars = java.util.Collections.unmodifiableList(result);
 			}
+			loopDeclaredVariables = vars;
 		}
-		return loopDeclaredVariables;
+		return vars;
 	}
 
 	// A C-style for-loop's lexical loop variables live in a dedicated per-loop
@@ -315,7 +319,7 @@ public class ASTFor extends ASTVarContainer implements ILabeledNode, DebuggableN
 	// after parsing, so this only needs computing once, however many times
 	// this loop node itself is evaluated (e.g. inside a function called
 	// repeatedly).
-	private Boolean needsPerIterationBinding;
+	private volatile Boolean needsPerIterationBinding;
 
 	// A fresh-per-iteration binding is only OBSERVABLE if something could
 	// capture the context across iterations: a nested closure (function/
@@ -338,11 +342,13 @@ public class ASTFor extends ASTVarContainer implements ILabeledNode, DebuggableN
 	// iteration 0's `i`, not the shared mutated one, even though `f` itself
 	// is never re-created after the first iteration).
 	private boolean needsPerIterationBinding() {
-		if(needsPerIterationBinding==null) {
-			needsPerIterationBinding = hasPerIterationBindings()
+		Boolean needs = needsPerIterationBinding;
+		if(needs==null) {
+			needs = hasPerIterationBindings()
 					&& (mayCaptureAcrossIterations(initNode) || mayCaptureAcrossIterations(testNode) || mayCaptureAcrossIterations(incNode) || mayCaptureAcrossIterations(bodyNode));
+			needsPerIterationBinding = needs;
 		}
-		return needsPerIterationBinding;
+		return needs;
 	}
 
 	// See ASTVarContainer.needsHeadClosureSnapshot()'s own doc: a closure
@@ -360,8 +366,9 @@ public class ASTFor extends ASTVarContainer implements ILabeledNode, DebuggableN
 	// Cached result of findDeferredIncClosure() - see that method's own doc.
 	// Computed once (pure function of the AST, doesn't change across
 	// however many times this loop node is itself evaluated/transpiled).
+	// (the value is written before the volatile flag that publishes it)
 	private ASTFunction deferredIncClosure;
-	private boolean deferredIncClosureComputed;
+	private volatile boolean deferredIncClosureComputed;
 
 	// The "let-closure-inside-next-expression" test262 shape:
 	// `for(let i=0; i<5; a.push(function(){return i;}), ++i) {}` - a
@@ -410,8 +417,8 @@ public class ASTFor extends ASTVarContainer implements ILabeledNode, DebuggableN
 
 	private ASTFunction getDeferredIncClosure() {
 		if(!deferredIncClosureComputed) {
-			deferredIncClosureComputed = true;
 			deferredIncClosure = needsPerIterationBinding() ? findDeferredIncClosure() : null;
+			deferredIncClosureComputed = true;
 		}
 		return deferredIncClosure;
 	}
@@ -954,7 +961,7 @@ public class ASTFor extends ASTVarContainer implements ILabeledNode, DebuggableN
 		}
 
 		if(StringUtil.isNotEmpty(label)) {
-			b.println("{0}:", label);
+			b.println("{0}:", ILabeledNode.javaLabel(label));
 		}
 
 		// See the "Loop-counter math specialization" block above this method

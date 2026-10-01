@@ -24,6 +24,9 @@ import org.monflabs.galtajs.node.control.ASTFunction;
 import org.monflabs.galtajs.node.literal.ASTArrayLiteral;
 import org.monflabs.galtajs.node.literal.ASTObjectLiteral;
 import org.monflabs.galtajs.parser.Token;
+import org.monflabs.galtajs.rt.JSResult;
+import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext;
+import org.monflabs.galtajs.rt.transpiler.VarAccessor;
 import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext.VAR_TYPE;
 import org.monflabs.util.StringFormat;
 
@@ -118,7 +121,7 @@ public abstract class ASTAbstractAssign extends ASTNode {
 				// aborting the whole script before the assertion ever runs)
 				// - the runtime check in ASTIdentifier.evaluateAssign() /
 				// RuntimeUtil already covers it correctly.
-				if(v.getVarType()==VAR_TYPE.CONST) {
+				if(v.getVarType()==VAR_TYPE.CONST && isStaticConstAssignmentError(initContext)) {
 					// Note that an assign statement should still be valid.
 					// Also: only flag this as a static/parse-time error when
 					// the assignment is in the SAME function scope as the
@@ -147,6 +150,33 @@ public abstract class ASTAbstractAssign extends ASTNode {
 			}
 		}
 	}
+	// Logical assignment (&&=, ||=, ??=) to an identifier, spec 13.15.2: the
+	// reference is resolved and read first; the right side is only evaluated,
+	// and the binding only written, when the operator does not short-circuit.
+	protected void evaluateLogicalAssign(JSInterpretedRuntimeContext context, ASTIdentifier ident, java.util.function.Predicate<Object> assigns, JSResult result) {
+		VarAccessor preResolved = ident.getScopeHops()<0 ? context.getVariableEntry(ident.getId()) : null;
+		Object oldValue = ident.evaluateValue(context, new JSResult());
+		if(!assigns.test(oldValue)) {
+			result.setValue(oldValue);
+			return;
+		}
+		Object rightValue = getRightNode().evaluateValue(context, new JSResult());
+		ident.evaluateAssign(context, rightValue, null, result, null, preResolved);
+	}
+
+	// Assigning to a const is, per spec, a runtime TypeError(SetMutableBinding
+	// on an immutable binding) that the program can catch. GaltaJS reports the
+	// statically obvious cases as a parse-time error instead, but only when the
+	// environment asks for its static checks (strict mode, as set by
+	// enableGaltaJSExtensions()). Never for a logical assignment (&&=, ||=,
+	// ??=), which only writes - and so only fails - when it doesn't short-circuit.
+	private boolean isStaticConstAssignmentError(InitContext initContext) {
+		if(this instanceof ASTAssignAnd || this instanceof ASTAssignOr || this instanceof ASTAssignNullCoalescing) {
+			return false;
+		}
+		return initContext.getEnvironment().isStrictMode();
+	}
+
 	// True if resolving `name` from this node walks through an intervening
 	// ASTFunction (i.e. the declaring scope is an ENCLOSING function, not
 	// this one) before reaching the ASTVarContainer that actually owns it -

@@ -801,19 +801,33 @@ public class ASTObjectLiteral extends ASTContainerLiteral {
 				String fieldName = id.getId();
 				variableFactory.accept(fieldName, o);
 		        return;
-			} else if(node instanceof ASTMember m) {
+			} else if(node instanceof ASTMember || node instanceof ASTArrayMember) {
 				// AssignmentRestProperty's target is a full
 				// DestructuringAssignmentTarget (any LeftHandSideExpression),
 				// not just a BindingIdentifier like a rest element in a
-				// var/let/const binding pattern - `{...src.y} = vals` must
-				// assign the collected rest object onto `src.y`, mirroring
-				// the identical ASTMember handling for a NON-rest property
-				// target above (test262 obj-rest-to-property.js/
-				// obj-rest-to-property-with-setter.js: the rest target was
-				// unconditionally rejected as "Invalid destructuration
-				// syntax" for anything other than a bare identifier).
-				JSObject o = collectRestObject(context, object, consumed);
-				m.evaluateAssign(context, o, null, result, null);
+				// var/let/const binding pattern - `{...src.y} = vals` and
+				// `{...t[k]} = vals` must assign the collected rest object onto
+				// the member, mirroring the ASTMember/ASTArrayMember handling
+				// for a NON-rest property target above (test262
+				// obj-rest-to-property.js/obj-rest-to-property-with-setter.js).
+				// Spec order (RestDestructuringAssignmentEvaluation): the
+				// target's reference is evaluated before the rest object is
+				// collected.
+				if(node instanceof ASTArrayMember arrayMember && arrayMember.canResolveReference()) {
+					ASTArrayMember.ResolvedReference ref = arrayMember.resolveReference(context, result);
+					JSObject o = collectRestObject(context, object, consumed);
+					if(ref!=null) {
+						arrayMember.assignToResolved(context, ref, o, null, result, null);
+					}
+				} else if(node instanceof ASTMember member && member.canResolveReference()) {
+					ASTMember.ResolvedReference ref = member.resolveReference(context, result);
+					JSObject o = collectRestObject(context, object, consumed);
+					if(ref!=null) {
+						member.assignToResolved(context, ref, o, null, result, null);
+					}
+				} else {
+					node.evaluateAssign(context, collectRestObject(context, object, consumed), null, result, null);
+				}
 				return;
 			} else {
 				throw fillInStackTrace(RuntimeUtil.syntaxError("Invalid destructuration syntax"));

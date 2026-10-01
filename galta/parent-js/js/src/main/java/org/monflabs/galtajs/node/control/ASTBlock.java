@@ -194,7 +194,7 @@ loop:	for(int i=0; i<statements.length; i++) {
     @Override
 	public void transpileJavaStatement(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b) {
 		if(StringUtil.isNotEmpty(label)) {
-			b.println("{0}:", label);
+			b.println("{0}:", ILabeledNode.javaLabel(label));
 		}
 		b.println("{");
 		b.incIndent();

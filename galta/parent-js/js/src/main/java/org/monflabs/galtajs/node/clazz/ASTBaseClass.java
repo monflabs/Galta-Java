@@ -99,13 +99,11 @@ public abstract class ASTBaseClass extends ASTNode {
 		return decorators;
 	}
 
-	private JSType objectType;
+	// Created with the node (not lazily: the node is shared by every thread running the script)
+	private final JSType objectType = JSType.ofConstructor(this);
 
-	/** JSType for "an instance of this class", memoized here (not in a global cache - see JSType.ofConstructor()) so its lifetime matches this node's. */
+	/** JSType for "an instance of this class", kept here (not in a global cache - see JSType.ofConstructor()) so its lifetime matches this node's. */
 	public JSType getObjectType() {
-		if(objectType==null) {
-			objectType = JSType.ofConstructor(this);
-		}
 		return objectType;
 	}
 	

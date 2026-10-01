@@ -69,7 +69,7 @@ public class ASTContinue extends ASTNode {
     	if(StringUtil.isEmpty(label)) {
     		b.println("continue;");
     	} else {
-    		b.println("continue {0};", label);
+    		b.println("continue {0};", ILabeledNode.javaLabel(label));
     	}
     }
 

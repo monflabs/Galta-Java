@@ -21,11 +21,9 @@ import java.util.List;
 import org.monflabs.galtajs.node.ASTNode;
 import org.monflabs.galtajs.node.control.ASTFunctionMethod;
 import org.monflabs.galtajs.parser.Token;
-import org.monflabs.galtajs.rt.JSResult;
 import org.monflabs.galtajs.rt.builtins.privatename.PrivateName;
 import org.monflabs.galtajs.rt.builtins.standard.function.BuiltinClassConstructor;
 import org.monflabs.galtajs.rt.builtins.standard.function.BuiltinFunction;
-import org.monflabs.galtajs.rt.interpreter.InterpretedUnitRuntimeContext.Signal;
 import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext;
 import org.monflabs.galtajs.transpiler.TranspilerJavaBuilder;
 import org.monflabs.galtajs.transpiler.context.JSTranspilerGeneratorContext;
@@ -38,8 +36,7 @@ import org.monflabs.galtajs.util.JavaBuilder;
 public class ASTClassSetter extends ASTClassMember {
 	
 	private ASTFunctionMethod functionDecl;
-	private BuiltinFunction function;
-	
+
 	public ASTClassSetter(Token t, Object name, ASTFunctionMethod functionDecl, boolean isStatic, boolean isPrivate) {
 		this(t,name,functionDecl,isStatic,isPrivate,Collections.emptyList());
 	}
@@ -50,10 +47,6 @@ public class ASTClassSetter extends ASTClassMember {
 
 	public ASTFunctionMethod getFunctionDecl() {
 		return functionDecl;
-	}
-
-	public BuiltinFunction getFunction() {
-		return function;
 	}
 
 	@Override
@@ -76,32 +69,21 @@ public class ASTClassSetter extends ASTClassMember {
 	}
 
 	@Override
-	public Signal evaluate(JSInterpretedRuntimeContext context, JSResult result) {
-		try {
-			function = (BuiltinFunction)functionDecl.evaluateValue(context, result);
-			return Signal.NONE;
-		} catch(Throwable ex) {
-			throw fillInStackTrace(ex);
-		}				
-	}
-
-	@Override
 	public void initClass(JSInterpretedRuntimeContext context, BuiltinClassConstructor clazz) {
+		Object name = evaluateName(context, clazz);
+		BuiltinFunction function = applyOwnDecorators(context, name, createFunction(context, functionDecl));
 		if(isStatic())  {
-			Object name = evaluateName(context, clazz);
-			applyOwnDecorators(context, name);
 			clazz.addClassStaticSetter(name, function);
 		} else {
-			Object name = evaluateName(context, clazz);
-			applyOwnDecorators(context, name);
 			clazz.addClassSetter(name, function);
+			if(isPrivate()) {
+				setPrivateInstanceFunction(clazz, function);
+			}
 		}
 	}
-	private void applyOwnDecorators(JSInterpretedRuntimeContext context, Object name) {
+	private BuiltinFunction applyOwnDecorators(JSInterpretedRuntimeContext context, Object name, BuiltinFunction function) {
 		Object result = applyDecorators(context, getDecorators(), function, "setter", name, isStatic(), isPrivate());
-		if(result instanceof BuiltinFunction bf) {
-			function = bf;
-		}
+		return result instanceof BuiltinFunction bf ? bf : function;
 	}
 
 	@Override
@@ -109,7 +91,7 @@ public class ASTClassSetter extends ASTClassMember {
 		// See ASTClassGetter.initInstance.
 		if(!isStatic() && isPrivate()) {
 			PrivateName name = (PrivateName)evaluateName(context, clazz);
-			clazz.addInstancePrivateAccessor(instance, name, null, function);
+			clazz.addInstancePrivateAccessor(instance, name, null, getPrivateInstanceFunction(clazz));
 		}
 	}
 	

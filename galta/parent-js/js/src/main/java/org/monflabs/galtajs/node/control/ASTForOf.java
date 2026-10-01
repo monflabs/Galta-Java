@@ -29,6 +29,7 @@ import org.monflabs.galtajs.parser.Token;
 import org.monflabs.galtajs.rt.DisposeResourcesUtil;
 import org.monflabs.galtajs.rt.JSGlobalContext;
 import org.monflabs.galtajs.rt.JSResult;
+import org.monflabs.galtajs.rt.JSRuntimeUncatchableException;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.interpreter.InterpretedBlockRuntimeContext;
 import org.monflabs.galtajs.rt.interpreter.InterpretedUnitRuntimeContext.Signal;
@@ -42,6 +43,7 @@ import org.monflabs.galtajs.types.JSType;
 import org.monflabs.galtajs.util.JavaBuilder;
 import org.monflabs.util.StringFormat;
 import org.monflabs.util.StringUtil;
+import org.monflabs.util.generators.GeneratorReturnSignal;
 
 
 
@@ -254,7 +256,8 @@ public class ASTForOf extends ASTFor_ {
 		return false;
 	}
 
-	private Boolean needsPerIterationBinding;
+	// Lazily computed: volatile, the AST node is shared by every thread running the script
+	private volatile Boolean needsPerIterationBinding;
 
 	// A fresh-per-iteration binding is only OBSERVABLE if something could
 	// capture it across iterations - see ASTFor's identical check (and its
@@ -266,11 +269,13 @@ public class ASTForOf extends ASTFor_ {
 	// default-value expression (`for (let [a = () => a] of pairs)`) is the
 	// scenario that matters.
 	private boolean needsPerIterationBinding() {
-		if(needsPerIterationBinding==null) {
-			needsPerIterationBinding = hasPerIterationBindings()
+		Boolean needs = needsPerIterationBinding;
+		if(needs==null) {
+			needs = hasPerIterationBindings()
 					&& (mayCaptureAcrossIterations(varDecl) || mayCaptureAcrossIterations(collectionNode) || mayCaptureAcrossIterations(bodyNode));
+			needsPerIterationBinding = needs;
 		}
-		return needsPerIterationBinding;
+		return needs;
 	}
 
 	// See ASTVarContainer.needsHeadClosureSnapshot()'s own doc: a closure
@@ -437,6 +442,28 @@ loop:		while(it.hasNext()) {
 						}
 						return Signal.NONE;
 					});
+				} catch(JSRuntimeUncatchableException ex) {
+					// Terminates the script: nothing more runs, not even return()
+					throw ex;
+				} catch(GeneratorReturnSignal ex) {
+					// The enclosing generator's return(): a return completion, so
+					// IteratorClose (7.4.8) is not quiet - an error thrown by the
+					// iterator's return() (or by a disposal) replaces it.
+					if(hasUsingDeclarations()) {
+						Throwable toThrow = DisposeResourcesUtil.dispose(forContext, null);
+						if(toThrow!=null) {
+							closeIteratorQuietly(context.getEnvironment(), it);
+							if(toThrow instanceof RuntimeException re) {
+								throw re;
+							}
+							if(toThrow instanceof Error e) {
+								throw e;
+							}
+							throw new RuntimeException(toThrow);
+						}
+					}
+					closeIterator(context.getEnvironment(), it);
+					throw ex;
 				} catch(Throwable ex) {
 					// IteratorClose (7.4.8): the loop is being abandoned because of an
 					// exception (binding the loop variable or the body) - best-effort
@@ -616,7 +643,7 @@ loop:		while(it.hasNext()) {
 		b.incIndent();
 
 		if(StringUtil.isNotEmpty(getLabel())) {
-			b.println("{0}:", getLabel());
+			b.println("{0}:", ILabeledNode.javaLabel(getLabel()));
 		}
 		b.println("for(;;) {");
 		b.incIndent();
@@ -721,6 +748,18 @@ loop:		while(it.hasNext()) {
 			}
 		}
 
+		b.decIndent();
+		// Uncatchable: terminates the script, no close. The enclosing
+		// generator's return() (GeneratorReturnSignal): a return completion,
+		// closed by the finally below, whose error then replaces it.
+		b.println("} catch(JSRuntimeUncatchableException {0}) {", bodyExVar);
+		b.incIndent();
+		b.println("{0}=true;", closedVar);
+		b.println("throw {0};", bodyExVar);
+		b.decIndent();
+		b.println("} catch(GeneratorReturnSignal {0}) {", bodyExVar);
+		b.incIndent();
+		b.println("throw {0};", bodyExVar);
 		b.decIndent();
 		b.println("} catch(Throwable {0}) {", bodyExVar);
 		b.incIndent();

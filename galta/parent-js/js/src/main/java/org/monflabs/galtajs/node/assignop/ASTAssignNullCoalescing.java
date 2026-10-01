@@ -92,6 +92,8 @@ public class ASTAssignNullCoalescing extends ASTAbstractAssign {
 						result.setValue(rightValue);
 					}
 				}
+			} else if(leftNode instanceof ASTIdentifier ident) {
+				evaluateLogicalAssign(context, ident, RuntimeUtil::isNullOrUndefined, result);
 			} else {
 				leftNode.evaluateAssign(context, null, (v) -> RuntimeUtil.nullCoalescing(context.getEnvironment(),v, ()->getRightNode().evaluateValue(context, new JSResult())), result, null);
 			}

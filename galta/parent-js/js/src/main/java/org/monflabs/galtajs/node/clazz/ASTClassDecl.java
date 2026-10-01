@@ -234,12 +234,7 @@ public class ASTClassDecl extends ASTBaseClass /*implements HoistableNode*/ { //
 	private void checkDuplicatePrivateNames(ASTNode[] nodes) {
 		java.util.Map<String,int[]> seen = null;   // name -> { kindMask, isStatic }
 		for(ASTNode node: nodes) {
-			// A static initialization block is constructed as ASTClassMember
-			// with isPrivate=true and an empty name purely as an internal
-			// marker (see ASTClassStaticBlock's super(...) call) - it binds no
-			// private identifier at all and must not participate here.
 			if(!(node instanceof ASTClassMember member) || !member.isPrivate()
-					|| node instanceof ASTClassStaticBlock
 					|| StringUtil.isEmpty(member.getName())) {
 				continue;
 			}

@@ -574,9 +574,9 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 	// walk, not a static AST walk - needed so it still resolves correctly through
 	// nested eval-within-eval, where each eval'd text is its own freshly-parsed,
 	// AST-disconnected program) for how these are computed at the eval call site.
-	// All-true is the permissive default (an ordinary, non-eval script/module
-	// program never runs checkEvalCallerRestrictions() for real, since every
-	// check below is gated on its own fact being false).
+	// All-true is the permissive default (only eval code gets its top-level
+	// new.target/super restrictions from these facts - see
+	// EarlyErrorsValidator.check()).
 	public void __init(JSEnvironment env, boolean commonJS, boolean forceStrict, boolean callerHasNewTarget, boolean callerIsMethod, boolean callerIsDerivedCtor) {
 		__init(env,commonJS,forceStrict,callerHasNewTarget,callerIsMethod,callerIsDerivedCtor,false);
 	}
@@ -654,11 +654,12 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 		// expected TypeError (test262 namespace/internals/delete-
 		// exported-*.js, set.js: strict-mode-only rejections never fired).
 		this.init(new MainContext(env,isForceStrictMode() || forceStrict || isModule));
-		checkEvalCallerRestrictions(callerHasNewTarget,callerIsMethod,callerIsDerivedCtor);
 		checkParameterExpressionArgumentsRestriction(callerInParameterExpressionScope);
-		checkFieldInitializerArgumentsRestriction(callerInFieldInitializer);
 		PrivateNameValidator.check(this, callerPrivateNames);
-		EarlyErrorsValidator.check(this, env.supportImportExportInScripts());
+		// Also PerformEval's new.target/super restrictions, and the Additional
+		// Early Error Rules for Eval Inside Initializer (no "arguments"), from
+		// the eval caller's facts
+		EarlyErrorsValidator.check(this, env.supportImportExportInScripts(), callerHasNewTarget, callerIsMethod, callerIsDerivedCtor, callerInFieldInitializer);
 	}
 
 	// A direct eval whose call site is inside a function's default parameter-
@@ -688,105 +689,6 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 				throw new JSParseException(null,this,"'arguments' is not allowed to be declared in this eval");
 			}
 		}
-	}
-
-	// Additional Early Error Rules for Eval Inside Initializer (a class field
-	// Initializer is never a function body, so it has no "arguments" binding
-	// of its own at all - unlike the parameter-expression case above, this
-	// is a REFERENCE restriction, not just a declaration one: "It is a
-	// Syntax Error if ContainsArguments of StatementList is true" - ANY use
-	// of the identifier "arguments" anywhere in the eval'd text is rejected,
-	// not just a `var arguments`/`function arguments(){}` declaration.
-	private void checkFieldInitializerArgumentsRestriction(boolean callerInFieldInitializer) {
-		if(!callerInFieldInitializer) {
-			return;
-		}
-		ASTNode offender = findArgumentsReference(this,false);
-		if(offender!=null) {
-			throw new JSParseException(null,offender,"'arguments' is not allowed in class field initializer");
-		}
-	}
-	// Same opaque-at-nested-non-arrow-function-boundary walk as
-	// findEvalCallerRestrictionViolation() below - a nested non-arrow
-	// function (including a class method/constructor) establishes its own
-	// genuine "arguments" binding, so a reference inside one is unrelated to
-	// the field initializer's own restriction.
-	private static ASTNode findArgumentsReference(ASTNode node, boolean insideNestedNonArrow) {
-		if(node==null) {
-			return null;
-		}
-		if(!insideNestedNonArrow && node instanceof ASTIdentifier id && "arguments".equals(id.getId())) {
-			return node;
-		}
-		boolean childInsideNestedNonArrow = insideNestedNonArrow;
-		if(node instanceof ASTFunction fn && !fn.isArrow()) {
-			childInsideNestedNonArrow = true;
-		}
-		int n = node.getChildCount();
-		for(int i=0; i<n; i++) {
-			ASTNode result = findArgumentsReference(node.getChild(i),childInsideNestedNonArrow);
-			if(result!=null) {
-				return result;
-			}
-		}
-		return null;
-	}
-
-	// PerformEval, non-eval-specific early errors:
-	//   - "If inFunc is false and body Contains NewTarget, throw a SyntaxError."
-	//   - "If inMethod is false and body Contains SuperProperty, throw a SyntaxError."
-	//   - "If inDerivedCtor is false and body Contains SuperCall, throw a SyntaxError."
-	// A single top-down scan checks all three at once. Nested non-arrow functions
-	// (and, transitively, class bodies via their methods/constructor, which are
-	// themselves non-arrow ASTFunctionMethod nodes) are opaque - they establish
-	// their OWN new.target/super context, so a `new.target`/`super` used inside
-	// one is unrelated to the CALLER's context and must never be flagged here;
-	// arrow functions are transparent (same rule "Contains" static semantics uses,
-	// mirrored by ASTFunction.containsHazard()/RuntimeUtil.getSuper()/superCtor()'s
-	// runtime arrow-skipping walks). All three facts default to permissive
-	// (true/true/true) for an ordinary, non-eval program, making this a no-op.
-	private void checkEvalCallerRestrictions(boolean callerHasNewTarget, boolean callerIsMethod, boolean callerIsDerivedCtor) {
-		if(callerHasNewTarget && callerIsMethod && callerIsDerivedCtor) {
-			return;
-		}
-		ASTNode offender = findEvalCallerRestrictionViolation(this,false,callerHasNewTarget,callerIsMethod,callerIsDerivedCtor);
-		if(offender!=null) {
-			if(offender instanceof ASTNewMember) {
-				throw new JSParseException(null,offender,"new.target expression is not allowed here");
-			}
-			if(offender instanceof ASTSuperMember) {
-				throw new JSParseException(null,offender,"'super' keyword is only valid inside a method");
-			}
-			throw new JSParseException(null,offender,"'super' keyword is only valid inside a constructor");
-		}
-	}
-	private static ASTNode findEvalCallerRestrictionViolation(ASTNode node, boolean insideNestedNonArrow, boolean callerHasNewTarget, boolean callerIsMethod, boolean callerIsDerivedCtor) {
-		if(node==null) {
-			return null;
-		}
-		if(!insideNestedNonArrow) {
-			if(node instanceof ASTNewMember && !callerHasNewTarget) {
-				return node;
-			}
-			if(node instanceof ASTSuperMember && !callerIsMethod) {
-				return node;
-			}
-			if(node instanceof ASTSuperCtor && !callerIsDerivedCtor) {
-				return node;
-			}
-		}
-		boolean childInsideNestedNonArrow = insideNestedNonArrow;
-		if(node instanceof ASTFunction fn && !fn.isArrow()) {
-			childInsideNestedNonArrow = true;
-		}
-		int n = node.getChildCount();
-		for(int i=0; i<n; i++) {
-			ASTNode result = findEvalCallerRestrictionViolation(node.getChild(i),childInsideNestedNonArrow,callerHasNewTarget,callerIsMethod,callerIsDerivedCtor);
-			if(result!=null) {
-				return result;
-			}
-		}
-		return null;
 	}
 	
 	@Override
@@ -1347,16 +1249,16 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 	private static void validateGlobalDeclarationSets(JSRuntimeContext context, GlobalThis globalThis, java.util.Set<String> functionNames, java.util.Set<String> varNames, java.util.Set<String> lexNames) {
 		for(String name: lexNames) {
 			if(hasLexicalDeclaration(context, name)) {
-				throw RuntimeUtil.syntaxError("Identifier ''{0}'' has already been declared", name);
+				throw RuntimeUtil.syntaxError("Identifier '{0}' has already been declared", name);
 			}
 			PropertyDescriptor existing = globalThis.getOwnPropertyDescriptor(name);
 			if(existing!=null && !existing.isConfigurable()) {
-				throw RuntimeUtil.syntaxError("Identifier ''{0}'' has already been declared", name);
+				throw RuntimeUtil.syntaxError("Identifier '{0}' has already been declared", name);
 			}
 		}
 		for(String name: functionNames) {
 			if(hasLexicalDeclaration(context, name)) {
-				throw RuntimeUtil.syntaxError("Identifier ''{0}'' has already been declared", name);
+				throw RuntimeUtil.syntaxError("Identifier '{0}' has already been declared", name);
 			}
 		}
 		for(String name: varNames) {
@@ -1364,12 +1266,12 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 				continue;
 			}
 			if(hasLexicalDeclaration(context, name)) {
-				throw RuntimeUtil.syntaxError("Identifier ''{0}'' has already been declared", name);
+				throw RuntimeUtil.syntaxError("Identifier '{0}' has already been declared", name);
 			}
 		}
 		for(String name: functionNames) {
 			if(!canDeclareGlobalFunction(globalThis, name)) {
-				throw RuntimeUtil.typeError("Cannot declare global function ''{0}''", name);
+				throw RuntimeUtil.typeError("Cannot declare global function '{0}'", name);
 			}
 		}
 		for(String name: varNames) {
@@ -1377,7 +1279,7 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 				continue;
 			}
 			if(!canDeclareGlobalVar(globalThis, name)) {
-				throw RuntimeUtil.typeError("Cannot declare global variable ''{0}''", name);
+				throw RuntimeUtil.typeError("Cannot declare global variable '{0}'", name);
 			}
 		}
 	}

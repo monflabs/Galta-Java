@@ -92,6 +92,8 @@ public class ASTAssignOr extends ASTAbstractAssign {
 						result.setValue(rightValue);
 					}
 				}
+			} else if(leftNode instanceof ASTIdentifier ident) {
+				evaluateLogicalAssign(context, ident, (v) -> !RuntimeUtil.toBoolean(context.getEnvironment(), v), result);
 			} else {
 				leftNode.evaluateAssign(context, null, (v) -> RuntimeUtil.or(context.getEnvironment(),v, ()->getRightNode().evaluateValue(context, new JSResult())), result, null);
 			}

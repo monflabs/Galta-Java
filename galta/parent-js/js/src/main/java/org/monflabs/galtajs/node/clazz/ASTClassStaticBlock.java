@@ -64,7 +64,7 @@ public class ASTClassStaticBlock extends ASTClassMember implements IContextRootC
 	private ASTBlock block;
 
 	public ASTClassStaticBlock(Token t, ASTBlock block) {
-		super(t,"",true,true);
+		super(t,"",true,false);
 		this.block = assignParent(block);
 	}
 

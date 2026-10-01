@@ -54,9 +54,9 @@ import org.monflabs.galtajs.rt.builtins.standard.arguments.Arguments;
  * function declarations in sloppy code, Annex B.3.2.4) nor be a var
  * declared name of the block.</li>
  * </ul>
- * Code outside of any function (a script or an eval) is left to
- * ASTProgram.checkEvalCallerRestrictions(), which knows the eval caller's
- * context.
+ * Code outside of any function has no new.target and no super in a script
+ * or a module; in an eval, it gets them from the eval caller's context
+ * (PerformEval's inFunc/inMethod/inDerivedCtor), passed by ASTProgram.
  */
 public class EarlyErrorsValidator {
 
@@ -69,6 +69,13 @@ public class EarlyErrorsValidator {
 
 	// importExportInScripts: JSConfiguration.supportImportExportInScripts()
 	public static void check(ASTNode root, boolean importExportInScripts) {
+		check(root, importExportInScripts, true, true, true, false);
+	}
+
+	// callerHasNewTarget/callerIsMethod/callerIsDerivedCtor/callerInFieldInitializer:
+	// for eval code, what the eval caller's context allows at the top level of
+	// the eval'd code (see ASTProgram.__init()) - ignored for a script or a module.
+	public static void check(ASTNode root, boolean importExportInScripts, boolean callerHasNewTarget, boolean callerIsMethod, boolean callerIsDerivedCtor, boolean callerInFieldInitializer) {
 		boolean module = root instanceof ASTProgram p && p.isModule();
 		// import/export declarations are module items (GaltaJS extension:
 		// also allowed at the top level of a script)
@@ -91,11 +98,14 @@ public class EarlyErrorsValidator {
 				}
 			}
 		}
-		// Script and module code (not eval code, which ASTProgram.
-		// checkEvalCallerRestrictions() checks against its caller) has no
-		// new.target and no super
+		// Script and module code has no new.target and no super; eval code
+		// has what its caller has
 		boolean topLevel = root instanceof ASTProgram p && !p.isEval() && !p.isCommonJS();
-		walk(root, !topLevel, !topLevel, false, module, module, !topLevel);
+		if(topLevel) {
+			walk(root, false, false, false, module, module, false);
+		} else {
+			walk(root, callerIsDerivedCtor, callerIsMethod, callerInFieldInitializer, module, module, callerHasNewTarget);
+		}
 	}
 
 	private static void walk(ASTNode node, boolean superCall, boolean superProperty, boolean noArguments, boolean noAwait, boolean module, boolean newTarget) {

@@ -34,6 +34,7 @@ public class AllGaltaJSTests extends TestSuite {
 		suite.addTestSuite(tests.javascript.regression.RuntimeRegressionJavaTest.class);
 		suite.addTestSuite(tests.javascript.regression.EngineRegression3JavaTest.class);
 		suite.addTestSuite(tests.javascript.regression.BuiltinsRegressionJavaTest.class);
+		suite.addTestSuite(tests.javascript.regression.ParserRegressionJavaTest.class);
 		suite.addTestSuite(tests.debug.DebuggerImplTest.class);
 		suite.addTestSuite(tests.debug.TranspiledDebuggerImplTest.class);
 		suite.addTestSuite(tests.debug.DebugHookMechanismTest.class);

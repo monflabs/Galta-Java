@@ -42,20 +42,13 @@ import org.monflabs.galtajs.node.literal.ASTPrivateNameLiteral;
  * executes, too late for the early SyntaxError this rule requires (and,
  * critically, AFTER any earlier statements in the same program have already
  * run). This is a single, one-shot AST walk performed right after parsing/
- * init, mirroring the existing pattern used by
- * ASTProgram.checkEvalCallerRestrictions() for new.target/super.
+ * init, like EarlyErrorsValidator's.
  *
- * `initiallyValidNames`==null means "skip this check entirely" (the same
- * permissive-default convention checkEvalCallerRestrictions() uses for its
- * own caller-derived facts) - used only for a direct eval whose CALLER is a
- * transpiled context, since the transpiler doesn't yet compute the caller's
- * enclosing private-name set (see StandardLibrary's eval case) and transpiled
- * mode's private fields currently share a single "#name"-keyed scheme anyway
- * (a separate, already-documented gap) - forcing an empty set there would be
- * a straight regression, not just an unfixed gap. Every other caller
- * (ordinary script/module/function compiles, `new Function(...)`, indirect
- * eval, and direct eval from an INTERPRETED caller) always enforces with a
- * real (possibly empty) set.
+ * `initiallyValidNames` is the set of private names visible at a direct
+ * eval's call site (empty for every other compile). null skips the check
+ * entirely: the engine itself never passes it (a transpiled direct eval gets
+ * its caller's names baked in at transpile time, see StandardLibrary's eval
+ * case), it is only honored for JSEnvironment.createScript() API callers.
  */
 public class PrivateNameValidator {
 
@@ -65,7 +58,7 @@ public class PrivateNameValidator {
 		}
 		ASTNode offender = find(root, initiallyValidNames);
 		if(offender!=null) {
-			throw new JSParseException(null, offender, "Private field ''{0}'' must be declared in an enclosing class", nameOf(offender));
+			throw new JSParseException(null, offender, "Private field '{0}' must be declared in an enclosing class", nameOf(offender));
 		}
 	}
 

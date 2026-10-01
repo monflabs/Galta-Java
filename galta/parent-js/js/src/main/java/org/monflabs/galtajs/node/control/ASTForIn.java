@@ -176,18 +176,21 @@ public class ASTForIn extends ASTFor_ {
 		return false;
 	}
 
-	private Boolean needsPerIterationBinding;
+	// Lazily computed: volatile, the AST node is shared by every thread running the script
+	private volatile Boolean needsPerIterationBinding;
 
 	// A fresh-per-iteration binding is only OBSERVABLE if something could
 	// capture it across iterations - see ASTFor's identical check (and its
 	// own doc) for the full rationale; duplicated here (and in ASTForOf)
 	// rather than shared, to keep this fix self-contained.
 	private boolean needsPerIterationBinding() {
-		if(needsPerIterationBinding==null) {
-			needsPerIterationBinding = hasPerIterationBindings()
+		Boolean needs = needsPerIterationBinding;
+		if(needs==null) {
+			needs = hasPerIterationBindings()
 					&& (mayCaptureAcrossIterations(varDecl) || mayCaptureAcrossIterations(collectionNode) || mayCaptureAcrossIterations(bodyNode));
+			needsPerIterationBinding = needs;
 		}
-		return needsPerIterationBinding;
+		return needs;
 	}
 
 	// See ASTVarContainer.needsHeadClosureSnapshot()'s own doc: a closure
@@ -483,7 +486,7 @@ loop:		for(Object value: names) {
 		}
 
 		if(StringUtil.isNotEmpty(getLabel())) {
-			b.println("{0}:", getLabel());
+			b.println("{0}:", ILabeledNode.javaLabel(getLabel()));
 		}
 
 		String itName = "_it"+_jsContext.getDepth();

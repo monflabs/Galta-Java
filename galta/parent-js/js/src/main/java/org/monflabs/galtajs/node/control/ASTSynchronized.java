@@ -15,9 +15,11 @@
  */
 package org.monflabs.galtajs.node.control;
 
+import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.node.ASTNode;
 import org.monflabs.galtajs.parser.Token;
 import org.monflabs.galtajs.rt.JSResult;
+import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.interpreter.InterpretedUnitRuntimeContext.Signal;
 import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext;
 import org.monflabs.galtajs.transpiler.JSTranspiler;
@@ -71,7 +73,7 @@ public class ASTSynchronized extends ASTNode {
 		try {
 			context.getGlobalContext().checkInterrupted();
 
-			Object sync = syncNode.evaluateValue(context, result);
+			Object sync = lockTarget(context.getEnvironment(), syncNode.evaluateValue(context, result));
 			Signal signal;
 			synchronized(sync) {
 				signal = bodyNode.evaluate(context, result);
@@ -87,6 +89,15 @@ public class ASTSynchronized extends ASTNode {
 		}		
 	}
 
+	// The object locked by synchronized(): an object, never null/undefined or a
+	// primitive value (a shared, interned or boxed-on-the-fly instance)
+	public static Object lockTarget(JSEnvironment env, Object value) {
+		if(!RuntimeUtil.isObject(env, value)) {
+			throw RuntimeUtil.typeError("synchronized() requires an object, not {0}", value==RuntimeUtil.UNDEFINED ? "undefined" : value==null ? "null" : "a primitive value");
+		}
+		return value;
+	}
+
     @Override
 	public JSType getReturnedType() {
     	return JSType.UNKNOWN;
@@ -97,7 +108,7 @@ public class ASTSynchronized extends ASTNode {
     public void transpileJavaStatement(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b) {
     	JSTranspilerGeneratorContext syncContext = new TranspilerGeneratorBlockContext(jsContext); 
 
-		b.println("synchronized({0}) {", JSTranspiler.asValue(syncContext, syncNode));
+		b.println("synchronized({0}.lockTarget({1},{2})) {", ASTSynchronized.class.getName(), JSTranspiler.MAIN_ENVIRONMENT, JSTranspiler.asValue(syncContext, syncNode));
     	b.incIndent();
 		if(bodyNode instanceof ASTBlock block) {
 			block.transpileJavaStatementNoBrace(syncContext,b);

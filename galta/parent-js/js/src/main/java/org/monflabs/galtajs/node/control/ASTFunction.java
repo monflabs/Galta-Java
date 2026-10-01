@@ -210,6 +210,21 @@ public abstract class ASTFunction extends ASTRootStatementList {
 		return false;
 	}
 
+	// True when the parser recorded the function's last token (the body's
+	// closing "}", or the last token of an arrow's expression body) as its end
+	// position: the source extraction below then needs no text scanning to
+	// find where the function ends (a scan can't tell a regular expression
+	// literal from a division, e.g. `x => /\)/.test(x)`).
+	private boolean exactEnd;
+
+	@Override
+	public <T> T endToken(Token token) {
+		if(token!=null) {
+			exactEnd = true;
+		}
+		return super.endToken(token);
+	}
+
 	// Function.prototype.toString(): slice the exact original source text
 	// (including comments/whitespace) using this node's begin/end position -
 	// spec requires the literal source, not a re-serialization of the AST.
@@ -257,6 +272,9 @@ public abstract class ASTFunction extends ASTRootStatementList {
 			if(i>=5 && code.regionMatches(i-5,"async",0,5) && (i==5 || !Character.isJavaIdentifierPart(code.charAt(i-6)))) {
 				start = i-5;
 			}
+		}
+		if(exactEnd) {
+			return new int[]{start, end};
 		}
 		// A function's parameter list and body positions aren't fully
 		// reliable from AST child aggregation (some node types, e.g.

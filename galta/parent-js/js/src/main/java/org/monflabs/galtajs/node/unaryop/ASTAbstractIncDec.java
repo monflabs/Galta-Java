@@ -83,7 +83,9 @@ public abstract class ASTAbstractIncDec extends ASTUnaryOp {
 					// ASTIdentifier.evaluateAssign()'s runtime CONST check (the
 					// same path ASTAbstractAssign itself already relies on for its
 					// own deferred cases).
-					if(!declaredByForLoopHead(id.getId())) {
+					// Like assignments (see ASTAbstractAssign), only a static
+					// error when the environment asks for GaltaJS's static checks.
+					if(initContext.getEnvironment().isStrictMode() && !declaredByForLoopHead(id.getId())) {
 						throw new JSParseException(null, this, "Cannot increment or decrement the constant {0}", id.getId());
 					}
 				}

@@ -357,10 +357,10 @@ public class JSParser {
  	// directly follow another identifier with no operator between them, so
  	// checking the NEXT token looks like a binding identifier is enough to
  	// tell the two apart without a full syntactic lookahead.
+ 	// "let" is excluded: it is never a valid lexically bound name.
  	private boolean looksLikeBindingIdentifier(int index) {
  	  int k = getToken(index).kind;
- 	  return k==IDENTIFIER_NAME || k==GET || k==SET || k==ASYNC || k==AWAIT
- 	      || k==SYNCHRONIZED || k==USING || k==STATIC || (k==YIELD && !yieldReserved);
+ 	  return k!=LET && isIdentifierToken(k);
  	}
 
  	// "using [no LineTerminator here] BindingIdentifier"
@@ -566,10 +566,7 @@ public class JSParser {
  	// commit to Identifier_Name() even when the next token isn't one (e.g.
  	// plain "continue;"), causing a spurious parse error.
  	private boolean noLineTerminatorBeforeLabel() {
- 	  int k = getToken(1).kind;
- 	  return noLineTerminatorBeforeNextToken() &&
- 	    (k==IDENTIFIER_NAME || k==GET || k==SET || k==ASYNC || k==AWAIT || k==SYNCHRONIZED || k==USING
- 	      || (k==YIELD && !yieldReserved));
+ 	  return noLineTerminatorBeforeNextToken() && isIdentifierToken(getToken(1).kind);
  	}
 
  	// "return [no LineTerminator here] Expression": true only when the next
@@ -643,6 +640,12 @@ public class JSParser {
  	      || kind==SYNCHRONIZED || kind==LET || kind==YIELD || kind==USING || kind==STATIC;
  	}
 
+ 	// The token kinds Identifier_Name() accepts at the current position:
+ 	// "yield" only outside a generator's own parameters/body.
+ 	private boolean isIdentifierToken(int kind) {
+ 	  return kind==YIELD ? !yieldReserved : isIdentifierNameLikeToken(kind);
+ 	}
+
  	private boolean computeSoleObjectLiteralProgram(String text) {
  	  JSParserTokenManager scanTM = new JSParserTokenManager(new SimpleCharStream(new org.monflabs.util.io.FastStringReader(text, removeShebang(text)), 1, 1));
  	  Token t1 = scanTM.getNextToken();
@@ -677,20 +680,29 @@ public class JSParser {
  	  return last.kind == EOF;
  	}
 
- 	// True if there is no LineTerminator/comment attached as a special token
- 	// immediately before getToken(index).
+ 	// True if there is no LineTerminator (or comment containing one) attached
+ 	// as a special token immediately before getToken(index).
  	private boolean noLineTerminatorBefore(int index) {
- 	  Token next = getToken(index);
- 	  if (next.specialToken != null) {
- 	    Token specialT = next.specialToken;
- 	    while (specialT != null) {
- 	      if (specialT.kind == LINE_TERMINATOR || specialT.kind == SINGLE_LINE_COMMENT) {
- 	        return false;
- 	      }
- 	      specialT = specialT.specialToken;
- 	    }
+ 	  return !lineTerminatorBefore(getToken(index));
+ 	}
+
+ 	// The ")" closing an if/while/for/with head is followed by a Statement, so
+ 	// a "/" there starts a RegularExpressionLiteral - but RPAREN's lexical
+ 	// action leaves the lexer in NO_REGEX (right for "(a) / b"). Switch back
+ 	// to DEFAULT before the next token is lexed; if a lookahead already lexed
+ 	// it as a lone "/" or "/=", give it back and lex it again.
+ 	private void regexAllowedAfterHead() {
+ 	  Token next = token.next;
+ 	  if (next == null) {
+ 	    token_source.SwitchTo(DEFAULT);
+ 	  } else if ((next.kind == SLASH || next.kind == SLASHASSIGN) && next.next == null) {
+ 	    token_source.input_stream.backup(next.image.length());
+ 	    token_source.SwitchTo(DEFAULT);
+ 	    Token relexed = token_source.getNextToken();
+ 	    relexed.specialToken = next.specialToken;
+ 	    token.next = relexed;
+ 	    jj_ntk = -1;
  	  }
- 	  return true;
  	}
 
  	// Helper to check if we have an arrow function pattern: scan for => after balanced parens
@@ -1157,14 +1169,9 @@ TOKEN_MGR_DECLS : {
 
 <DEFAULT, NO_REGEX>
 SPECIAL_TOKEN: { 
-   <WHITE_SPACE: <TAB> | <VT> | <FAKEVT> | <FF> | <SP> | <NBSP> | <BOM> | <USP>>
+   <WHITE_SPACE: <TAB> | <VT> | <FF> | <SP> | <NBSP> | <BOM> | <USP>>
  | < #TAB: "\u0009" | "\t" > /* TAB */
  | < #VT: "\u000B" > /* Vertical Tab */
-   /* In JavaCC, you cannot use the escape sequence \v directly because JavaCC is based on Java, and Java itself does not recognize \v
-      as a valid escape sequence for a vertical tab.
-      #VT catches the actual vertical tab character, while #FAKE_VTAB matches the string \v. Note the double backslashes (\\v),
-      which are necessary because in Java strings, the backslash itself must be escaped. */
- | < #FAKEVT: "\\v" > /* Fake Vertical Tab */
  | < #FF: "\u000C" | "\f"> /* Form Feed */
  | < #SP: "\u0020" | " " > /* Space */
  | < #NBSP: "\u00A0" > /* No-break space */
@@ -2624,8 +2631,8 @@ TOKEN:
 		|	["\uFF3F"]
 		|	["\uFF65"]
 		>	 	
-	|	<#ZWNJ:	"\u200D"> 
-	|	<#ZWJ:	"\u200C">
+	|	<#ZWNJ:	"\u200C"> 
+	|	<#ZWJ:	"\u200D">
 }
 
 
@@ -3019,19 +3026,19 @@ void PropertyEntry(ASTObjectLiteral node): {
 		  	// starting mid-way at the parameter list (test262
 		  	// built-ins/Function toString cluster).
 		  	Token tbegin = tasync!=null ? tasync : (tgen!=null ? tgen : tname);
-		  	ASTFunctionMethod decl = nodeFactory.createFunctionMethod(tbegin,name,parameters,body);
+		  	ASTFunctionMethod decl = nodeFactory.createFunctionMethod(tbegin,name,parameters,body); decl.endToken(token);
 		  	decl.setGenerator(tgen!=null);
 		  	decl.setAsync(tasync!=null);
       		node.addFunction(name,decl);
 		}
    | LOOKAHEAD(3) tget="get" name=PropertyName() { savedYieldReserved = yieldReserved; yieldReserved = false; savedAwaitReserved = awaitReserved; enterFunction(); awaitReserved = false; } t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")" { skipTypeAnnotationIfAny(); } "{" body = FunctionBody() "}" { yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved; exitFunction(); }
 		{
-		  	ASTFunctionMethod decl = nodeFactory.createFunctionMethod(tget,name,parameters,body);
+		  	ASTFunctionMethod decl = nodeFactory.createFunctionMethod(tget,name,parameters,body); decl.endToken(token);
       		node.addGetter(name,decl);
 		}
    | LOOKAHEAD(3) tset="set" name=PropertyName() { savedYieldReserved = yieldReserved; yieldReserved = false; savedAwaitReserved = awaitReserved; enterFunction(); awaitReserved = false; } t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")" { skipTypeAnnotationIfAny(); } "{" body = FunctionBody() "}" { yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved; exitFunction(); }
 		{
-		  	ASTFunctionMethod decl = nodeFactory.createFunctionMethod(tset,name,parameters,body);
+		  	ASTFunctionMethod decl = nodeFactory.createFunctionMethod(tset,name,parameters,body); decl.endToken(token);
       		node.addSetter(name,decl);
 		}
    | n=AssignmentExpression() 
@@ -3298,7 +3305,7 @@ ASTNode NewTargetSuffixes(ASTNode n): {
 	  	}
 	| LOOKAHEAD(2) "." t=Property_Name()
 		{
-			n=nodeFactory.createMember(t,n,t.image,false,false);
+			n=nodeFactory.createMember(t,n,ASTLiteral.parseIdentifier(t.image),false,false);
 		}
 	| LOOKAHEAD({ getToken(1).kind==LBRACKET && getToken(2).kind!=RBRACKET }) t="[" e=Expression() "]"
 		{
@@ -3383,23 +3390,23 @@ ASTNode CallExpressionPart(ASTNode leftMember): {
         }
    | LOOKAHEAD(2) t=".." t2=Property_Name()
         {
-           	return nodeFactory.createMember(t2,leftMember,t2.image,true,false);
+           	return nodeFactory.createMember(t2,leftMember,ASTLiteral.parseIdentifier(t2.image),true,false);
         }
    | LOOKAHEAD(2) t=".." t2=<DEC_INTEGER_LITERAL>
         {
            	return nodeFactory.createMember(t2,leftMember,t2.image,true,false);
         }
-   | LOOKAHEAD(2) ".."
+   | LOOKAHEAD(2) t=".."
         {
             return nodeFactory.createArrayMemberDeepScan(t,leftMember);
         }
    | LOOKAHEAD(3) (o="?." | s=".") "#" {privateNameFollows();} t=Property_Name()
         {
-          	return nodeFactory.createMember(o,leftMember,"#"+ASTLiteral.parseIdentifier(t.image),false,o!=null).endToken(t);
+          	return nodeFactory.createMember(o!=null?o:s,leftMember,"#"+ASTLiteral.parseIdentifier(t.image),false,o!=null).endToken(t);
         }
    | LOOKAHEAD(2) (o="?." | s=".") t=Property_Name()
         {
-          	return nodeFactory.createMember(o,leftMember,ASTLiteral.parseIdentifier(t.image),false,o!=null).endToken(t);
+          	return nodeFactory.createMember(o!=null?o:s,leftMember,ASTLiteral.parseIdentifier(t.image),false,o!=null).endToken(t);
         }
    | LOOKAHEAD(2) t=<DECIMAL_LITERAL>
         {
@@ -3710,6 +3717,7 @@ ASTNode RelationalExpression(): {
  	ASTNode leftNode,rightNode;
 }
 {
+	  (
 	    LOOKAHEAD(2) tpriv="#" {privateNameFollows();} tname=Property_Name() t="in" rightNode=ShiftExpression()
 	    	{
 	    		// Ergonomic brand check (#name in obj): the private name is a fixed,
@@ -3720,10 +3728,12 @@ ASTNode RelationalExpression(): {
 	    		// private-name reference, distinct from a coincidental ordinary string
 	    		// literal like "#name" that happens to start with "#" - ASTIn needs to
 	    		// tell the two apart.
-	    		leftNode = nodeFactory.createPrivateNameLiteral(tpriv, "#"+tname.image);
-	    		return nodeFactory.createIn(t,MODE.ONE,leftNode,rightNode);
+	    		// The result is itself a RelationalExpression ("#x in o in p").
+	    		leftNode = nodeFactory.createPrivateNameLiteral(tpriv, "#"+ASTLiteral.parseIdentifier(tname.image));
+	    		leftNode = nodeFactory.createIn(t,MODE.ONE,leftNode,rightNode);
 	    	}
-	  | leftNode=ShiftExpression() ( LOOKAHEAD(1)
+	  | leftNode=ShiftExpression()
+	  ) ( LOOKAHEAD(1)
       (  (t="<" rightNode=ShiftExpression()
            {
                leftNode=nodeFactory.createLt(t,MODE.ONE,leftNode,rightNode);
@@ -4437,7 +4447,7 @@ ASTNode IfStatement(): {
  	Token t;
 }
 {
-    t="if" "(" n1=Expression() ")" n2=SubStatement(ASTNode.POSITION_IF_CLAUSE)
+    t="if" "(" n1=Expression() ")" {regexAllowedAfterHead();} n2=SubStatement(ASTNode.POSITION_IF_CLAUSE)
     [ LOOKAHEAD("else") "else" n3=SubStatement(ASTNode.POSITION_IF_CLAUSE) ]
     	{
     	    if(debug) {
@@ -4467,7 +4477,7 @@ ASTNode IterationStatement():
      		return nodeFactory.createDoWhile(t,n1,body);
     	}
 
-    | t="while" "(" n1=Expression()")" body=LoopBody()
+    | t="while" "(" n1=Expression() ")" {regexAllowedAfterHead();} body=LoopBody()
     	{
     	    if(debug) {
     	      n1 = nodeFactory.createDebugHook(n1);
@@ -4490,7 +4500,7 @@ ASTNode IterationStatement():
     // [+Await]-gated grammar rejects it (a SyntaxError either way, just not
     // one with this construct's own dedicated message).
     | LOOKAHEAD("for" "await", {awaitReserved})
-      t="for" "await" "(" n1=LoopVariable() tv=Identifier_Name() n2=AssignmentExpression() t2=")" body=LoopBody()
+      t="for" "await" "(" n1=LoopVariable() tv=Identifier_Name() n2=AssignmentExpression() t2=")" {regexAllowedAfterHead();} body=LoopBody()
       	{
       	    if(!"of".equals(tv.image)) {
 	 			throw generateParseException();
@@ -4502,7 +4512,7 @@ ASTNode IterationStatement():
       	}
 
     | LOOKAHEAD("for" "(", {isForInitializationSemicolonNext()})
-	  t="for" "(" [n1=ForInitialization()] ";" [n2=Expression()] ";" [n3=Expression()] t2=")" body=LoopBody()
+	  t="for" "(" [n1=ForInitialization()] ";" [n2=Expression()] ";" [n3=Expression()] t2=")" {regexAllowedAfterHead();} body=LoopBody()
     	{ 
     	    if(debug) {
     	      // n1 (the init clause) is deliberately NOT wrapped here -
@@ -4520,7 +4530,7 @@ ASTNode IterationStatement():
     		return nodeFactory.createFor(t,n1,n2,n3,body).endToken(t2);
     	}
     | LOOKAHEAD("for" "(" LoopVariable() "in")
-    	t="for" "(" n1=LoopVariable() "in" n2=Expression() t2=")" body=LoopBody()
+    	t="for" "(" n1=LoopVariable() "in" n2=Expression() t2=")" {regexAllowedAfterHead();} body=LoopBody()
           	{
 	    	    if(debug) {
 	    	      n2 = nodeFactory.createDebugHook(n2);
@@ -4529,7 +4539,7 @@ ASTNode IterationStatement():
           	}
     // "of" is not a reserved word but an identifier
     | LOOKAHEAD("for" "(" LoopVariable() Identifier_Name() )
-     	t="for" "(" {Token first=getToken(1);} n1=LoopVariable() tv=Identifier_Name() n2=AssignmentExpression() t2=")" body=LoopBody()
+     	t="for" "(" {Token first=getToken(1);} n1=LoopVariable() tv=Identifier_Name() n2=AssignmentExpression() t2=")" {regexAllowedAfterHead();} body=LoopBody()
           	{
           	    // Is there a different way to handle that with JavaCC?
           	    if(!"of".equals(tv.image)) {
@@ -4700,7 +4710,7 @@ ASTNode WithStatement(): {
 }
 {
   
-	t="with" "(" exprNode=Expression() ")" node=SubStatement(ASTNode.POSITION_BODY)
+	t="with" "(" exprNode=Expression() ")" {regexAllowedAfterHead();} node=SubStatement(ASTNode.POSITION_BODY)
 		{
     		return nodeFactory.createWith(t,exprNode,node);
 		}
@@ -4964,7 +4974,7 @@ ASTNode FunctionDeclaration():
     {
       yieldReserved = savedYieldReserved;
       awaitReserved = savedAwaitReserved; exitFunction();
-      ASTFunctionDecl fdecl = nodeFactory.createFunctionDecl(t,fname,parameters,body);
+      ASTFunctionDecl fdecl = nodeFactory.createFunctionDecl(t,fname,parameters,body); fdecl.endToken(token);
       fdecl.setGenerator(tgen!=null);
       fdecl.setAsync(tasync!=null);
       return fdecl;
@@ -5004,7 +5014,7 @@ ASTNode FunctionArrowDeclaration():
 		  	  LOOKAHEAD("{") "{" nodes = FunctionBody() "}"
 		  	  	{
 		  	  	  awaitReserved = savedAwaitReserved; exitFunction();
-		  	  	  ASTFunctionArrow fdecl = nodeFactory.createFunctionArrow(null,parameters,nodes);
+		  	  	  ASTFunctionArrow fdecl = nodeFactory.createFunctionArrow(null,parameters,nodes); fdecl.endToken(token);
 			      fdecl.setGenerator(tgen!=null);
 			      fdecl.setAsync(tasync!=null);
 		  	  	  return fdecl;
@@ -5013,7 +5023,7 @@ ASTNode FunctionArrowDeclaration():
 		  	| node = AssignmentExpression()
 		  		{
 		  		  awaitReserved = savedAwaitReserved; exitFunction();
-		  		  ASTFunctionArrow fdecl = nodeFactory.createFunctionArrow(null,parameters,Collections.singletonList(nodeFactory.createReturn(null,node)));
+		  		  ASTFunctionArrow fdecl = nodeFactory.createFunctionArrow(null,parameters,Collections.singletonList(nodeFactory.createReturn(null,node))); fdecl.endToken(token);
 			      fdecl.setGenerator(tgen!=null);
 			      fdecl.setAsync(tasync!=null);
 		  	  	  return fdecl;
@@ -5150,7 +5160,6 @@ ASTNode ClassElement(): {
         yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved;
         staticBlockDepth--;
     }
-    insertSemiColon()
     {
         ASTBlock block = nodeFactory.createBlock(t,statements);
         return nodeFactory.createClassStaticBlock(t, block);
@@ -5220,7 +5229,7 @@ ASTNode ClassElement(): {
             // above, which never sees tpriv at all) only ever received the
             // bare identifier text.
             Object fnMethodName = (tpriv!=null && name instanceof CharSequence) ? "#"+name : name;
-            ASTFunctionMethod function = nodeFactory.createFunctionMethod(tfnBegin,fnMethodName,parameters,statements);
+            ASTFunctionMethod function = nodeFactory.createFunctionMethod(tfnBegin,fnMethodName,parameters,statements); function.endToken(token);
             function.setGenerator(tgen!=null);
             function.setAsync(tasync!=null);
             return nodeFactory.createClassMethod(tbegin, name, function, tstat!=null,tpriv!=null,false,decorators);
@@ -5231,7 +5240,7 @@ ASTNode ClassElement(): {
             // from the function's own begin token (tget) but included in
             // tbegin for the wrapping ClassGetter node.
             Token tbegin = tstat!=null ? tstat : tget;
-            ASTFunctionMethod function = nodeFactory.createFunctionMethod(tget,name,parameters,statements);
+            ASTFunctionMethod function = nodeFactory.createFunctionMethod(tget,name,parameters,statements); function.endToken(token);
             return nodeFactory.createClassGetter(tbegin, name, function, tstat!=null,tpriv!=null,decorators);
 		}
    | LOOKAHEAD("set" ["#"] PropertyName() "(") tset="set" [tpriv="#" {privateNameFollows();}] name=PropertyName() { savedYieldReserved = yieldReserved; yieldReserved = false; savedAwaitReserved = awaitReserved; enterFunction(); awaitReserved = false; } t="(" {parameters = nodeFactory.createArrayLiteral(t);} FormalParameterList(parameters) ")" { skipTypeAnnotationIfAny(); } "{" statements = FunctionBody() "}" { yieldReserved = savedYieldReserved; awaitReserved = savedAwaitReserved; exitFunction(); }
@@ -5240,10 +5249,10 @@ ASTNode ClassElement(): {
             // from the function's own begin token (tset) but included in
             // tbegin for the wrapping ClassSetter node.
             Token tbegin = tstat!=null ? tstat : tset;
-            ASTFunctionMethod function = nodeFactory.createFunctionMethod(tset,name,parameters,statements);
+            ASTFunctionMethod function = nodeFactory.createFunctionMethod(tset,name,parameters,statements); function.endToken(token);
             return nodeFactory.createClassSetter(tbegin, name, function, tstat!=null,tpriv!=null,decorators);
 		}
-    |   [LOOKAHEAD({isAccessorFieldModifier()}) taccessor=Identifier_Name()] [tpriv="#" {privateNameFollows();}] name=PropertyName()
+    |   {tname=getToken(1);} [LOOKAHEAD({isAccessorFieldModifier()}) taccessor=Identifier_Name()] [tpriv="#" {privateNameFollows();}] name=PropertyName()
         // TypeScript's optional-field marker ("x?"/"x?:") - no ternary
         // ambiguity here (unlike FormalParameter()'s identical-looking
         // marker): PropertyName() is a dedicated production, not
@@ -5252,7 +5261,7 @@ ASTNode ClassElement(): {
         { skipOptionalMarkerAndTypeIfAny(); }
         [LOOKAHEAD("=") "=" initializer=AssignmentExpression()] insertSemiColon()
         {
-        	return nodeFactory.createClassField(null, name, initializer, tstat!=null, tpriv!=null, decorators, taccessor!=null);
+        	return nodeFactory.createClassField(tstat!=null ? tstat : tname, name, initializer, tstat!=null, tpriv!=null, decorators, taccessor!=null);
         }
     )
     )
@@ -5275,7 +5284,7 @@ void PropertyEntry(ASTObjectLiteral node): {
 		}
    | LOOKAHEAD(3) (tgen="*")? name=PropertyName() t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"
 		{
-		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body);
+		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); decl.endToken(token);
 		  	if(tgen!=null) {
 		  	  decl.setGenerator(true);
 		 	}
@@ -5283,12 +5292,12 @@ void PropertyEntry(ASTObjectLiteral node): {
 		}
    | LOOKAHEAD(3) <GET> name=PropertyName() t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"
 		{
-		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); 
+		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); decl.endToken(token);
       		node.addGetter(decl);
 		}
    | LOOKAHEAD(3) <SET> name=PropertyName() t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"
 		{
-		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); 
+		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); decl.endToken(token);
       		node.addSetter(decl);
 		} 
    | LOOKAHEAD(1) "[" f=AssignmentExpression() "]" ((":" n=AssignmentExpression()) | (t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"))
@@ -5296,7 +5305,7 @@ void PropertyEntry(ASTObjectLiteral node): {
    		    if(n!=null) { 
       			node.addExpression(f, n);
       		} else {
-			  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,null,parameters,body);
+			  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,null,parameters,body); decl.endToken(token);
 			  	if(tgen!=null) {
 			  	  decl.setGenerator(true);
 			 	}
@@ -5993,28 +6002,9 @@ boolean checkSemiColon(){
 	if(inputToken.kind == SEMICOLON){
 		inputToken = getNextToken();
 	} else if((inputToken.kind != EOF) && (inputToken.kind != RBRACE)){
-		if(inputToken.specialToken != null){
-			boolean foundLineSeparator = false;
-			Token specialT = inputToken.specialToken;	 
-
-			while((specialT != null) && (! foundLineSeparator)){
-				if((specialT.kind == LINE_TERMINATOR) || (specialT.kind == SINGLE_LINE_COMMENT)){
-					foundLineSeparator = true;
-				} else if(specialT.kind == MULTI_LINE_COMMENT && containsLineTerminator(specialT.image)){
-					// A MultiLineComment containing a line terminator counts as a
-					// LineTerminator for ASI purposes, even though "*/" itself doesn't.
-					foundLineSeparator = true;
-				}
-
-				specialT = specialT.specialToken;
-			}
-
-			if(! foundLineSeparator){
-				return false; 
-			}
-		} else {
-			return false; 
-		}
+		// A MultiLineComment containing a line terminator counts as a
+		// LineTerminator for ASI purposes, even though "*/" itself doesn't.
+		return lineTerminatorBefore(inputToken);
 	}
-	return true; 
+	return true;
 }

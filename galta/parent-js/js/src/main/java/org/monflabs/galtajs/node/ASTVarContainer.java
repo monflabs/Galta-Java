@@ -513,7 +513,7 @@ public abstract class ASTVarContainer extends ASTNode implements IContextBlockCo
 			if(this instanceof ASTProgram p && p.isModule()
 					&& (varType==VAR_TYPE.FUNCTION || v.getVarType()==VAR_TYPE.FUNCTION)
 					&& isVarOrFunction(varType) && isVarOrFunction(v.getVarType())) {
-				throw new JSParseException(null,this,"Identifier ''{0}'' has already been declared", varName);
+				throw new JSParseException(null,this,"Identifier '{0}' has already been declared", varName);
 			}
 			if(v.getVarType()!=VAR_TYPE.SYSTEM && v.getVarType()!=VAR_TYPE.FUNCTION_SELF
 					&& (!varType.canBeOverriden() || !v.getVarType().canBeOverriden())) {

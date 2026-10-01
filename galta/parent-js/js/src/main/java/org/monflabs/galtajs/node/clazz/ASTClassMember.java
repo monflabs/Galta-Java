@@ -21,6 +21,7 @@ import java.util.List;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.JSObject;
 import org.monflabs.galtajs.node.ASTNode;
+import org.monflabs.galtajs.node.control.ASTFunctionMethod;
 import org.monflabs.galtajs.parser.Token;
 import org.monflabs.galtajs.rt.JSResult;
 import org.monflabs.galtajs.rt.RuntimeUtil;
@@ -28,6 +29,7 @@ import org.monflabs.galtajs.rt.builtins.BaseMethod;
 import org.monflabs.galtajs.rt.builtins.Callable;
 import org.monflabs.galtajs.rt.builtins.primitives.symbol.Symbol;
 import org.monflabs.galtajs.rt.builtins.standard.function.BuiltinClassConstructor;
+import org.monflabs.galtajs.rt.builtins.standard.function.BuiltinFunction;
 import org.monflabs.galtajs.rt.interpreter.InterpretedUnitRuntimeContext.Signal;
 import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext;
 import org.monflabs.galtajs.transpiler.JSTranspiler;
@@ -211,11 +213,28 @@ public abstract class ASTClassMember extends ASTNode {
 		return Signal.NONE;
 	}
 
-	public Object construct(JSInterpretedRuntimeContext context, Object instance, Object[] params) {
-		return RuntimeUtil.UNDEFINED;
+	// The function of a method/getter/setter, created anew for each class
+	// evaluation (never kept on the shared AST node).
+	protected BuiltinFunction createFunction(JSInterpretedRuntimeContext context, ASTFunctionMethod functionDecl) {
+		try {
+			return (BuiltinFunction)functionDecl.evaluateValue(context, new JSResult());
+		} catch(Throwable ex) {
+			throw fillInStackTrace(ex);
+		}
 	}
 
-	
+	// A private instance method/accessor is installed on every new instance
+	// (initInstance) with the function created by initClass for the SAME class
+	// evaluation, so it is kept on the class itself, keyed by this node - like
+	// a computed instance field name (ASTClassField).
+	protected void setPrivateInstanceFunction(BuiltinClassConstructor clazz, BuiltinFunction function) {
+		clazz.setComputedFieldName(this, function);
+	}
+	protected BuiltinFunction getPrivateInstanceFunction(BuiltinClassConstructor clazz) {
+		return (BuiltinFunction)clazz.getComputedFieldName(this);
+	}
+
+
 	public void initClass(JSInterpretedRuntimeContext context, BuiltinClassConstructor clazz) {
 	}
 	public void initInstance(JSInterpretedRuntimeContext context, BuiltinClassConstructor clazz, Object instance) {
