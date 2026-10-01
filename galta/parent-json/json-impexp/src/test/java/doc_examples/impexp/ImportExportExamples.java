@@ -29,6 +29,7 @@ import org.monflabs.json.impexp.file.ZipFileSource;
 import org.monflabs.json.impexp.file.ZipTarget;
 import org.monflabs.json.impexp.impl.JsonTargetImpl;
 import org.monflabs.json.impexp.pojo.PojoTarget;
+import org.monflabs.json.impexp.replication.RangeFilter;
 import org.monflabs.json.impexp.util.StaticContent;
 import org.monflabs.json.impexp.util.StaticDeletedContent;
 
@@ -264,6 +265,26 @@ public class ImportExportExamples extends ProjectTestCase {
 			fail();
 		} catch(JsonException e) {
 			assertTrue(closed[0]);
+			assertTrue(e.getMessage(), e.getMessage().startsWith("Error while importing :0: disk full"));
 		}
+	}
+
+	public void testRangeFilter() throws Exception {
+		JsonArray events = JsonArray.parse("""
+				[ { "id": "e1", "at": "2024-03-01T10:00:00Z" },
+				  { "id": "e2", "at": "2024-09-01T10:00:00Z" },
+				  { "id": "e3" } ]
+				""");
+		JsonContainerSource source = JsonContainerSource.newBuilder()
+				.container(events)
+				.keyFunction(o -> ((JsonObject)o).getString("id"))
+				.timestampFunction(o -> ((JsonObject)o).containsKey("at") ? Instant.parse(((JsonObject)o).getString("at")) : null)
+				.build();
+		JsonContainerTarget target = JsonContainerTarget.newBuilder()
+				.format(JsonInMemoryFormat.RECORDSBYKEY)
+				.build();
+		target.importFrom(source, new RangeFilter(Instant.parse("2024-06-01T00:00:00Z"), null));
+		// e2: in the range, e3: no timestamp, always kept
+		assertEquals(List.of("e2", "e3"), new ArrayList<>(((JsonObject)target.getContainer()).keySet()));
 	}
 }

@@ -20,7 +20,7 @@ The `json-impexp` module moves JSON documents between stores: folders of files, 
 |---|---|---|
 | Document | `JsonContent` | A key, a JSON value (any value, not only objects), an optional timestamp, and a type: `RECORD` or `DELETION`. |
 | Key | `JsonKey` | A *collection* name and an *id*. The collection groups documents, like a table or a folder; it may be empty. |
-| Source | `JsonSource` | Streams documents: `stream()`, `estimatedCount()` (`-1` when unknown), `exportTo(target)`. |
+| Source | `JsonSource` | Streams documents: `stream([rangeFilter])`, `estimatedCount()` (`-1` when unknown), `exportTo(target[, rangeFilter])`. |
 | Target | `JsonTarget` | Receives them: `importFrom(source)` returns an `ImportResult` (inserted, deleted, duration). |
 
 `StaticContent(key, json, timestamp)` and `StaticDeletedContent(key)` are ready-made documents.
@@ -69,7 +69,26 @@ memory.importFrom(files);
 // memory.getContainer() equals data
 ```
 
-A source can be exported several times: each export opens it again.
+A source can be exported several times: each export opens it again. The state of a stream (an open zip file, a CSV reader, the stream of a factory...) belongs to the stream and is released when it is closed, so a source can even be streamed by several exports at the same time.
+
+A target runs one import (or replication) at a time: `importFrom()` and `replicate()` are synchronized, so concurrent calls wait for each other, and starting an import from a callback of the running one (in the same thread) throws a `JsonException`.
+
+### Range filters
+
+`stream(rangeFilter)`, `exportTo(target, rangeFilter)` and `importFrom(source, rangeFilter)` restrict the documents to a range of dates, `new RangeFilter(since, until)`, both ends included and either one `null` for no bound. A replication source (`JsonDbSource`) applies it to the date the documents were stored; every other source applies it to the document timestamps (`getTimestamp()`: the file date for `FileSource`, the entry date for the zips, the `timestampFunction` for the container, stream and CSV sources), and keeps the documents without a timestamp. A custom source that selects the documents itself overrides `JsonSourceImpl.handlesRangeFilter()`.
+
+Sample: `doc_examples/impexp/ImportExportExamples.java` (`testRangeFilter`)
+
+```java
+// [ { "id": "e1", "at": "2024-03-01T10:00:00Z" }, { "id": "e2", "at": "2024-09-01T10:00:00Z" }, { "id": "e3" } ]
+JsonContainerSource source = JsonContainerSource.newBuilder()
+        .container(events)
+        .keyFunction(o -> ((JsonObject)o).getString("id"))
+        .timestampFunction(o -> ((JsonObject)o).containsKey("at") ? Instant.parse(((JsonObject)o).getString("at")) : null)
+        .build();
+target.importFrom(source, new RangeFilter(Instant.parse("2024-06-01T00:00:00Z"), null));
+// e2 (in the range) and e3 (no timestamp) are imported
+```
 
 ## Sources and targets
 
@@ -137,17 +156,24 @@ source.exportTo(withKeys);
 
 ### Files and zips
 
-On disk, a document is a file named after its id plus `.json`, inside a `@<collection>` folder when it has a collection. Characters that are not valid in file names (`/ \ : * ? " < > |`, `%` and control characters), as well as `@`, are encoded as `%XX`, and decoded when reading. The same encoding applies to collection names, so a collection name such as `a/b` or `../x` stays a single folder under the root.
+On disk, a document is a file named after its id plus `.json`, inside a `@<collection>` folder when it has a collection. Characters that are not valid in file names (`/ \ : * ? " < > |`, `%` and control characters), as well as `@`, are encoded as `%XX`, and decoded when reading. The names Windows reserves are encoded too: a device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`, whatever the case and the extension) gets its first character encoded (`%43ON.json`), and a trailing dot or space is encoded. The same encoding applies to collection names, so a collection name such as `a/b` or `../x` stays a single folder under the root. An encoded name longer than 255 bytes cannot be a file name: `FileTarget` reports it (a zip entry name can be longer).
+
+Two documents must not map to the same file or entry, which can happen with `ignoreCollection(true)` when two collections hold the same id: the export fails with a `JsonException` rather than silently overwriting a document (or, for a zip, failing on a duplicate entry). With `FileTarget`, the same document written twice in an import is fine (the last version wins); a zip cannot hold an entry twice.
 
 | `FileTarget` option | Default | Meaning |
 |---|---|---|
 | `root(File)` | | The folder. |
-| `clearOnStart(boolean)` | `true` | **Delete everything under the root** before writing. Set it to `false` to add to an existing folder. |
+| `clearOnStart(boolean)` | `true` | **Replace everything under the root** with the exported documents. Set it to `false` to add to an existing folder. |
 | `subdir(int levels)` | `0` | Spread the files in 1 to 4 levels of sub-folders named after a hash of the id (`@docs/3F/A0/id.json`), for large sets. |
 | `keepTimestamp(boolean)` | `false` | Set the file's modification date to the document timestamp. |
 | `ignoreCollection(boolean)` | `false` | Write every document at the root, without `@collection` folders. |
 
-`ZipTarget` has `root(File)` (the zip file, overwritten), `subdir` and `ignoreCollection`. `FileSource`, `ZipFileSource` and `ZipInputStreamSource` take `ignoreCollection` and `estimateCount` (count the files up front, for progress reporting). `FileSource` reads the files of a folder in name order. A file document's timestamp is the file's modification date, or the zip entry's date (none when the entry has no date).
+`ZipTarget` has `root(File)` (the zip file, overwritten), `subdir` and `ignoreCollection`. `FileSource`, `ZipFileSource` and `ZipInputStreamSource` take `ignoreCollection` and `estimateCount` (count the files up front, for progress reporting). `FileSource` reads the files of a folder in name order, and follows the symbolic links to folders, but never visits a folder twice (a link loop, or two links to the same folder, does not duplicate documents). A file document's timestamp is the file's modification date, or the zip entry's date (none when the entry has no date). A zip entry keeps the document timestamp with a precision of a second (two for the MS-DOS date that every entry holds), and a document without timestamp gets the date of the export.
+
+The exports are crash safe: an export that fails, or is cancelled, leaves the previous export untouched.
+
+- `ZipTarget` writes to a temporary file next to the zip file, which replaces it when the export succeeds, and is deleted otherwise. A root that is a folder is refused.
+- `FileTarget` with `clearOnStart(true)` writes to a new folder next to the root, which replaces the root when the export succeeds (the previous content is moved aside, then deleted), and is deleted otherwise. With `clearOnStart(false)`, each document is written to a temporary file then moved, so a document is never left truncated. A root that is a regular file is refused (it is not deleted).
 
 Sample: `doc_examples/impexp/ImportExportExamples.java` (`testFileTargetOptions`, `testZip`)
 
@@ -186,7 +212,7 @@ Every target built on `JsonTargetImpl` (all of the above) accepts these builder 
 | `beforeProcessing(Function<JsonContent,JsonContent>)` | Transform a document before it is written; return `null` to skip it. |
 | `afterProcessing(Consumer<JsonContent>)` | Called after a document is written. Throwing aborts the import. |
 | `notification(Notification)` | Progress events: `START`, `PROCESS` (at most every `notificationDelay` ms, 2000 by default), `CANCEL`, `END`. `JsonTargetImpl.consoleLogger` logs them; extend `TextNotification` to route the messages elsewhere. |
-| `estimatedCount(LongSupplier)` | The expected count, for the notifications (usually `source::estimatedCount`). |
+| `estimatedCount(LongSupplier)` | The expected count, for the notifications. By default, the `estimatedCount()` of the source. |
 | `transactionThreshold(int)` | For transactional targets: commit every N documents, see [Transactions](#transactions). |
 | `replicationTable(ReplicationTable)` | Enables replication, see below. |
 
@@ -231,7 +257,7 @@ target.importFrom(JsonContentStreamSource.newBuilder().streamFactory(changes::st
 // store -> {"k2":2,"k3":3}
 ```
 
-When anything fails, the import stops, the pending transaction is rolled back, the target is closed, and the error is rethrown as a `JsonException`.
+When anything fails, the import stops, the pending transaction is rolled back, the target is closed, and the error is rethrown as a `JsonException`. When the failure comes from writing a document, the message names it: `Error while importing customers:c1: <cause>`.
 
 Sample: `doc_examples/impexp/ImportExportExamples.java` (`testNotificationAndFailure`)
 
@@ -314,6 +340,8 @@ target.replicate(source, (src, tgt) -> new JsonContent[] {
 
 The changes are selected by time, with millisecond resolution. The range includes its lower bound, so a document changed in the same millisecond as the last replication can be sent twice rather than missed.
 
+`FileReplicationTable` keeps the last replication dates in a JSON file. Its updates hold an exclusive lock on a companion `.lock` file (and a lock between the threads of the process), so several tables, in one or several processes, can share the file without losing updates; an empty file is an empty table. `ReplicationResult.toJson()` reports the counts (`inserted`, also as `created`, `deleted`, `conflicts`, `ignored`), the duration and the range, in UTC unless a time zone is given.
+
 ## CSV
 
 `json-impexp-fastcsv` reads and writes CSV with [FastCSV](https://github.com/osiegmar/FastCSV). A CSV row is a flat `JsonObject`, one property per column.
@@ -367,7 +395,7 @@ CsvSource source = CsvSource.newBuilder()
 // p3 -> {"id":"p3","name":"Ink","stock":7}                 extra cell ignored
 ```
 
-A leading UTF-8 byte order mark is skipped, so it does not end up in the first column name. Empty rows are skipped. An empty cell is an empty string, and a cell reader receives it too; `emptyAsNull(true)` reads it as `null` instead (the cell reader is then not called). A header that repeats a column name is an error:
+A leading UTF-8 byte order mark is skipped, so it does not end up in the first column name. The header names are trimmed (`trimHeader(false)` keeps them as is), and the empty columns at the end of the header, that spreadsheets often add, are ignored. A column declared with `column()` must be in the header, unless `allowMissingColumns(true)`. With several columns, empty lines are skipped; with a single column, an empty line is a row with an empty value (`skipEmptyLines(boolean)` forces either way). An empty cell is an empty string, and a cell reader receives it too; `emptyAsNull(true)` reads it as `null` instead (the cell reader is then not called). A header that repeats a column name is an error, as is a quoted cell that is never closed (instead of silently reading the rest of the file as one cell); the errors, including the exceptions of a cell reader, give the line (and the column):
 
 Sample: `doc_examples/csv/CsvExamples.java` (`testByteOrderMarkAndEmptyCells`)
 
@@ -385,7 +413,9 @@ CsvSource source = CsvSource.newBuilder()
 
 ### `CsvTarget`
 
-Without declared columns, the columns are the properties of the first document; later documents fill them and missing values become empty cells, but a later document with a property the first one does not have is an error (the header is already written): declare the columns to export heterogeneous documents. Declared columns are a projection, other properties are ignored. Values are converted to text, objects and arrays as JSON; `null` is an empty cell. The writer is closed at the end of the export, unless `closeWriter(false)` (it is then flushed). Deletions are ignored.
+Without declared columns, the columns are the properties of the first document; later documents fill them and missing values become empty cells, but a later document with a property the first one does not have is an error (the header is already written): declare the columns to export heterogeneous documents. Declared columns are a projection, other properties are ignored. Values are converted to text, objects and arrays as JSON; `null` is an empty cell. With a single column, an empty (or null) cell is written `""`, so it is not an empty line that readers would skip. A document that is not an object is an error, unless every column has a cell writer. The writer is closed at the end of the export, unless `closeWriter(false)` (it is then flushed). Deletions are ignored.
+
+`escapeFormulas(true)` prefixes with a quote (`'`) the cells starting with `=`, `+`, `-`, `@`, a tab or a carriage return, that a spreadsheet would run as formulas (CSV injection). The prefix is part of the cell: use it for files meant to be opened in a spreadsheet, not for files read back as data.
 
 Sample: `doc_examples/csv/CsvExamples.java` (`testCsvTargetInferredColumns`)
 
@@ -431,4 +461,8 @@ CsvTarget target = CsvTarget.newBuilder()
 | `keyFunction`, `collectionFunction`, `timestampFunction` | yes | | row index, none, none |
 | `estimateCount(boolean)` | yes | | `false` |
 | `emptyAsNull(boolean)` | yes | | `false` |
+| `skipEmptyLines(boolean)` | yes | | with several columns |
+| `trimHeader(boolean)` | yes | | `true` |
+| `allowMissingColumns(boolean)` | yes | | `false` |
 | `closeWriter(boolean)` | | yes | `true` |
+| `escapeFormulas(boolean)` | | yes | `false` |

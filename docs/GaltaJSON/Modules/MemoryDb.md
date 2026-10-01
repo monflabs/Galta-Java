@@ -39,17 +39,18 @@ db.isDeleted(JsonKey.of("teams", "t1"));   // -> true: a tombstone is kept
 | `insert(key, value)` | Fails with a `JsonException` if the key exists. |
 | `update(key, value)` | Fails if the key does not exist. |
 | `upsert(key, value)` | Inserts or replaces. |
-| `delete(key)`, `delete(Collection<JsonKey>)` | Fails if a key does not exist (for a collection, before deleting anything). Leaves a tombstone, used by replication. |
+| `delete(key)`, `delete(Collection<JsonKey>)` | Fails if a key does not exist (for a collection, before deleting anything: the call is all or nothing, and a key present twice is deleted once). Leaves a tombstone, used by replication. |
 | `delete(Predicate<JsonDbRecord>)` | Deletes the matching records. |
 | `exists(key)`, `isDeleted(key)` | Presence of a record / of a tombstone. |
 | `count()`, `deletedCount()` | Number of records / tombstones. |
-| `clear()` | Removes everything, tombstones included. |
+| `clear()` | Removes everything, tombstones included. The removed records are not replicated (there is no tombstone left), and a transaction started before can no longer commit. |
+| `clear(true)` | Deletes every record like `delete(key)`, leaving tombstones: the clear is replicated. |
 | `serialize([sorted])` | The records as one `JsonObject`, keyed by `JsonKey.keyString()`. |
 | `execute(Function<MemoryJsonDb,T>)` | Runs several operations under the database lock. |
 
 A value can be any JSON value. A record (`JsonDbRecord`) exposes `getKey()`, `getJson()`, `getTimestamp()` (the time of the last write, or the source timestamp for an imported document) and `getDbAdded()` (when it was written to this database). Re-inserting a deleted key removes its tombstone.
 
-Values are stored as given, not copied: changing a `JsonObject` after inserting it changes the stored record. Clone it first (`deepClone()`) when that matters.
+Values are stored as given, not copied: changing a `JsonObject` after inserting it (or after reading it with `select()`) changes the stored record, without updating its timestamps (so a replication does not see the change) and outside of any transaction (a rollback does not undo it). Treat stored values as read-only, and clone them (`deepClone()`) before changing them.
 
 Sample: `doc_examples/memdb/MemoryDbExamples.java` (`testValuesAreNotCopied`, `testSerialize`, `testExecute`)
 
@@ -71,7 +72,7 @@ int n = db.execute(d -> {            // atomic read-modify-write
 
 ## Selecting
 
-`select()` starts a `JsonSelect`, narrowed with `collection(name)` and `filter(Predicate<JsonDbRecord>)`, and consumed with `stream()`, `forEach()`, `collect()`, `first()`, `count()`, `keys()` or `records()`. Records come in insertion order (an update keeps the position). A select iterates over a snapshot, so the database can be modified while iterating. `count()` and `first()` take no snapshot: they scan the records while the database is locked (`first()` stops at the first match), so their filter must not wait on another thread using the database.
+`select()` starts a `JsonSelect`, narrowed with `collection(name)` and `filter(Predicate<JsonDbRecord>)`, and consumed with `stream()`, `forEach()`, `collect()`, `first()`, `count()`, `keys()` or `records()`. Records come in insertion order (an update keeps the position). A select iterates over a snapshot, so the database can be modified while iterating. The records are indexed by collection: a select of a collection only copies (and scans) the records of that collection. `count()` and `first()` take no snapshot: they scan the records while the database is locked (`first()` stops at the first match), so their filter must not wait on another thread using the database.
 
 Sample: `doc_examples/memdb/MemoryDbExamples.java` (`testSelect`)
 
@@ -92,11 +93,13 @@ db.select().collection("people").forEach(r -> db.delete(r.getKey()));
 db.delete(r -> r.getKey().getCollection().equals("teams"));
 ```
 
-A select is a scan: there are no indexes.
+A select is a scan of its collection (or of the whole database): there are no other indexes.
 
 ## Transactions
 
-`beginTransaction()` returns a `MemoryJsonDb.Transaction`, a private copy of the database with the same API. Its changes become visible at `commit()`, or are dropped by `rollback()`. Transactions are optimistic: a commit fails with a `JsonException` when the database was modified after the transaction began. A failed commit leaves the transaction open, to be rolled back; a committed or rolled back transaction cannot be used any more.
+`beginTransaction()` returns a `MemoryJsonDb.Transaction`, with the same API as the database. A transaction only holds its own changes, and reads through to the database for the other records: it sees the committed state of the database plus its own changes (a record committed by another writer after the transaction began is visible to it). Its changes become visible at `commit()`, or are dropped by `rollback()`.
+
+Transactions are optimistic: a commit fails with a `JsonException`, and changes nothing, when one of the records the transaction writes (inserts, updates or deletes) was changed in the database after the transaction began, or when the database was cleared (`clear()`). A change to another record is not a conflict. A failed commit leaves the transaction open, to be rolled back; a committed or rolled back transaction cannot be used any more.
 
 Sample: `doc_examples/memdb/MemoryDbExamples.java` (`testTransactions`)
 
@@ -108,13 +111,15 @@ db.exists(JsonKey.of("c", "k1"));   // -> true: not visible until committed
 tx.commit();
 
 MemoryJsonDb.Transaction tx3 = db.beginTransaction();
-tx3.insert(JsonKey.of("c", "k4"), JsonObject.of("v", 4));
-db.insert(JsonKey.of("c", "k5"), JsonObject.of("v", 5));
-tx3.commit();                       // JsonException: Database has been modified since the transaction started
+tx3.upsert(JsonKey.of("c", "k4"), JsonObject.of("v", 4));
+db.insert(JsonKey.of("c", "k4"), JsonObject.of("v", 40));
+tx3.commit();                       // JsonException: Database has been modified since the transaction started (record c:k4)
 tx3.rollback();
 ```
 
-The transaction copies the record maps when it begins, so its cost grows with the size of the database. Any change to the database after the transaction began, `clear()` included, makes its `commit()` fail.
+A transaction costs nothing when it begins, and its commit is proportional to the number of records it changed, whatever the size of the database. The changes of a transaction are stamped with the commit date (`getDbAdded()`), so a replication from this database that ran while the transaction was pending still picks them up.
+
+The isolation only covers the records, not their values: as values are not copied, changing a value read from a transaction (or from the database) changes it everywhere, and a rollback does not undo it. Write a new value (`update()`/`upsert()`) instead.
 
 ## Import and export
 
@@ -145,7 +150,7 @@ people.exportTo(out);
 // {"ada":{"name":"Ada"},"alan":{"name":"Alan"}}
 ```
 
-`JsonDbTarget` is transactional: an import runs in a transaction and is rolled back if it fails, or is committed in chunks with `transactionThreshold(n)` (see [Transactions](/GaltaJSON/Modules/ImportExport#transactions)). A `JsonDbSource` also streams the tombstones, as deletions. It streams a snapshot taken when the stream starts, so the database can be changed while it is exported, even by the target of the same export. Its `estimatedCount()` is the number of records and tombstones it streams (of its collection, if any).
+`JsonDbTarget` is transactional: an import runs in a transaction and is rolled back if it fails, or is committed in chunks with `transactionThreshold(n)` (see [Transactions](/GaltaJSON/Modules/ImportExport#transactions)). A `JsonDbSource` also streams the tombstones, as deletions. It streams a snapshot taken when the stream starts, so the database can be changed while it is exported, even by the target of the same export. Each stream has its own snapshot and range filter, so several exports or replications can stream from the same source at the same time. Its `estimatedCount()` is the number of records and tombstones it streams (of its collection, if any). Its range filter applies to the date the records were stored in the database (`getDbAdded()`), not to their timestamp.
 
 Sample: `doc_examples/memdb/MemoryDbExamples.java` (`testImportIsTransactional`)
 
@@ -177,4 +182,4 @@ ReplicationResult r2 = target.replicate(source, ConflictResolver.FAIL_EXCEPTION)
 // replica: c:k1 -> {"v":10}, c:k2 is gone
 ```
 
-A replication runs in a transaction on the target: a conflict that the resolver rejects rolls it back entirely. `ReplicationResult.toJson()` summarizes a run (duration, time range, counts).
+A replication runs in a transaction on the target: a conflict that the resolver rejects rolls it back entirely. As the records committed by a transaction are stamped with the commit date, a replication never misses them, including in a chain (A to B to C) where B receives its records in transactions while it is replicated to C. A `clear()` is not replicated: use `clear(true)` to replicate it as deletions. `ReplicationResult.toJson()` summarizes a run (duration, time range in UTC, counts).

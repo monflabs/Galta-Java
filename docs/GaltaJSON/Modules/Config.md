@@ -110,7 +110,7 @@ config.updateValues(u -> u.put("a", "1"));   // app.json is not written
 config.save();                               // now it is
 ```
 
-A save failure is reported as a `ConfigException`, from `save()` or from the `updateValues()` call that triggered it.
+A save failure is reported as a `ConfigException`, from `save()` or from the `updateValues()` call that triggered it. With auto save, the update replaces the content only once it is saved: when the save fails, the configuration keeps its previous content (as the files do).
 
 ## Read-only configurations
 
@@ -172,9 +172,29 @@ config.updateValues(u -> u.put("db/host", "db.internal"));
 // db.json  -> {"host":"db.internal","port":5432}
 ```
 
-With a `JsonFileConfig`, a referenced file must be inside the configuration folder: an absolute path or a `..` climbing out of it is rejected (`ConfigException`), as the referenced files are also written back when saving. The files are replaced atomically (written to a temporary file, then moved). A `$ref` inside a referenced resource is followed too, and a local `#/...` reference there is relative to that resource. Each resource is loaded once, however many references lead to it: they all share its content. A reference may carry a JSON Pointer fragment (`common.json#/db`, see [Pointers](/GaltaJSON/Pointers)); such a value is read, but it is not written back when saving (unless the same resource is also referenced as a whole, as the shared content is then saved with it). The resource name of a nested reference is resolved against the referring resource when loading, but saved as written.
+With a `JsonFileConfig`, a referenced file must be inside the configuration folder: an absolute path, a `..` climbing out of it, or a symbolic link (to a file or a folder) leading outside of it is rejected (`ConfigException`), as the referenced files are also written back when saving. The files are replaced atomically (written to a temporary file, then moved). A `$ref` inside a referenced resource is followed too, and a local `#/...` reference there is relative to that resource. The resource name of a nested reference is resolved against the referring resource when loading, but saved as written.
+
+A resource referenced several times is loaded once and shared: an update through one reference is seen through the others, and saved once. A cycle of references between resources (`a.json` referencing `b.json` referencing `a.json`, or a resource referencing a part of itself) fails the load with a `ConfigException` (`Circular $ref`).
+
+A reference may carry a JSON Pointer fragment (`common.json#/db`, see [Pointers](/GaltaJSON/Pointers)): only that part of the resource is read. When saving, the resource is read again, the part is replaced with the current content, and the resource is written back: the other parts of the resource are kept as they are in the file. Its encrypted values are encrypted at rest like any other.
 
 Sample: `doc_examples/config/ConfigExamples.java` (`testReferenceLimits`)
+
+```java
+// app.json:    { "db": { "$ref": "common.json#/db" }, "nested": { "$ref": "outer.json" } }
+// common.json: { "db": { "host": "h" }, "other": 1 }
+// outer.json:  { "inner": { "$ref": "common.json" } }
+config.getString("db/host");                      // -> "h": the part of common.json
+config.getInt("nested/inner/other");              // -> 1: references are followed
+config.updateValues(u -> u.put("db/host", "h2"));
+// common.json -> {"db":{"host":"h2"},"other":1}; app.json keeps its $ref
+```
+
+## Saving files
+
+A `JsonFileConfig` file is replaced atomically: it is written to a temporary file, then moved. A file that is a symbolic link is written to the target of the link, and the link is kept (the main file can be a link to a file anywhere, the referenced files must stay in the folder). A replaced file keeps its POSIX permissions; a new file is only readable and writable by its owner (`rw-------`).
+
+Several `JsonFileConfig` instances, in one or several processes, can use the same folder: a load, a save and an update hold a lock on the configuration (an exclusive lock on a `.<fileName>.lock` file in the folder, plus a lock between the threads of the process), and an update reloads the files first when auto save is on, so it applies to their current content and does not overwrite the changes of another instance. With `autoSave(false)`, the updates are applied to the content loaded by the instance, and a `save()` overwrites the files with it.
 
 ## Encrypting values
 
@@ -199,11 +219,14 @@ config.getString("db/password");       // -> "s3cret"
 
 How it behaves:
 
-- Only string values are encrypted. An encrypted value is written as `[[v2:` + Base64 + `]]`: the payload holds a random salt, a random IV and the AES-GCM ciphertext, the key being derived from the passphrase with PBKDF2-HMAC-SHA256. A value is recognized as encrypted only when it has that exact shape (or the legacy one below), so a plain value such as `[[x]]` is encrypted like any other value.
+- Only string values are encrypted. An encrypted value is written as `[[v3:` + Base64 + `]]`: the payload holds the PBKDF2 iteration count (600,000), a random salt, a random IV and the AES-GCM ciphertext, the key being derived from the passphrase with PBKDF2-HMAC-SHA256. A value is recognized as encrypted only when it has that exact shape (or one of the older ones below), so a plain value such as `[[x]]` is encrypted like any other value.
+- An encrypted value is bound to its key path (the keys joined with `/`, `db/password`), used as AES-GCM additional authenticated data: a value copied to another key fails to decrypt (`ConfigException`, which names the key, never the value). A value produced by `encryptValue()`, which has no key, is not bound and is accepted for any key.
+- The configuration holds every value in clear, and encrypts all the selected values when it saves: a plain value that happens to look like an encrypted one is stored encrypted, and read back as is.
 - When a *writable* configuration loads a resource with values that match the predicate but are still in clear, it saves the resource encrypted right away, whatever the auto-save setting. A read-only configuration decrypts but never writes. So a secret can be typed in clear in the file and gets encrypted by the next start of the application.
 - Referenced (`$ref`) resources are decrypted and encrypted the same way. The predicate receives the full key path in the configuration: a `password` in `db.json`, referenced from `db`, is `["db", "password"]`.
 - The encryption is randomized: encrypting the same value twice gives two different texts, and a modified or foreign value fails to decrypt (`ConfigException`). It protects secrets at rest, it is not a replacement for a secret vault.
-- Values written by earlier versions (`[[` + Base64 + `]]`, AES-CBC with a fixed IV) are still decrypted, and a *writable* configuration re-encrypts them in the current format when it loads them (`ValueEncryptor.needsReencryption()`).
+- Values written by earlier versions are still decrypted: `[[v2:...]]` (not bound to a key path, 65,536 iterations) and the legacy `[[` + Base64 + `]]` (AES-CBC with a fixed IV). A *writable* configuration re-encrypts them in the current format when it loads them (`ValueEncryptor.needsReencryption()`), as well as the v3 values encrypted with fewer iterations. The legacy shape can be turned off (`new KeyEncryptor(key, predicate, false)`): such values in a file are then plain values, encrypted on load.
+- The key of a passphrase is derived once per salt (an encryptor has its own random salt, and keeps the keys of a few other salts, for the values written by other instances). The derivation is purposely slow (a fraction of a second).
 - The strings inside an array are encrypted too: they are checked with the key path of the array (`["tokens"]` for every item of `"tokens": [...]`, at any depth).
 
 `KeyEncryptor` can also be used on its own, through `encryptValue()` / `decryptValue()`, or implement the `ValueEncryptor` interface to plug in another algorithm.
@@ -212,7 +235,7 @@ Sample: `doc_examples/config/ConfigExamples.java` (`testEncryptorStandalone`)
 
 ```java
 KeyEncryptor encryptor = new KeyEncryptor("my-master-key", keys -> true);
-String enc = encryptor.encryptValue("hello");   // "[[v2:...]]", different at each call
+String enc = encryptor.encryptValue("hello");   // "[[v3:...]]", different at each call
 encryptor.decryptValue(enc);                    // -> "hello"
 ```
 
