@@ -30,6 +30,7 @@ import org.monflabs.galtajs.jsonfactory.internal.JSObjectInternal;
 import org.monflabs.galtajs.rt.JSRuntimeException;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.BaseMethod;
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.monflabs.galtajs.rt.builtins.Callable;
 import org.monflabs.galtajs.rt.builtins.JSAccessor;
 import org.monflabs.galtajs.rt.builtins.NativeObject;
@@ -423,41 +424,32 @@ public class JSON extends NativeObject {
 	    		throw RuntimeUtil.typeError("Do not know how to serialize a BigInt");
 	    	}
 	    	value = unwrapBoxedPrimitive(value);
-	    	if(value==RuntimeUtil.UNDEFINED) {
-	    		if(cont==null || cont instanceof JSObjectInternal) {
-	    			return Replacer.IGNORE;
-	    		}
-	    		return null;
-	    	} else if(value instanceof Double d) {
-	    		if(d.isInfinite() || d.isNaN()) {
-	    			return null;
-	    		}
-	    	} else if(value instanceof Float f) {
-	    		if(f.isInfinite() || f.isNaN()) {
-	    			return null;
-	    		}
-	    	} else if(value instanceof Symbol) {
-	    		if(RuntimeUtil.isPrimitiveValue(getEnvironment(), value)) {
-	    			if(cont==null || cont instanceof JSObjectInternal) {
-	    				return Replacer.IGNORE;
-	    			}
-	    			return null;
-	    		}
-	    		return RuntimeUtil.getPrimitiveObject(getEnvironment(), value);
-	    	} else if(value instanceof Callable c && c.isCallable()) {
-	    		// A raw `instanceof Callable` is true for EVERY BuiltinProxy
-	    		// regardless of its target (see the matching comment on the
-	    		// function-replacer detection above) - isCallable() is the
-	    		// real, target-aware check, needed so a non-callable Proxy
-	    		// (the ordinary array/object-of-a-Proxy case) falls through to
-	    		// materializeProxy() below instead of being wrongly dropped/
-	    		// nulled here as if it were itself a function.
-	    		if(cont==null || cont instanceof JSObjectInternal) {
-	    			return Replacer.IGNORE;
-	    		}
-	    		return null;
+	    	Object special = serializeNonJsonValue(cont, value);
+	    	if(special!=NOT_SPECIAL) {
+	    		return special;
 	    	}
 	    	return materializeProxy(value, proxyCache);
+	    }
+	    private static final Object NOT_SPECIAL = new Object();
+	    // The values JSON cannot represent: undefined, a function and a Symbol are
+	    // omitted from an object (IGNORE) and become null in an array; NaN and the
+	    // infinities become null; a boxed Symbol is a plain object. Anything else
+	    // is NOT_SPECIAL. Only a genuinely callable value is a function: every
+	    // Proxy implements Callable, and a non-callable one (wrapping a plain
+	    // array/object - value-array-proxy.js/value-object-proxy.js) must be
+	    // serialized as that array/object.
+	    private Object serializeNonJsonValue(Object cont, Object value) {
+	    	return switch(value) {
+	    		case null -> NOT_SPECIAL;
+	    		case Double d when d.isInfinite() || d.isNaN() -> null;
+	    		case Float f when f.isInfinite() || f.isNaN() -> null;
+	    		case Symbol sym -> RuntimeUtil.isPrimitiveValue(getEnvironment(), sym) ? omitted(cont) : RuntimeUtil.getPrimitiveObject(getEnvironment(), sym);
+	    		case Callable c when c.isCallable() -> omitted(cont);
+	    		default -> value==RuntimeUtil.UNDEFINED ? omitted(cont) : NOT_SPECIAL;
+	    	};
+	    }
+	    private static Object omitted(Object cont) {
+	    	return cont==null || cont instanceof JSObjectInternal ? Replacer.IGNORE : null;
 	    }
 	    // Per spec (SerializeJSONProperty step 4), a boxed Number/String/Boolean
 	    // wrapper finalizes differently per type - NOT a single generic
@@ -492,12 +484,9 @@ public class JSON extends NativeObject {
 	    		}
 	    		return value;
 	    	}
-	    	if(value==RuntimeUtil.UNDEFINED || value instanceof Double || value instanceof Float
-	    			|| value instanceof Symbol || RuntimeUtil.isPrimitiveType(value)
-	    			|| (value instanceof Callable c && c.isCallable())) {
-	    		// (see standardSerializer()'s matching comment for why a raw
-	    		// `instanceof Callable` alone would wrongly match every
-	    		// non-callable Proxy too, skipping its toJSON lookup below)
+	    	// toJSON is only looked up on an object (see serializeNonJsonValue()
+	    	// for why a non-callable Proxy is one)
+	    	if(value==RuntimeUtil.UNDEFINED || RuntimeUtil.isPrimitiveType(value) || BuiltinUtil.isCallable(value)) {
 	    		return value;
 	    	}
 	    	JSAccessor acc = getEnvironment().getAccessor(value);
@@ -528,43 +517,11 @@ public class JSON extends NativeObject {
 	    	// be treated as if already a raw double (see unwrapBoxedPrimitive()'s
 	    	// comment for the full rationale).
 	    	value = unwrapBoxedPrimitive(value);
-	    	if(value==RuntimeUtil.UNDEFINED) {
-    			if(cont==null || cont instanceof JSObjectInternal) {
-    				return Replacer.IGNORE;
-    			}
-    			return null;
-	    	} else if(value instanceof Double d) {
-    			if(d.isInfinite() || d.isNaN()) {
-    				return null;
-    			}
-	    	} else if(value instanceof Float f) {
-    			if(f.isInfinite() || f.isNaN()) {
-    				return null;
-    			}
-	    	} else if(value instanceof Symbol) {
-	    		if(RuntimeUtil.isPrimitiveValue(getEnvironment(), value)) {
-	    			if(cont==null || cont instanceof JSObjectInternal) {
-	    				return Replacer.IGNORE;
-	    			}
-	    			return null;
-	    		}
-	    		// Just a regular object
-	    		return RuntimeUtil.getPrimitiveObject(getEnvironment(), value);
-	    	} else if(value instanceof Callable c && c.isCallable()) {
-	    		// A raw `instanceof Callable` is true for EVERY BuiltinProxy
-	    		// regardless of its target (see the matching comment on the
-	    		// function-replacer detection above, near the top of this
-	    		// class) - isCallable() is the real, target-aware check,
-	    		// needed so a non-callable Proxy (e.g. one wrapping a plain
-	    		// array/object - value-array-proxy.js/value-object-proxy.js)
-	    		// falls through to the toJSON lookup and materializeProxy()
-	    		// below instead of being wrongly dropped/nulled here as if it
-	    		// were itself a function.
-    			if(cont==null || cont instanceof JSObjectInternal) {
-    				return Replacer.IGNORE;
-    			}
-	    		return null;
-	    	} else if(RuntimeUtil.isPrimitiveType(value)) {
+	    	Object special = serializeNonJsonValue(cont, value);
+	    	if(special!=NOT_SPECIAL) {
+	    		return special;
+	    	}
+	    	if(RuntimeUtil.isPrimitiveType(value)) {
 	    		// null, or an already-unwrapped-if-boxed String/Number/Boolean - the
 	    		// toJSON lookup below is only meaningful for a genuine object.
 	    		return value;

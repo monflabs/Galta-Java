@@ -16,19 +16,14 @@
 package org.monflabs.galtajs.rt.builtins.errors;
 
 import org.monflabs.galtajs.JSEnvironment;
-import org.monflabs.galtajs.rt.RuntimeUtil;
-import org.monflabs.galtajs.rt.builtins.BasePrototype;
-import org.monflabs.galtajs.rt.builtins.Constructor;
-import org.monflabs.galtajs.rt.builtins.PropertyDescriptor;
-import org.monflabs.galtajs.rt.builtins.primitives.BaseStandardConstructor;
 
 /**
- * @author Philippe Riand
+ * InternalError (see NativeError).
  */
-public class InternalError extends BaseError {
-	
-	public static final class PrototypeImpl extends BasePrototype {
-		
+public class InternalError extends NativeError {
+
+	public static final class PrototypeImpl extends NativeErrorPrototype {
+
 		public static PrototypeImpl get(JSEnvironment env) {
 			PrototypeImpl proto = (PrototypeImpl)env.getRegisteredPrototype(PrototypeImpl.class);
 			if(proto==null) {
@@ -37,82 +32,39 @@ public class InternalError extends BaseError {
 			}
 			return proto;
 		}
-		
-		private PrototypeImpl(JSEnvironment env) {
-			super(env);
-			setOwnProperty("name",ConstructorImpl.CLASSNAME,PropertyDescriptor.DESC_METHOD);
-			// Every NativeError prototype has its own "message" - "" own property.
-			setOwnProperty("message","",PropertyDescriptor.DESC_METHOD);
-		}
 
-		@Override
-		protected Object getDefaultPrototype() {
-			return Error.PrototypeImpl.get(getEnvironment());
+		private PrototypeImpl(JSEnvironment env) {
+			super(env,ConstructorImpl.CLASSNAME);
 		}
 	}
 
-	public static final class ConstructorImpl extends BaseStandardConstructor {
-		
+	public static final class ConstructorImpl extends NativeErrorConstructor {
+
 		public static final String CLASSNAME = "InternalError";
-		
+
 		public ConstructorImpl(JSEnvironment env) {
-			super(env,CLASSNAME,PrototypeImpl.get(env),1);
+			super(env,CLASSNAME,PrototypeImpl.get(env));
 		}
-		
+
 		@Override
 		public Class<?> getNativeClass() {
 			return InternalError.class;
 		}
 
-		// A NativeError constructor's own [[Prototype]] is %Error% (constructor-
-		// level inheritance), not Function.prototype - mirrors how its own
-		// "prototype" property's [[Prototype]] is Error.prototype.
 		@Override
-		protected Object getDefaultPrototype() {
-			return getEnvironment().getStandardObjects().getConstructor(Error.ConstructorImpl.CLASSNAME);
-		}
-
-		@Override
-		public Object constructObject(Object[] parameters, Constructor topConstructor) {
-			InternalError error = new InternalError(getEnvironment());
-			if(parameters.length>=1 && parameters[0]!=RuntimeUtil.UNDEFINED) {
-				error.setOwnProperty("message",RuntimeUtil.toString(getEnvironment(),parameters[0]),PropertyDescriptor.DESC_METHOD);
-			}
-			if(parameters.length>=2) {
-				Object options = parameters[1];
-				if(options != null && options != RuntimeUtil.UNDEFINED && RuntimeUtil.isObject(getEnvironment(),options)) {
-					// InstallErrorCause: HasProperty must be checked (and its
-					// abrupt completion propagated, e.g. via a Proxy "has"
-					// trap) before Get - not folded into a single lookup.
-					if(RuntimeUtil.hasProperty(getEnvironment(),options,"cause")) {
-						Object cause = RuntimeUtil.getProperty(getEnvironment(),options,"cause");
-						error.setOwnProperty("cause", cause, PropertyDescriptor.DESC_METHOD);
-					}
-				}
-			}
-			// GetPrototypeFromConstructor, like the other NativeError constructors
-			return applyNewTargetPrototype(error, topConstructor);
+		protected NativeError createError(JSEnvironment env) {
+			return new InternalError(env);
 		}
 	}
 
-    public InternalError(JSEnvironment env) {
-    	super(env);
-    }
-    
-    public InternalError(JSEnvironment env, String message) {
-    	super(env);
-		// Set the message
-		// Note: The message is not set in the constructor, but in the prototype
-		// to allow the constructor to be called with no parameters.
-		// This is consistent with other error constructors.
-    	setOwnProperty("message",message,PropertyDescriptor.DESC_METHOD);
-    }
-    public InternalError(JSEnvironment env, String message, Object options) {
-    	super(env);
-    	setOwnProperty("message",message);
-    	setOwnProperty("options",options);
-    }
-    
+	public InternalError(JSEnvironment env) {
+		super(env);
+	}
+
+	public InternalError(JSEnvironment env, String message) {
+		super(env,message);
+	}
+
 	@Override
 	protected Object getDefaultPrototype() {
 		return PrototypeImpl.get(getEnvironment());

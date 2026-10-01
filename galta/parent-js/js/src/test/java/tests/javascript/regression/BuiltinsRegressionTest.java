@@ -233,6 +233,64 @@ public class BuiltinsRegressionTest extends JavaScriptStrictTestCase {
 			""");
 	}
 
+	// The NativeError constructors share one implementation
+	public void testNativeErrors() throws Exception {
+		executeCode("""
+			for (var E of [EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError]) {
+				var e = new E('m', {cause: 'c'});
+				assertEquals(E.name, e.name);
+				assertEquals('m', e.message);
+				assertEquals('c', e.cause);
+				assertTrue(e instanceof E && e instanceof Error);
+				assertTrue(Object.getPrototypeOf(E) === Error);
+				assertTrue(Object.getPrototypeOf(E.prototype) === Error.prototype);
+				assertEquals('', E.prototype.message);
+				assertFalse(Object.hasOwn(E(), 'message'));
+				assertEquals(E.name + ': x', String(E('x')));
+				class Sub extends E {}
+				assertTrue(new Sub('s') instanceof Sub);
+				assertEquals(1, E.length);
+			}
+			try { null.x; } catch(e) { assertTrue(e instanceof TypeError); }
+			try { undefinedVariable; } catch(e) { assertTrue(e instanceof ReferenceError); }
+			""");
+	}
+
+	// JSON.stringify: the values JSON cannot represent
+	public void testJsonNonJsonValues() throws Exception {
+		executeCode("""
+			assertEquals('{"a":1}', JSON.stringify({a:1, u:undefined, f(){}, s:Symbol(), n:undefined}));
+			assertEquals('[null,null,null,null,null,1.5]', JSON.stringify([undefined, ()=>0, Symbol(), NaN, -Infinity, 1.5]));
+			assertEquals(undefined, JSON.stringify(undefined));
+			assertEquals(undefined, JSON.stringify(() => 0));
+			assertEquals('null', JSON.stringify(NaN));
+			assertEquals('{}', JSON.stringify(Object(Symbol())));
+			assertEquals('[1]', JSON.stringify(new Proxy([1], {})));
+			assertEquals('{"a":2}', JSON.stringify(new Proxy({a:2}, {})));
+			assertEquals('{"x":"y"}', JSON.stringify({x: {toJSON() { return 'y'; }}}));
+			assertEquals('[1,null]', JSON.stringify([1, 2], (k, v) => v === 2 ? undefined : v));
+			Number.prototype.toJSON = function() { return 'boxed'; };
+			try {
+				// toJSON is looked up on objects and BigInts only, not on a number
+				assertEquals('[1,1.5,"boxed"]', JSON.stringify([1, 1.5, new Number(2)]));
+			} finally {
+				delete Number.prototype.toJSON;
+			}
+			""");
+	}
+
+	// The compiled-regexp cache stays correct past its bound
+	public void testManyRegExps() throws Exception {
+		executeCode("""
+			for (var i = 0; i < 1200; i++) {
+				var re = new RegExp('^a' + i + '$');
+				assertTrue(re.test('a' + i));
+				assertFalse(re.test('a' + i + 'x'));
+			}
+			assertTrue(/^a7$/.test('a7'));
+			""");
+	}
+
 	// TypedArray set/slice of the same element type copy the bytes; default sort
 	public void testTypedArrayCopies() throws Exception {
 		executeCode("""

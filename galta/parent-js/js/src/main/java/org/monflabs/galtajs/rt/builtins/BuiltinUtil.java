@@ -41,15 +41,6 @@ public final class BuiltinUtil {
 	}
 
 	/**
-	 * Resolves a relative index (at(), with(), ...) against a length, without
-	 * clamping: the result can be negative or &gt;= len, and is then out of range.
-	 * The relative index is the result of ToIntegerOrInfinity (+/-Infinity included).
-	 */
-	public static double relativeIndex(long len, double relative) {
-		return relative>=0 ? relative : len+relative;
-	}
-
-	/**
 	 * Sorts a[0..n) with a stable merge sort. Unlike Arrays.sort/List.sort, it never
 	 * validates the comparator: an inconsistent comparator (e.g. a random one) gives
 	 * an implementation-defined order, as the spec requires, never an exception.

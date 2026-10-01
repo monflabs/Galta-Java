@@ -278,8 +278,23 @@ public class RegExpEngineJoni implements RegExpEngine {
 	// this codebase today (regexpCacheSize defaults to 0 - confirmed no
 	// caller sets it), so routing through that dormant, opt-in mechanism
 	// would not have fixed the reported problem for default configurations.
-	private static final org.monflabs.util.cache.LRUCache<String, Compiled> COMPILED_CACHE =
-			new org.monflabs.util.cache.LRUCache<>(512);
+	// A concurrent map, not a synchronized LRU: lookups never contend. The
+	// bound is enforced by evicting an arbitrary entry when it is full, which
+	// only matters for programs that compile more than 512 distinct patterns.
+	private static final int COMPILED_CACHE_SIZE = 512;
+	private static final java.util.concurrent.ConcurrentHashMap<String, Compiled> COMPILED_CACHE =
+			new java.util.concurrent.ConcurrentHashMap<>();
+
+	private static void cacheCompiled(String key, Compiled compiled) {
+		if (COMPILED_CACHE.size() >= COMPILED_CACHE_SIZE) {
+			java.util.Iterator<String> it = COMPILED_CACHE.keySet().iterator();
+			if (it.hasNext()) {
+				it.next();
+				it.remove();
+			}
+		}
+		COMPILED_CACHE.put(key, compiled);
+	}
 
 	public RegExpEngineJoni(JSEnvironment env, RegExp regExp) {
 		this.env = env;
@@ -409,7 +424,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 				CustomLookbehind sentinel = new CustomLookbehind();
 				sentinel.totalGroupCount = countCapturingGroups(translated);
 				this.customLookbehind = sentinel;
-				COMPILED_CACHE.put(cacheKey, new Compiled(regex, namedGroups, multiplexNamedGroups, customLookbehind, topLevelAlternatives));
+				cacheCompiled(cacheKey, new Compiled(regex, namedGroups, multiplexNamedGroups, customLookbehind, topLevelAlternatives));
 				return;
 			}
 
@@ -442,7 +457,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 				}
 			}
 		}
-		COMPILED_CACHE.put(cacheKey, new Compiled(regex, namedGroups, multiplexNamedGroups, customLookbehind, topLevelAlternatives));
+		cacheCompiled(cacheKey, new Compiled(regex, namedGroups, multiplexNamedGroups, customLookbehind, topLevelAlternatives));
 	}
 
 	// True if `translated` contains a lookbehind ("(?<=...)"/"(?<!...)",
