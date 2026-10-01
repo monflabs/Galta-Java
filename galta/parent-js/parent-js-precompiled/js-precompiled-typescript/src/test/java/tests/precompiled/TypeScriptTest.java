@@ -41,15 +41,20 @@ public class TypeScriptTest extends __BaseTestCase {
 
 	public void testTranspiled() throws Exception {
 		JSEnvironment env = TestEnvironment.create();
-		
+
 		Typescript tsCompiler = Typescript.newBuilder()
 				.environment(env)
 				.build();
-		
+
 		String tsSource = support.loadText("source/sample.ts");
-		String result = tsCompiler.execute(tsSource);
-		Console.log(result);
-		support.assertTextResult(result, "sample.js");
+		// typescript.js is not transpiled by this build yet (see the pom): a
+		// clear failure, not a NullPointerException
+		try {
+			tsCompiler.execute(tsSource);
+			fail("The precompiled compiler is not available");
+		} catch(IllegalStateException e) {
+			assertTrue(e.getMessage(), e.getMessage().contains("not available"));
+		}
 	}
 	
 	public void testInterpreted() throws Exception {
@@ -63,8 +68,8 @@ public class TypeScriptTest extends __BaseTestCase {
 		JSValue ts = context.global("ts");
 
 		JSValue compilerOptions = context.createObject();
-		ts.put("module",ts.get("ModuleKind").get("None"));
-		ts.put("target",ts.get("ScriptTarget").get("ES2020"));
+		compilerOptions.put("module",ts.get("ModuleKind").get("None"));
+		compilerOptions.put("target",ts.get("ScriptTarget").get("ES2020"));
 		
 		String tsSource = support.loadText("source/sample.ts");
 		

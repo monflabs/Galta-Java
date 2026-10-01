@@ -63,7 +63,6 @@ const usersArray = [
 const allEmails = getUserProp(usersArray, "email"); // It's showing suggetions based on its dynamic arguments
 // 11.3 Generics in Class
 class Country {
-    resources;
     constructor(resources) {
         this.resources = resources;
     }

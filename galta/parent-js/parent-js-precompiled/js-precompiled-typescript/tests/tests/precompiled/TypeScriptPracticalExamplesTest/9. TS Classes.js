@@ -1,10 +1,6 @@
 "use strict";
 // 9.1 Basic Class__________
 class Individual {
-    name;
-    age;
-    exp;
-    occupation;
     //   name: string;
     //   age: number;
     //   occupation: string;
@@ -33,7 +29,6 @@ console.log(Riyad.getOccupation());
 // console.log(Riyad.exp) - Property 'exp' is protected and only accessible within class 'Individual' and its subclasses
 // 9.2 Subclass_________
 class Engineer extends Individual {
-    lang;
     constructor(name, age, occupation, exp, lang = "TypeScript" // Default Value
     ) {
         super(name, age, exp, occupation);
@@ -47,8 +42,6 @@ class Engineer extends Individual {
 const SadikEngeer = new Engineer("Sadik", 25, "Std Engeer", 2);
 console.log(SadikEngeer.getExp());
 class Cricketer {
-    name;
-    age;
     constructor(name, age) {
         this.name = name;
         this.age = age;
@@ -63,18 +56,16 @@ const Mashrafee = new Cricketer("Mashrafee", 32);
 console.log(Mashrafee.play("bowling")); // Mashrafee is bowling
 // 9.5 Static____________
 class People {
-    name;
-    static count = 0;
     static getCount() {
         return People.count;
     }
-    id;
     constructor(name) {
         this.name = name;
         this.name = name;
         this.id = ++People.count; // accessable because of static type
     }
 }
+People.count = 0;
 const John = new People("John");
 const Steve = new People("Steve");
 const Amy = new People("Amy");
@@ -84,7 +75,6 @@ console.log(Amy.id); // 3
 console.log(People.count); // 3
 // 9.6 Setter & Getter___________
 class School {
-    students;
     constructor() {
         this.students = [];
     }

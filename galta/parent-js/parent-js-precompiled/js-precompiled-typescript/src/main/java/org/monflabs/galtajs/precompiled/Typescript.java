@@ -21,6 +21,14 @@ import org.monflabs.galtajs.jsonfactory.JSValue;
 import org.monflabs.galtajs.rt.transpiler.TranspiledGlobalRuntimeContext;
 import org.monflabs.util.ObjectBuilder;
 
+/**
+ * The TypeScript compiler, meant to run transpiled to Java.
+ * <p>
+ * Not functional yet: the transpilation of typescript.js is disabled in this
+ * module's pom (the transpiler cannot handle it yet), so there is no compiled
+ * compiler to run and {@link #execute(String)} fails with an
+ * {@link IllegalStateException}.
+ */
 public class Typescript {
 	
 	public static final class Builder extends ObjectBuilder<Typescript> {
@@ -53,21 +61,31 @@ public class Typescript {
 					.supportGlobalAlias(true)
 					.build();
 		}
-/*		
-		//Enable that when the transpiler is enabled!		
+/*
+		//Enable that when the transpiler is enabled!
 		js.Typescript js = new js.Typescript(env);
 		runtimeContext = new TranspiledGlobalRuntimeContext(env,env.createProgramExecutor());
         js.executeWithContext(runtimeContext);
-*/        			
+*/
 	}
-	
+
+	/**
+	 * Transpiles TypeScript source to JavaScript (ES2020, no module system).
+	 *
+	 * @throws IllegalStateException as long as the compiler is not transpiled
+	 * (see the class documentation)
+	 */
 	public String execute(String source) {
+		if(runtimeContext==null) {
+			throw new IllegalStateException("The precompiled TypeScript compiler is not available: "
+					+ "typescript.js is not transpiled by this build (see js-precompiled-typescript/pom.xml)");
+		}
 		JSValue ts = runtimeContext.global("ts");
 
 		JSValue compilerOptions = runtimeContext.createObject();
-		ts.put("module",ts.get("ModuleKind").get("None"));
-		ts.put("target",ts.get("ScriptTarget").get("ES2020"));
-		
+		compilerOptions.put("module",ts.get("ModuleKind").get("None"));
+		compilerOptions.put("target",ts.get("ScriptTarget").get("ES2020"));
+				
 	    String res = ts.get("transpile").call(source,compilerOptions).stringValue();
 		return res;
 	}

@@ -49,11 +49,9 @@ public class BeautifyCss {
 	private BeautifyCss(Builder b) {
 		this.env = b.env;
 		if(env==null) {
-			if(env==null) {
-				env = JavaScriptEnvironment.newBuilder()
-						.supportGlobalAlias(true)
-						.build();
-			}
+			env = JavaScriptEnvironment.newBuilder()
+					.supportGlobalAlias(true)
+					.build();
 		}
 		js.Beautifycss js = new js.Beautifycss(env);
 		runtimeContext = new TranspiledGlobalRuntimeContext(env,env.createProgramExecutor());
