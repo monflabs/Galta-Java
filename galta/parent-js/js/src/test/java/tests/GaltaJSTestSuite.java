@@ -483,6 +483,7 @@ public class GaltaJSTestSuite {
 		suite.addTestSuite(tests.javascript.regression.EngineRegression2Test.class);
 		suite.addTestSuite(tests.javascript.regression.EngineRegressionNoStrictTest.class);
 		suite.addTestSuite(tests.javascript.regression.ConsoleFormatTest.class);
+		suite.addTestSuite(tests.javascript.regression.RuntimeRegressionTest.class);
 		suite.addTestSuite(tests.javascript.control.TryTest.class);
 		suite.addTestSuite(tests.javascript.control.WhileTest.class);
 		suite.addTestSuite(tests.javascript.control.WithNoStrictTest.class);

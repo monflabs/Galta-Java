@@ -7,7 +7,7 @@
     let fired = false;
     const id = setTimeout(() => { fired = true; }, 10);
     assertTrue(typeof id === "number");
-    // Callback hasn't fired yet at this point (it's a delayed microtask).
+    // Callback hasn't fired yet at this point (it's a timer macrotask).
     assertFalse(fired);
 }
 
@@ -66,9 +66,10 @@ clearTimeout(null);
         }
     }, 10);
     setTimeout(() => {
-        // After ~80ms the interval must have fired exactly 3 times and stopped.
+        // Well after 30ms the interval must have fired exactly 3 times and
+        // stopped (generous margin: timers drift on a cold JVM)
         assertEquals(3, count);
-    }, 80);
+    }, 200);
 }
 
 // setInterval passes extra arguments through on every tick
@@ -221,3 +222,25 @@ assertEquals("foob", atob("Zm9vYg"));
 // btoa coerces non-string input via ToString
 assertEquals("MTIz", btoa(123));
 assertEquals("dHJ1ZQ==", btoa(true));
+
+// A timer callback is a macrotask: it runs after the pending promise
+// reactions (microtasks), even with a 0 delay
+{
+    const order = [];
+    setTimeout(() => order.push("timeout"));
+    Promise.resolve().then(() => order.push("promise1")).then(() => order.push("promise2"));
+    queueMicrotask(() => order.push("microtask"));
+    setTimeout(() => {
+        assertEquals("promise1,microtask,promise2,timeout", order.join());
+    }, 20);
+}
+
+// Due timers run in order, each followed by its own microtasks
+{
+    const order = [];
+    setTimeout(() => { order.push("t1"); Promise.resolve().then(() => order.push("p1")); });
+    setTimeout(() => order.push("t2"));
+    setTimeout(() => {
+        assertEquals("t1,p1,t2", order.join());
+    }, 20);
+}
