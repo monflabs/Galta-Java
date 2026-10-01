@@ -177,12 +177,11 @@ public interface Config {
 	public default String getResourceAsString(String path) {
 		InputStream is=getResource(path);
 		if(is!=null) {
-			try {
-				return IOStreamUtil.readContent(is);
+			// try-with-resources: a failing close() no longer masks the original exception
+			try(InputStream in=is) {
+				return IOStreamUtil.readContent(in);
 			} catch(IOException e) {
 				throw new ConfigException(e,"Error while loading resource '{0}'",path);
-			} finally {
-				IOStreamUtil.close(is);;
 			}
 		}
 		return null;
@@ -190,12 +189,11 @@ public interface Config {
 	public default String getResourceAsString(String path, Charset cs) {
 		InputStream is=getResource(path);
 		if(is!=null) {
-			try {
-				return IOStreamUtil.readContent(is,cs);
+			// try-with-resources: a failing close() no longer masks the original exception
+			try(InputStream in=is) {
+				return IOStreamUtil.readContent(in,cs);
 			} catch(IOException e) {
 				throw new ConfigException(e,"Error while loading resource '{0}'",path);
-			} finally {
-				IOStreamUtil.close(is);;
 			}
 		}
 		return null;

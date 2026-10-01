@@ -22,15 +22,16 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 import org.monflabs.javacompiler.TargetFactory;
 
 
 public class MapTargetFactory implements TargetFactory {
 	
-	// Concurrent: compilations may run while classes are loaded from another thread
-	private Map<String,byte[]> files = new ConcurrentHashMap<>();
+	// Concurrent: compilations may run while classes are loaded from another thread.
+	// Sorted: the files of a package are a range of keys, not a scan of every file.
+	private final ConcurrentSkipListMap<String,byte[]> files = new ConcurrentSkipListMap<>();
 	
 	public MapTargetFactory() {
 	}
@@ -59,10 +60,16 @@ public class MapTargetFactory implements TargetFactory {
 	}
 	@Override
 	public Collection<String> listClassFiles(String packageFolder) {
+		return listClassFiles(packageFolder, false);
+	}
+
+	@Override
+	public Collection<String> listClassFiles(String packageFolder, boolean recurse) {
 		String prefix = packageFolder.isEmpty() ? "" : packageFolder+"/";
+		Collection<String> names = prefix.isEmpty() ? files.keySet() : files.subMap(prefix, true, prefix+Character.MAX_VALUE, false).keySet();
 		List<String> result = new ArrayList<>();
-		for(String name: files.keySet()) {
-			if(name.startsWith(prefix) && name.endsWith(".class") && name.indexOf('/',prefix.length())<0) {
+		for(String name: names) {
+			if(name.endsWith(".class") && (recurse || name.indexOf('/',prefix.length())<0)) {
 				result.add(name);
 			}
 		}

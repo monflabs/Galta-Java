@@ -42,13 +42,33 @@ public class CloseableListSupplier<T extends AutoCloseable> implements AutoClose
 		return wrapped;
 	}
 	
+	/**
+	 * Closes every supplied object, even when some of them fail: the first failure is
+	 * thrown (as a ForwardRuntimeException) once all are closed, the others attached to
+	 * it as suppressed exceptions.
+	 */
 	@Override
 	public synchronized void close() {
 		if(list!=null) {
-			for( T t: list) {
-				IOStreamUtil.close(t);
-			}
+			List<T> l = list;
 			list = null;
+			ForwardRuntimeException failure = null;
+			for( T t: l) {
+				try {
+					if(t!=null) {
+						t.close();
+					}
+				} catch(Exception ex) {
+					if(failure==null) {
+						failure = new ForwardRuntimeException(ex, "Error while closing stream");
+					} else {
+						failure.addSuppressed(ex);
+					}
+				}
+			}
+			if(failure!=null) {
+				throw failure;
+			}
 		}
 	}
 }

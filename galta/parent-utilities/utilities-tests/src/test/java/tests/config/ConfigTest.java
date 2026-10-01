@@ -254,4 +254,27 @@ public class ConfigTest extends ProjectTestCase {
 		assertFalse(ro.updateValues(u -> {}));
 		assertThrows(ConfigException.class, () -> ro.setResource("x", "y"));
 	}
+
+	public void testResourceCloseFailureDoesNotMaskReadFailure() throws Exception {
+		Config c = new Config() {
+			@Override public Iterator<String> keysOf(String key, ENUM_KEYS type) { return List.<String>of().iterator(); }
+			@Override public boolean has(String key) { return false; }
+			@Override public boolean isValue(String key) { return false; }
+			@Override public boolean isFolder(String key) { return false; }
+			@Override public Object getValue(String key) { return null; }
+			@Override public InputStream getResource(String path) {
+				return new InputStream() {
+					@Override public int read() throws java.io.IOException { throw new java.io.IOException("read"); }
+					@Override public int read(byte[] b, int off, int len) throws java.io.IOException { throw new java.io.IOException("read"); }
+					@Override public void close() throws java.io.IOException { throw new java.io.IOException("close"); }
+				};
+			}
+		};
+		// The failing close() in a finally used to replace the read failure
+		ConfigException ex = assertThrows(ConfigException.class, () -> c.getResourceAsString("r.txt"));
+		assertEquals("read", ex.getCause().getMessage());
+		assertEquals("close", ex.getCause().getSuppressed()[0].getMessage());
+		ex = assertThrows(ConfigException.class, () -> c.getResourceAsString("r.txt", StandardCharsets.UTF_8));
+		assertEquals("read", ex.getCause().getMessage());
+	}
 }

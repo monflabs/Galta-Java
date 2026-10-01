@@ -95,6 +95,14 @@ public class JavaCompilerFactory {
 			return this;
 		}
 		
+		// The @Required annotations are only checked in debug mode: check them always
+		@Override
+		protected void validate() {
+			assertNotNull(classLoader, "classLoader");
+			assertNotNull(sourceFactory, "sourceFactory");
+			assertNotNull(targetFactory, "targetFactory");
+		}
+
 		@Override
 		protected JavaCompiler _build() {
 			return new JavaCompilerJavac(classLoader,sourceFactory,targetFactory,options,failOnWarnings);

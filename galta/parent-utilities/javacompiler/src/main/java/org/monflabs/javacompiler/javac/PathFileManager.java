@@ -106,7 +106,7 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 		Set<String> seen = new HashSet<>();
 		String folder = packageName.replace('.', '/');
 		for(TargetFactory f: classPathFactories) {
-			for(String fileName: f.listClassFiles(folder)) {
+			for(String fileName: f.listClassFiles(folder, recurse)) {
 				if(seen.add(fileName)) {
 					result.add(new FactoryClassFile(f, fileName));
 				}

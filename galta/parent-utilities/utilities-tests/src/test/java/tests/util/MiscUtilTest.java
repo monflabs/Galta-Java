@@ -106,4 +106,28 @@ public class MiscUtilTest extends ProjectTestCase {
 		assertNull( PathUtil.POSIX.getRelativePath(null, "/a") );
 		assertThrows(RuntimeException.class, () -> { throw new RuntimeException(); });
 	}
+
+	public void testCloseableListSupplierClosesAll() throws Exception {
+		java.util.List<String> closed = new java.util.ArrayList<>();
+		int[] n = new int[1];
+		org.monflabs.util.CloseableListSupplier<AutoCloseable> s = org.monflabs.util.CloseableListSupplier.of(() -> {
+			int i = n[0]++;
+			return () -> {
+				closed.add("c" + i);
+				if (i < 2) {
+					throw new java.io.IOException("fail" + i);
+				}
+			};
+		});
+		s.get();
+		s.get();
+		s.get();
+		// close() used to stop at the first failure, leaking the others
+		RuntimeException ex = org.junit.Assert.assertThrows(RuntimeException.class, s::close);
+		assertEquals(java.util.List.of("c0", "c1", "c2"), closed);
+		assertEquals("fail0", ex.getCause().getMessage());
+		assertEquals(1, ex.getSuppressed().length);
+		assertEquals("fail1", ex.getSuppressed()[0].getMessage());
+		s.close();   // already closed: nothing left to do
+	}
 }

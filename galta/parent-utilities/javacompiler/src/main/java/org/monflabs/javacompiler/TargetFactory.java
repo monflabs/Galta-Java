@@ -51,4 +51,17 @@ public interface TargetFactory {
 	public default Collection<String> listClassFiles(String packageFolder) throws IOException {
 		return Collections.emptyList();
 	}
+
+	/**
+	 * List the class files of a package folder, including its sub packages when
+	 * <code>recurse</code> is true (javac asks for it through JavaFileManager.list()).
+	 * The default implementation only lists the package itself.
+	 * @param packageFolder the package, as a folder ("com/acme"), or "" for the default package
+	 * @param recurse true to include the sub packages
+	 * @return the file names, relative to the factory root
+	 * @throws IOException
+	 */
+	public default Collection<String> listClassFiles(String packageFolder, boolean recurse) throws IOException {
+		return listClassFiles(packageFolder);
+	}
 }

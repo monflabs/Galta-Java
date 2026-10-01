@@ -74,6 +74,27 @@ public class PathFileFactory implements SourceFactory, TargetFactory {
 	}
 
 	@Override
+	public Collection<String> listClassFiles(String packageFolder, boolean recurse) throws IOException {
+		if(!recurse) {
+			return listClassFiles(packageFolder);
+		}
+		List<String> result = new ArrayList<>();
+		Path dir = packageFolder.isEmpty() ? path : path.resolve(packageFolder);
+		if(Files.isDirectory(dir)) {
+			try(Stream<Path> s = Files.walk(dir)) {
+				s.forEach( p -> {
+					if(p.getFileName().toString().endsWith(".class") && Files.isRegularFile(p)) {
+						String relative = path.relativize(p).toString();
+						String sep = p.getFileSystem().getSeparator();
+						result.add(sep.equals("/") ? relative : relative.replace(sep, "/"));
+					}
+				});
+			}
+		}
+		return result;
+	}
+
+	@Override
 	public Collection<String> listClassFiles(String packageFolder) throws IOException {
 		List<String> result = new ArrayList<>();
 		Path dir = packageFolder.isEmpty() ? path : path.resolve(packageFolder);

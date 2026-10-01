@@ -18,6 +18,16 @@ package org.monflabs.javacompiler;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLStreamHandler;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
 
 import org.monflabs.util.StringFormat;
 
@@ -26,8 +36,14 @@ import org.monflabs.util.StringFormat;
  * <p>
  * The classes found in the factory take precedence over the parent class loader
  * (child-first): a compiled class is never shadowed by a class with the same name
- * on the application class path. Classes from the <code>java.*</code> packages are
- * always delegated, as they cannot be redefined.
+ * on the application class path. Classes from the platform packages (<code>java.*</code>,
+ * <code>javax.*</code>, <code>jdk.*</code>, <code>sun.*</code>, <code>com.sun.*</code>) are
+ * always delegated to the parent first: a class file with such a name in the factory must
+ * never shadow the platform's own class.
+ * <p>
+ * The compiled class files are also visible as resources, consistently through
+ * {@link #getResource(String)}, {@link #getResources(String)} and
+ * {@link #getResourceAsStream(String)}.
  * <p>
  * A class loader defines a class once: after the bytes of a class change in the factory
  * (a recompilation), a new class loader is needed to load the new version.
@@ -61,7 +77,7 @@ public class FactoryClassLoader extends ClassLoader {
 	
 	@Override
 	protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-		if(name.startsWith("java.")) {
+		if(isPlatformClass(name)) {
 			return super.loadClass(name, resolve);
 		}
 		synchronized(getClassLoadingLock(name)) {
@@ -82,6 +98,11 @@ public class FactoryClassLoader extends ClassLoader {
 		}
 	}
 	
+	private static boolean isPlatformClass(String name) {
+		return name.startsWith("java.") || name.startsWith("javax.") || name.startsWith("jdk.")
+			|| name.startsWith("sun.") || name.startsWith("com.sun.");
+	}
+
 	@Override
 	public Class<?> findClass(String name) throws ClassNotFoundException {
 		// Only reached for a class that the parent does not have (see loadClass)
@@ -101,22 +122,81 @@ public class FactoryClassLoader extends ClassLoader {
 		}
 	}
 	
-	@Override
-	public InputStream getResourceAsStream(String name) {
-		// Makes the compiled .class files readable as resources (e.g. by bytecode libraries)
+	// The bytes of a compiled class file, if this name is one in the factory
+	private byte[] factoryResource(String name) {
 		if(name.endsWith(".class")) {
 			try {
-				byte[] bytes = factory.readBytes(name.startsWith("/") ? name.substring(1) : name);
-				if(bytes!=null) {
-					return new ByteArrayInputStream(bytes);
-				}
+				return factory.readBytes(name.startsWith("/") ? name.substring(1) : name);
 			} catch(IOException ex) {
 				// Fall back to the parent
 			}
 		}
+		return null;
+	}
+
+	private static URL toURL(String name, byte[] bytes) {
+		try {
+			return URL.of(new URI("factory", null, "/"+(name.startsWith("/") ? name.substring(1) : name), null), new URLStreamHandler() {
+				@Override
+				protected URLConnection openConnection(URL u) {
+					return new URLConnection(u) {
+						@Override
+						public void connect() {
+							connected = true;
+						}
+						@Override
+						public InputStream getInputStream() {
+							return new ByteArrayInputStream(bytes);
+						}
+						@Override
+						public long getContentLengthLong() {
+							return bytes.length;
+						}
+					};
+				}
+			});
+		} catch(URISyntaxException | MalformedURLException ex) {
+			return null;
+		}
+	}
+
+	@Override
+	public URL getResource(String name) {
+		// Child-first, as for the classes
+		byte[] bytes = factoryResource(name);
+		if(bytes!=null) {
+			URL u = toURL(name, bytes);
+			if(u!=null) {
+				return u;
+			}
+		}
+		return super.getResource(name);
+	}
+
+	@Override
+	public Enumeration<URL> getResources(String name) throws IOException {
+		Enumeration<URL> parent = super.getResources(name);
+		byte[] bytes = factoryResource(name);
+		URL u = bytes!=null ? toURL(name, bytes) : null;
+		if(u==null) {
+			return parent;
+		}
+		List<URL> all = new ArrayList<>();
+		all.add(u);
+		all.addAll(Collections.list(parent));
+		return Collections.enumeration(all);
+	}
+
+	@Override
+	public InputStream getResourceAsStream(String name) {
+		// Makes the compiled .class files readable as resources (e.g. by bytecode libraries)
+		byte[] bytes = factoryResource(name);
+		if(bytes!=null) {
+			return new ByteArrayInputStream(bytes);
+		}
 		return super.getResourceAsStream(name);
 	}
-	
+
 	public Class<?> alreadyLoaded(String className) {
 		return findLoadedClass(className);
 	}

@@ -250,4 +250,64 @@ public class JavaCompilerRegressionTest extends ProjectTestCase {
 		Collections.sort(l);
 		return l;
 	}
+
+	public void testBuilderValidatesRequiredFields() {
+		// A missing factory used to surface later as a NullPointerException inside javac
+		org.junit.Assert.assertThrows(org.monflabs.util.ObjectBuilderException.class, () -> JavaCompilerFactory.newBuilder()
+				.classLoader(getClass().getClassLoader())
+				.targetFactory(new MapTargetFactory())
+				.build());
+		org.junit.Assert.assertThrows(org.monflabs.util.ObjectBuilderException.class, () -> JavaCompilerFactory.newBuilder()
+				.sourceFactory(MapSourceFactory.of("A.java", "public class A {}"))
+				.targetFactory(new MapTargetFactory())
+				.build());
+		org.junit.Assert.assertThrows(org.monflabs.util.ObjectBuilderException.class, () -> JavaCompilerFactory.newBuilder()
+				.classLoader(getClass().getClassLoader())
+				.sourceFactory(MapSourceFactory.of("A.java", "public class A {}"))
+				.build());
+	}
+
+	public void testPlatformPackagesAreParentFirst() throws Exception {
+		MapTargetFactory tgt = new MapTargetFactory();
+		tgt.getFiles().put("javax/net/SocketFactory.class", new byte[] {1,2,3});
+		tgt.getFiles().put("jdk/internal/misc/Unsafe.class", new byte[] {1,2,3});
+		FactoryClassLoader cl = new FactoryClassLoader(getClass().getClassLoader(), tgt);
+		// A class file in the factory used to shadow (or fail to redefine) the platform's
+		assertSame(javax.net.SocketFactory.class, cl.loadClass("javax.net.SocketFactory"));
+		assertFalse(cl.hasDefinedClasses());
+	}
+
+	public void testCompiledClassVisibleThroughAllResourceMethods() throws Exception {
+		MapTargetFactory tgt = new MapTargetFactory();
+		try(JavaCompiler c = newCompiler(MapSourceFactory.of("p/Res.java", "package p; public class Res {}"), tgt)) {
+			c.compile("p.Res");
+			ClassLoader cl = c.getClassLoader();
+			byte[] expected = tgt.getFiles().get("p/Res.class");
+			java.net.URL u = cl.getResource("p/Res.class");
+			// getResourceAsStream() saw the compiled class, getResource()/getResources() did not
+			assertNotNull(u);
+			try(java.io.InputStream in = u.openStream()) {
+				assertTrue(java.util.Arrays.equals(expected, in.readAllBytes()));
+			}
+			java.util.List<java.net.URL> all = java.util.Collections.list(cl.getResources("p/Res.class"));
+			assertEquals(1, all.size());
+			try(java.io.InputStream in = cl.getResourceAsStream("p/Res.class")) {
+				assertTrue(java.util.Arrays.equals(expected, in.readAllBytes()));
+			}
+			assertNull(cl.getResource("p/Missing.class"));
+		}
+	}
+
+	public void testMapTargetFactoryRecursiveListing() throws Exception {
+		MapTargetFactory tgt = new MapTargetFactory();
+		tgt.getFiles().put("a/A.class", new byte[0]);
+		tgt.getFiles().put("a/b/B.class", new byte[0]);
+		tgt.getFiles().put("a/b/info.txt", new byte[0]);
+		tgt.getFiles().put("ab/C.class", new byte[0]);
+		tgt.getFiles().put("D.class", new byte[0]);
+		assertEquals(java.util.List.of("a/A.class"), new java.util.ArrayList<>(tgt.listClassFiles("a")));
+		assertEquals(java.util.List.of("a/A.class", "a/b/B.class"), new java.util.ArrayList<>(tgt.listClassFiles("a", true)));
+		assertEquals(java.util.List.of("D.class"), new java.util.ArrayList<>(tgt.listClassFiles("")));
+		assertEquals(5 - 1, tgt.listClassFiles("", true).size());
+	}
 }
