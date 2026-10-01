@@ -221,4 +221,41 @@ public class ClassMetadataTest extends ProjectTestCase {
 		assertFalse(a.putMember(new Overloads(), "nope", 1));
 		assertSame(ModelAccessor.UNHANDLED, a.getMember((Object)null, "x"));
 	}
+
+	public static class LoaderOverloads {
+		public static String f(Object o) {
+			return "object";
+		}
+		public static String f(String s) {
+			return "string";
+		}
+	}
+
+	public void testOverloadCacheDoesNotPinForeignLoaders() throws Exception {
+		ClassMetadata cm = new ClassMetadata(null);
+		MethodCache mc = cm.getClassInfoCache(LoaderOverloads.class).getMethod("f");
+		assertEquals("string", mc.call((v,c) -> v, true, null, new Object[] {"x"}));
+		java.lang.ref.WeakReference<ClassLoader> loader = callWithForeignArgument(mc);
+		// Several shapes, so the foreign one is not only the "last call" either
+		assertEquals("string", mc.call((v,c) -> v, true, null, new Object[] {"y"}));
+		assertEquals("object", mc.call((v,c) -> v, true, null, new Object[] {1}));
+		for (int i = 0; i < 100 && loader.get() != null; i++) {
+			System.gc();
+			Thread.sleep(20);
+		}
+		// The resolution cache used to keep the argument class, and its loader, forever
+		assertNull("the overload cache pinned a foreign class loader", loader.get());
+		assertEquals("string", mc.call((v,c) -> v, true, null, new Object[] {"z"}));
+	}
+
+	private static java.lang.ref.WeakReference<ClassLoader> callWithForeignArgument(MethodCache mc) throws Exception {
+		java.net.URL classes = sample.Class1.class.getProtectionDomain().getCodeSource().getLocation();
+		try (java.net.URLClassLoader l = new java.net.URLClassLoader(new java.net.URL[] {classes}, ClassLoader.getPlatformClassLoader())) {
+			Object foreign = l.loadClass("sample.Class1").getConstructor().newInstance();
+			assertNotSame(sample.Class1.class, foreign.getClass());
+			assertEquals("object", mc.call((v,c) -> v, true, null, new Object[] {foreign}));
+			assertEquals("object", mc.call((v,c) -> v, true, null, new Object[] {foreign}));
+			return new java.lang.ref.WeakReference<>(l);
+		}
+	}
 }

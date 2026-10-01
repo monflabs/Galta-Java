@@ -444,6 +444,93 @@ public class ClassMetadata {
 		MemberCache nextMember;
 	}
 
+	// The loaders whose classes are never unloaded: the bootstrap loader (null),
+	// the platform loader and the system loader with its ancestors
+	private static final Set<ClassLoader> PERMANENT_LOADERS = permanentLoaders();
+
+	private static Set<ClassLoader> permanentLoaders() {
+		Set<ClassLoader> set = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (ClassLoader l = ClassLoader.getSystemClassLoader(); l != null; l = l.getParent()) {
+			set.add(l);
+		}
+		set.add(ClassLoader.getPlatformClassLoader());
+		return set;
+	}
+
+	// A call shape: whether the call is static, and the class of each argument
+	private static final class Shape {
+		private final Boolean staticMethod;
+		private final Object[] classes;
+		private final int hash;
+
+		Shape(Boolean staticMethod, Object[] classes) {
+			this.staticMethod = staticMethod;
+			this.classes = classes;
+			this.hash = 31 * java.util.Objects.hashCode(staticMethod) + java.util.Arrays.hashCode(classes);
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			return o instanceof Shape s
+				&& hash == s.hash
+				&& java.util.Objects.equals(staticMethod, s.staticMethod)
+				&& java.util.Arrays.equals(classes, s.classes);
+		}
+	}
+
+	// The last call shape of an overload group, with its resolution
+	private static final class LastCall {
+		private final Boolean staticMethod;
+		// Classes (or NULL_ARG), or WeakReferences to the classes that must not be pinned
+		private final Object[] refs;
+		final Object result;
+
+		LastCall(Boolean staticMethod, Object[] classes, boolean strong, Object result) {
+			this.staticMethod = staticMethod;
+			if (strong) {
+				this.refs = classes;
+			} else {
+				Object[] r = new Object[classes.length];
+				for (int i = 0; i < r.length; i++) {
+					r[i] = classes[i] instanceof Class<?> c && !isBootstrap(c) ? new java.lang.ref.WeakReference<Class<?>>(c) : classes[i];
+				}
+				this.refs = r;
+			}
+			// The resolved member belongs to the owner: it never pins a foreign loader
+			this.result = result;
+		}
+
+		private static boolean isBootstrap(Class<?> c) {
+			return c.getClassLoader() == null;
+		}
+
+		boolean matches(Boolean staticMethod, Object[] args) {
+			if (refs.length != args.length || !java.util.Objects.equals(this.staticMethod, staticMethod)) {
+				return false;
+			}
+			for (int i = 0; i < args.length; i++) {
+				Object a = args[i];
+				Object r = refs[i];
+				if (a == null) {
+					if (r != CallableCache.NULL_ARG_MARKER) {
+						return false;
+					}
+				} else {
+					Class<?> c = a.getClass();
+					if (r != c && !(r instanceof java.lang.ref.WeakReference<?> w && w.get() == c)) {
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+	}
+
 
 	public abstract class CallableCache extends MemberCache {
 		CallableCache nextCallable;
@@ -480,43 +567,86 @@ public class ClassMetadata {
 		// Resolved overload per distinct call SHAPE (staticMethod + each
 		// argument's runtime class, null args using NULL_ARG as a stand-in
 		// since isAssignable() treats a null argument specially and it has
-		// no getClass() of its own) - overload resolution below depends
-		// only on this shape, never on the actual argument VALUES beyond
-		// their class/nullness (confirmed by reading isAssignable() - it
-		// takes the argument only to call p2.getClass()/check p2==null),
-		// so it's safe to skip re-running the full scan-every-overload
-		// resolution for a shape already seen on this same overload group.
-		// A call site invoking the same method with the same argument
-		// types every time (by far the common case) resolves in O(1) after
-		// the first call instead of re-comparing every overload, every
-		// time.
+		// no getClass() of its own) - overload resolution depends only on
+		// this shape, never on the argument VALUES beyond their class/nullness,
+		// so a shape already seen on this overload group resolves in O(1).
+		//
+		// This cache lives with the ClassInfoCache of a class, possibly for the
+		// life of the JVM (a JDK class): a shape is only kept in the map when all
+		// its classes come from a loader that can't be unloaded before the owner
+		// of the method (the bootstrap/platform/system loaders, or the owner's own
+		// loader and its ancestors). Classes from any other loader (e.g. one per
+		// compiled script) would be pinned - with their whole loader - forever.
 		// A ConcurrentHashMap can't hold a null value, so a resolved "no match" is
 		// stored as NO_MATCH - distinguishable from "never resolved this shape"
-		private final Map<List<Object>, Object> resolutionCache = new ConcurrentHashMap<>();
+		private final Map<Shape, Object> resolutionCache = new ConcurrentHashMap<>();
+		// The last resolved shape, checked first without allocating anything: most
+		// call sites always pass the same argument classes. It references classes
+		// from other loaders only weakly.
+		private volatile LastCall lastCall;
 		private static final Object NULL_ARG = new Object();
+		static final Object NULL_ARG_MARKER = NULL_ARG;
 		private static final Object NO_MATCH = new Object();
+
+		/**
+		 * The class whose loader bounds the lifetime of this member, if known.
+		 */
+		protected Class<?> getOwnerClass() {
+			return null;
+		}
 
 		// The methods should be added here!
 		public CallableCache findCallable(Boolean staticMethod, @NonNull Object[] args, boolean strictMatch) {
-			List<Object> key = new ArrayList<>(args.length + 1);
-			key.add(staticMethod);
-			for (Object a : args) {
-				key.add(a == null ? NULL_ARG : a.getClass());
+			LastCall last = lastCall;
+			if (last != null && last.matches(staticMethod, args)) {
+				return last.result == NO_MATCH ? null : (CallableCache) last.result;
 			}
-			// A plain get (not computeIfAbsent) so a genuinely ambiguous
-			// shape's ModelException (thrown by the real resolution below,
-			// not caught here) is never mistaken for "not yet cached" and
-			// re-thrown fresh on every call instead of being cached as a
-			// bogus result.
-			Object cached = resolutionCache.get(key);
-			if (cached != null) {
-				return cached == NO_MATCH ? null : (CallableCache) cached;
+			Class<?> owner = getOwnerClass();
+			ClassLoader ownerLoader = owner != null ? owner.getClassLoader() : null;
+			boolean cacheable = true;
+			Object[] classes = new Object[args.length];
+			for (int i = 0; i < args.length; i++) {
+				Object a = args[i];
+				if (a == null) {
+					classes[i] = NULL_ARG;
+				} else {
+					Class<?> c = a.getClass();
+					classes[i] = c;
+					if (cacheable && !isPinnable(c, ownerLoader)) {
+						cacheable = false;
+					}
+				}
 			}
-			CallableCache result = ClassMetadata.this.findCallable(staticMethod, args, this, strictMatch);
-			resolutionCache.put(key, result != null ? result : NO_MATCH);
-			return result;
+			Shape key = cacheable ? new Shape(staticMethod, classes) : null;
+			Object result = key != null ? resolutionCache.get(key) : null;
+			if (result == null) {
+				// A plain get (not computeIfAbsent) so a genuinely ambiguous
+				// shape's ModelException (thrown by the real resolution below,
+				// not caught here) is never mistaken for "not yet cached" and
+				// re-thrown fresh on every call instead of being cached as a
+				// bogus result.
+				CallableCache r = ClassMetadata.this.findCallable(staticMethod, args, this, strictMatch);
+				result = r != null ? r : NO_MATCH;
+				if (key != null) {
+					resolutionCache.put(key, result);
+				}
+			}
+			lastCall = new LastCall(staticMethod, classes, cacheable, result);
+			return result == NO_MATCH ? null : (CallableCache) result;
 		}
 
+		private static boolean isPinnable(Class<?> c, ClassLoader ownerLoader) {
+			ClassLoader l = c.getClassLoader();
+			if (l == null || PERMANENT_LOADERS.contains(l)) {
+				return true;
+			}
+			for (ClassLoader o = ownerLoader; o != null; o = o.getParent()) {
+				if (o == l) {
+					return true;
+				}
+			}
+			return false;
+		}
 
 		private Class<?> getObjectTypeFromPrimitive(Class<?> c) {
 			// Transform a primitive to its Object based class
@@ -613,6 +743,11 @@ public class ClassMetadata {
 			super(method.getParameterTypes());
 			this.method = method;
 		}
+
+		@Override
+		protected Class<?> getOwnerClass() {
+			return method.getDeclaringClass();
+		}
 		
 		public Method getMethod() {
 			return method;
@@ -690,6 +825,11 @@ public class ClassMetadata {
 		protected ConstructorCache(Constructor<?> constructor) {
 			super(constructor.getParameterTypes());
 			this.constructor = constructor;
+		}
+
+		@Override
+		protected Class<?> getOwnerClass() {
+			return constructor.getDeclaringClass();
 		}
 		
 		public Constructor<?> getConstructor() {
