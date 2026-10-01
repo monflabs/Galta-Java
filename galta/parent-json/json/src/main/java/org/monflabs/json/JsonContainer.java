@@ -15,14 +15,12 @@
  */
 package org.monflabs.json;
 
-import java.io.IOException;
 import java.io.Reader;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 
 import org.monflabs.json.jsonpath.JsonValues;
-import org.monflabs.json.stringifier.JsonStringifier.StringSerializer;
 import org.monflabs.util.iterators.Iterators;
 
 /**
@@ -93,13 +91,8 @@ public interface JsonContainer extends Cloneable {
 		return stringify(true);
 	}
 	public default String stringify(boolean compact) {
-		try {
-			StringSerializer sg = new StringSerializer();
-			sg.setCompact(compact);
-			return sg.stringify(this);
-		} catch(IOException e) {
-			throw new JsonException(e);
-		}
+		// Through the factory, so its configureJsonStringifier() applies
+		return factory().stringify(this, compact);
 	}
 	
 	public JsonContainer clone();

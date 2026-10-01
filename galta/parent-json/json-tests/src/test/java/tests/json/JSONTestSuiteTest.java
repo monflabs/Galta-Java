@@ -15,10 +15,14 @@
  */
 package tests.json;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Arrays;
 
 import org.junit.Before;
+import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonFactory;
 import org.monflabs.json.parser.JsonParser.StringParser;
 
@@ -27,29 +31,35 @@ import tests.ProjectTestCase;
 //
 //   https://github.com/nst/JSONTestSuite
 //
+// Every file is parsed twice by the strict parser: from the text decoded by the test
+// (a String), and from the raw bytes through JsonFactory.parse(InputStream, UTF-8, strict),
+// which also rejects the invalid UTF-8 byte sequences. A rejection must be a
+// JsonException (a ParseException...): any other exception is a parser bug.
+//
 public class JSONTestSuiteTest extends ProjectTestCase {
 
 	StringParser parser;
-	
+
 	@Override
 	@Before
     public void setUp() throws Exception {
 		super.setUp();
-		
+
 		parser = new StringParser(JsonFactory.get());
 		parser.setStrict(true);
 	}
-	
-	
+
+
 	public void testParser() throws Exception {
 		// Browse all the tests
 		File jsonDir = new File(support.getTestResourcesDirectory(),"JSONTestSuite");
 
 		File parsingDir = new File(jsonDir,"test_parsing");
-		checkFolder(parsingDir);
-		
+		checkFolder(parsingDir, true);
+
+		// The transform tests have no expected result for the invalid UTF-8 ones
 		File transformDir = new File(jsonDir,"test_transform");
-		checkFolder(transformDir);
+		checkFolder(transformDir, false);
 	}
 
 	// To test individual files
@@ -59,17 +69,17 @@ public class JSONTestSuiteTest extends ProjectTestCase {
 //		checkFile(jsonFile);
 //	}
 
-	private void checkFolder(File dir) throws Exception {
+	private void checkFolder(File dir, boolean bytes) throws Exception {
 		assertTrue(dir.exists());
-	
+
 		File[] files = dir.listFiles( (f) -> f.isFile() && f.getPath().endsWith(".json") );
 		Arrays.sort(files);
 		for(int i=0; i<files.length; i++) {
-			checkFile(files[i]);
+			checkFile(files[i], bytes);
 		}
 	}
-	
-	private void checkFile(File file) throws Exception {
+
+	private void checkFile(File file, boolean checkBytes) throws Exception {
 		assertTrue(file.exists());
 		String json = support.readString(file);
 
@@ -80,15 +90,22 @@ public class JSONTestSuiteTest extends ProjectTestCase {
 		} else if(fName.startsWith("i_")) {
 			expectedResult = ParseResult.UNDEFINED;
 		}
-		ParseResult result = parseJson(json);
+		check(file, expectedResult, parseJson(json), json, "string");
+		if(checkBytes) {
+			byte[] bytes = Files.readAllBytes(file.toPath());
+			check(file, expectedResult, parseBytes(bytes), json, "bytes");
+		}
+	}
+	private void check(File file, ParseResult expectedResult, ParseResult result, String json, String source) {
+		String fName = file.getName();
 		if(expectedResult!=ParseResult.UNDEFINED) {
 			if(expectedResult!=result) {
-				support.print("Parser error : {0}, was {1}, {2}  - {3}\n  {4}",expectedResult,result,fName,file.getPath(),json);
+				support.print("Parser error ({0}): {1}, was {2}, {3}  - {4}\n  {5}",source,expectedResult,result,fName,file.getPath(),json);
 				fail();
 			}
 		} else {
 			if(result!=ParseResult.SUCCESS) {
-				support.print("Unsupported JSON Optional parser feature: {0} -  {1}\n  {2}",fName,file.getPath(),json);
+				support.print("Unsupported JSON Optional parser feature ({0}): {1} -  {2}\n  {3}",source,fName,file.getPath(),json);
 			}
 		}
 	}
@@ -98,7 +115,15 @@ public class JSONTestSuiteTest extends ProjectTestCase {
 		try {
 			parser.parse(json);
 			return ParseResult.SUCCESS;
-		} catch(Throwable ex) {
+		} catch(JsonException ex) {
+			return ParseResult.FAILURE;
+		}
+	}
+	private ParseResult parseBytes(byte[] bytes) throws Exception {
+		try {
+			JsonFactory.get().parse(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8, true);
+			return ParseResult.SUCCESS;
+		} catch(JsonException ex) {
 			return ParseResult.FAILURE;
 		}
 	}

@@ -176,7 +176,7 @@ JsonValues collected = java.util.stream.StreamSupport.stream(titles.spliterator(
 
 ## CSV lines
 
-`CsvMapping.toCsvStrings()` returns a `Function` that turns a row, a `List` (such as a `JsonArray`) or a Java array, into one CSV line, following RFC 4180: a field that contains the separator, a double quote, a carriage return or a line feed is enclosed in double quotes, and its double quotes are doubled. A field that starts or ends with a space or a tab is quoted as well. Each cell is written with `toString()`, except the numbers that are written as in JSON (a `Double` `4.0` gives `4`, `1e10` gives `10000000000`), and `null` gives an empty field. Any other row, an object for example, gives an empty line.
+`CsvMapping.toCsvStrings()` returns a `Function` that turns a row into one CSV line, following RFC 4180: a field that contains the separator, a double quote, a carriage return or a line feed is enclosed in double quotes, and its double quotes are doubled. A field that starts or ends with a space or a tab is quoted as well. A row is a `List` (such as a `JsonArray`) or another `Collection`, a Java array, or a `Map` such as a `JsonObject` (its values, in order); a `null` row gives an empty line and any other row throws a `JsonException`. Each cell is written with `toString()`, except the numbers that are written as in JSON (a `Double` `4.0` gives `4`, `1e10` gives `10000000000`) and the JSON objects and arrays that are written as their compact JSON text; `null` gives an empty field.
 
 `toCsvStrings(separator, quoteStrategy)` sets the field separator and the `QuoteStrategy`:
 
@@ -185,6 +185,8 @@ JsonValues collected = java.util.stream.StreamSupport.stream(titles.spliterator(
 | `REQUIRED` (default) | Only the fields that need it |
 | `EMPTY` | Also empty strings, to tell them from `null` (as PostgreSQL's CSV import expects) |
 | `ALWAYS` | Every field, including numbers, booleans and `null` |
+
+`toCsvStrings(separator, quoteStrategy, true)` also protects against CSV injection: a text cell starting with `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with a single quote, so a spreadsheet doesn't evaluate it as a formula (numbers are left alone). It is off by default.
 
 The function reuses internal buffers: create one per stream and do not share it between threads.
 
@@ -232,10 +234,14 @@ List<String> lines = people.stream()
     .collect(Collectors.toList());
 // [1,Ada, 2,Grace]
 
-// An object is not a row
-CsvMapping.toCsvStrings().apply(people.get(0));    // ""
+// An object is a row of its values, in order
+CsvMapping.toCsvStrings().apply(people.get(0));    // "1,Ada"
 // A Java array is a row
 CsvMapping.toCsvStrings().apply(new Object[] {1, "a"});   // "1,a"
+// A container cell is compact JSON, quoted as needed
+CsvMapping.toCsvStrings().apply(List.of(1, JsonArray.of(1, 2)));    // 1,"[1,2]"
+// Formula injection protection (off by default)
+CsvMapping.toCsvStrings(',', QuoteStrategy.REQUIRED, true).apply(List.of("=SUM(A1)", -1));   // '=SUM(A1),-1
 ```
 
 For reading and writing CSV files, see [Import & Export](/GaltaJSON/Modules/ImportExport).

@@ -113,7 +113,8 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 	
 	@Override
 	public String toString() {
-		return stringify(false);
+		// Pretty, and a circular reference doesn't throw
+		return factory().toDisplayString(this);
 	}
 	
 	@Override

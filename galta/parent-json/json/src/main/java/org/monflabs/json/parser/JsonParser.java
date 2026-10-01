@@ -15,6 +15,7 @@
  */
 package org.monflabs.json.parser;
 
+import static org.monflabs.json.parser.ParseException.ERROR_SYNTAX;
 import static org.monflabs.json.parser.ParseException.ERROR_UNEXPECTED_CHAR;
 import static org.monflabs.json.parser.ParseException.ERROR_UNEXPECTED_EOF;
 import static org.monflabs.json.parser.ParseException.ERROR_UNEXPECTED_TOKEN;
@@ -83,8 +84,6 @@ public abstract class JsonParser {
 	public static class ReaderParser extends JsonParser {
 		public ReaderParser(JsonFactory jsonFactory) {
 			super(jsonFactory);
-			// A text read from a file or a stream may start with a UTF-8 BOM
-			setSkipByteOrderMark(true);
 		}
 		public Object parse(Reader in) throws JsonException, IOException {
 			return _parse(in);
@@ -93,6 +92,7 @@ public abstract class JsonParser {
 
 	
 	private static final int EOI = -1;
+	private static final int BOM = 0xFEFF;
 	private static final int BUFFER_SIZE = 1024;
 
 	/**
@@ -100,8 +100,23 @@ public abstract class JsonParser {
 	 * with a ParseException rather than overflowing the Java stack.
 	 */
 	public static final int DEFAULT_MAX_DEPTH = 1000;
+	/**
+	 * The highest nesting depth setMaxDepth() accepts: the parser is recursive, a deeper
+	 * content would overflow the Java stack of a default thread.
+	 */
+	public static final int MAX_DEPTH_LIMIT = 2000;
 	private int maxDepth = DEFAULT_MAX_DEPTH;
 	private int depth;
+
+	/**
+	 * Default maximum length, in characters, of a number literal. Converting a huge
+	 * literal to a BigInteger or a BigDecimal takes a time that grows faster than its
+	 * length (a million digits took tens of seconds): a longer literal is rejected with a
+	 * ParseException.
+	 */
+	public static final int DEFAULT_MAX_NUMBER_LENGTH = 1000;
+	private int maxNumberLength = DEFAULT_MAX_NUMBER_LENGTH;
+	private int numberStart;
 		
 	private JsonFactory jsonFactory;
 	private boolean strict;
@@ -111,7 +126,6 @@ public abstract class JsonParser {
 	// The reader reported the end of the input
 	private boolean eof;
 	// Skip a leading byte order mark (a stream/reader parse)
-	private boolean skipByteOrderMark;
 	private int bufferRead;
 	private MSB sb;
 	
@@ -183,24 +197,28 @@ public abstract class JsonParser {
 		return maxDepth;
 	}
 
+	/**
+	 * Set the maximum nesting depth of objects and arrays, capped at MAX_DEPTH_LIMIT.
+	 */
 	public void setMaxDepth(int maxDepth) {
-		this.maxDepth = maxDepth;
+		this.maxDepth = Math.min(maxDepth, MAX_DEPTH_LIMIT);
+	}
+
+	public int getMaxNumberLength() {
+		return maxNumberLength;
+	}
+
+	/**
+	 * Set the maximum length, in characters, of a number literal (sign, digits, '.' and
+	 * exponent included). 0 or a negative value removes the limit, which is only safe when
+	 * the factory converts the numbers to doubles: see DEFAULT_MAX_NUMBER_LENGTH.
+	 */
+	public void setMaxNumberLength(int maxNumberLength) {
+		this.maxNumberLength = maxNumberLength>0 ? maxNumberLength : Integer.MAX_VALUE;
 	}
 
 	public void setStrict(boolean strict) {
 		this.strict = strict;
-	}
-
-	public boolean isSkipByteOrderMark() {
-		return skipByteOrderMark;
-	}
-
-	/**
-	 * Whether a leading byte order mark (U+FEFF) is skipped. It is not by default, as it is
-	 * not a JSON whitespace, but it is for a {@link ReaderParser}.
-	 */
-	public void setSkipByteOrderMark(boolean skipByteOrderMark) {
-		this.skipByteOrderMark = skipByteOrderMark;
 	}
 
 	public Reviver getReviver() {
@@ -274,10 +292,31 @@ public abstract class JsonParser {
 		internedStrings = internMap;
 	}
 
-	private void checkStrict() {
+	/**
+	 * Reject a lenient-only construct in strict mode, reported at the current character.
+	 */
+	private void checkStrict(String construct) {
 		if(strict) {
-			throw new ParseException(this, ParseException.ERROR_UNEXPECTED_STRICT, getPosition(), null);
+			throw new ParseException(this, ParseException.ERROR_UNEXPECTED_STRICT, currentPosition(), construct);
 		}
+	}
+	private void checkStrict(String construct, int position) {
+		if(strict) {
+			throw new ParseException(this, ParseException.ERROR_UNEXPECTED_STRICT, position, construct);
+		}
+	}
+	/**
+	 * The position of the current character c, or the input length at the end of input.
+	 */
+	private int currentPosition() {
+		return c==EOI ? getPosition() : getPosition()-1;
+	}
+	/**
+	 * The end of input was reached where more content was expected: reported at the input
+	 * length.
+	 */
+	private ParseException unexpectedEOF() {
+		return new ParseException(this, ERROR_UNEXPECTED_EOF, getPosition(), null);
 	}
 	
 	//
@@ -323,14 +362,24 @@ public abstract class JsonParser {
 			this.bufferLength = 0;
 			this.depth = 0;
 			read();
-			if(skipByteOrderMark && c==0xFEFF) {
+			// A byte order mark is not JSON whitespace: the lenient parser skips a leading
+			// one (whatever the source: String, Reader or InputStream), the strict parser
+			// rejects it, like JSON.parse()
+			if(c==BOM && !strict) {
 				read();
 			}
 			skipSpacesAndComments();
 			if(strict && c==EOI) {
-				throw new ParseException(this, ERROR_UNEXPECTED_EOF, getPosition(), c);
+				throw unexpectedEOF();
 			}
-			Object v = readValue();
+			Object v;
+			try {
+				v = readValue();
+			} catch(StackOverflowError e) {
+				// Safety net: the depth limit should prevent it, unless the thread stack is
+				// very small or a reviver recurses
+				throw new ParseException(this, ERROR_SYNTAX, getPosition(), "Content nested too deeply for the parser stack");
+			}
 			if(reviver!=null) {
 				String context = captureContext(lastValueStart, v);
 				v = reviver.transform(null,"",v,context);
@@ -340,7 +389,7 @@ public abstract class JsonParser {
 			}
 			skipSpacesAndComments();
 			if(c!=EOI) {
-				throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition(), c);
+				throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, c);
 			}
 			return v;
 		} finally {
@@ -429,32 +478,17 @@ public abstract class JsonParser {
 				case '"':
 					return readString();
 				case '\'':
-					checkStrict();
+					checkStrict("A single quoted string");
 					return readString();
-				// null
 				case 'n':
-					int position = getPosition()-1;
-					String xs = readAlphaKeyword();
-					if ("null".equals(xs)) {
-						return null;
-					}
-					throw new ParseException(this, ERROR_UNEXPECTED_TOKEN, position, xs);
-				// false
+					readKeyword("null");
+					return null;
 				case 'f':
-					position = getPosition()-1;
-					xs = readAlphaKeyword();
-					if ("false".equals(xs)) {
-						return Boolean.FALSE;
-					}
-					throw new ParseException(this, ERROR_UNEXPECTED_TOKEN, position, xs);
-				// true
+					readKeyword("false");
+					return Boolean.FALSE;
 				case 't':
-					position = getPosition()-1;
-					xs = readAlphaKeyword();
-					if ("true".equals(xs)) {
-						return Boolean.TRUE;
-					}
-					throw new ParseException(this, ERROR_UNEXPECTED_TOKEN, position, xs);
+					readKeyword("true");
+					return Boolean.TRUE;
 				// digits
 				case '.':
 				case '0':
@@ -486,7 +520,7 @@ public abstract class JsonParser {
 	
 	private void enter() {
 		if(++depth>maxDepth) {
-			throw new ParseException(this, ERROR_UNEXPECTED_TOKEN, getPosition()-1, "nesting deeper than "+maxDepth);
+			throw new ParseException(this, ERROR_SYNTAX, getPosition()-1, "Objects and arrays nested deeper than "+maxDepth+" levels");
 		}
 	}
 
@@ -518,7 +552,7 @@ public abstract class JsonParser {
 					throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (char)c);
 				case '}':
 					if(state==2) {
-						checkStrict();
+						checkStrict("A trailing comma");
 					}
 					/* unstack */
 					next();
@@ -532,7 +566,7 @@ public abstract class JsonParser {
 					next();
 					continue;
 				case EOI:
-					throw new ParseException(this, ERROR_UNEXPECTED_EOF, getPosition(), "EOF");
+					throw unexpectedEOF();
 				case '"':
 				case '\'':
 				default:
@@ -544,18 +578,18 @@ public abstract class JsonParser {
 					if (c == '\"') {
 						key = readKey();
 					} else if (c == '\'') {
-						checkStrict();
+						checkStrict("A single quoted key");
 						key = readString();
 					} else {
 						// An unquoted name is a name, even "null" (a JSON key is never null)
+						checkStrict("An unquoted key");
 						key = readExtendedJSIdentifier();
-						checkStrict();
 					}
 					// Comments are allowed here as anywhere else between tokens
 					skipSpacesAndComments();
 					if (c != ':') {
 						if (c == EOI) {
-							throw new ParseException(this, ERROR_UNEXPECTED_EOF, getPosition()-1, null);
+							throw unexpectedEOF();
 						}
 						throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (char)c);
 					}				
@@ -633,7 +667,7 @@ public abstract class JsonParser {
 					continue;
 				case ']':
 					if(state==2) {
-						checkStrict();
+						checkStrict("A trailing comma");
 					}
 					/* unstack */
 					next();
@@ -650,7 +684,7 @@ public abstract class JsonParser {
 					next();
 					continue;
 				case EOI:
-					throw new ParseException(this, ERROR_UNEXPECTED_EOF, getPosition(), "EOF");
+					throw unexpectedEOF();
 				default:
 					if(state==1) {
 						throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (char) c);
@@ -767,10 +801,8 @@ public abstract class JsonParser {
 				this.bufferPos = p-1;
 				return readStringSlow(sep);
 			}
-			if(strict) {
-				if(c<0x0020 || c>0x10FFFF) {
-					checkStrict();
-				}
+			if(c<0x0020) {
+				checkStrict("A control character in a string", bufferRead+p-1);
 			}
 		}
 		final MSB sb = this.sb;
@@ -793,7 +825,7 @@ public abstract class JsonParser {
 			}
 			switch (c) {
 				case EOI:
-					throw new ParseException(this, ERROR_UNEXPECTED_EOF, getPosition()-1, null);
+					throw unexpectedEOF();
 				case '"':
 				case '\'':
 					if (sep == c) {
@@ -828,7 +860,7 @@ public abstract class JsonParser {
 							break;
 						case '\'':
 							// Not a JSON escape (only valid in a single quoted, non strict string)
-							checkStrict();
+							checkStrict("The \\' escape");
 							sb.append('\'');
 							break;
 						case '"':
@@ -838,18 +870,18 @@ public abstract class JsonParser {
 							sb.append(readUnicode(4));
 							break;
 						case 'x':
-							checkStrict();
+							checkStrict("The \\x escape");
 							sb.append(readUnicode(2));
 							break;
 						case '\n':
-							checkStrict();
+							checkStrict("A line continuation");
 							break;
 						case '\r':
-							checkStrict();
+							checkStrict("A line continuation");
 							continuationCR = true; // CRLF is one line terminator
 							break;
 						case EOI:
-							throw new ParseException(this, ERROR_UNEXPECTED_EOF, getPosition(), "EOF");
+							throw unexpectedEOF();
 						default:
 							throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (char)c);
 					}
@@ -861,14 +893,14 @@ public abstract class JsonParser {
 				case '\n':
 					// Same rule as the fast path: rejected in strict mode, kept otherwise
 					// (this path used to silently drop the character)
-					checkStrict();
+					checkStrict("A control character in a string");
 					sb.append((char) c);
 					break;
 				default:
 					// The other control characters are invalid in strict mode as well
 					// (the fast path checks them, this path did not)
 					if(c<0x20) {
-						checkStrict();
+						checkStrict("A control character in a string");
 					}
 					sb.append((char) c);
 			}
@@ -887,9 +919,9 @@ public abstract class JsonParser {
 			else if (c >= 'a' && c <= 'f')
 				value += (c - 'a') + 10;
 			else if (c == EOI)
-				throw new ParseException(this, ERROR_UNEXPECTED_EOF, getPosition()-1, "EOF");
+				throw unexpectedEOF();
 			else
-				throw new ParseException(this, ERROR_UNEXPECTED_UNICODE, getPosition()-1, c);
+				throw new ParseException(this, ERROR_UNEXPECTED_UNICODE, getPosition()-1, (char)c);
 		}
 		return (char) value;
 	}
@@ -903,37 +935,44 @@ public abstract class JsonParser {
 	private Object readNumber() throws JsonException, IOException {
 		final MSB sb = this.sb;
 		sb.clear();
-		
+		final int start = getPosition()-1;
+		this.numberStart = start;
+
 		// Initial sign
 		if(c=='-' || c=='+') {
 			if(c=='+') {
-				checkStrict();
+				checkStrict("A leading '+'");
 			}
 			sb.append((char) c);// first char digit or +-
 			next();
 			// Must be followed by a digit (-.1 not permitted)
 			if (c < '0' || c > '9') {
-				checkStrict();
+				if(c==EOI) {
+					throw unexpectedEOF();
+				}
+				if(c!='N' && c!='I') { // -Infinity: reported below
+					checkStrict("A sign not followed by a digit");
+				}
 			}
 		}
-		
+
 		// Special numbers
 		if(c=='N' || c=='I') {
 			readSpecialNumber(sb);
 			String s = sb.toString();
 			if(s.equals("NaN")) {
-				checkStrict();
+				checkStrict("NaN", start);
 				return Double.valueOf(Double.NaN);
 			}
 			if(s.equals("Infinity") || s.equals("+Infinity")) {
-				checkStrict();
+				checkStrict("Infinity", start);
 				return Double.POSITIVE_INFINITY;
 			}
 			if(s.equals("-Infinity")) {
-				checkStrict();
+				checkStrict("Infinity", start);
 				return Double.NEGATIVE_INFINITY;
 			}
-			throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (int)c);
+			throw new ParseException(this, ERROR_UNEXPECTED_TOKEN, start, s);
 		}
 		
 		// Digits of the integer and the fraction parts: a number needs at least one
@@ -943,23 +982,28 @@ public abstract class JsonParser {
 			digits++;
 			next();
 			if(c=='x' || c=='X') {
+				checkStrict("A hexadecimal number", start);
 				sb.append((char)c);
-				checkStrict();
 				next();
 				// Must be an integer
+				if(readHexaDigits(sb)==0) {
+					if(c==EOI) {
+						throw unexpectedEOF();
+					}
+					throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (char)c);
+				}
+				String xs = sb.toString();
 				try {
-					readHexaDigits(sb);
-					String xs = sb.toString();
 					return jsonFactory.parseIntegerWithRadix(xs);
-				} catch(Exception e) {
-					throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (int)c);
+				} catch(RuntimeException e) {
+					throw invalidNumber(xs, e);
 				}
 			}
 			if (c >= '0' && c <= '9') { // cannot be 0[0-9] in strict json
-				checkStrict();
+				checkStrict("A leading zero", start);
 			}
 		} else if(c=='.') {
-			checkStrict();
+			checkStrict("A number starting with '.'");
 		}
 
 		// Integer digits
@@ -975,31 +1019,30 @@ public abstract class JsonParser {
 				}
 			}
 			String xs = sb.toString();
-			return jsonFactory.parseInteger(xs);
+			try {
+				return jsonFactory.parseInteger(xs);
+			} catch(RuntimeException e) {
+				throw invalidNumber(xs, e);
+			}
 		}
-		
+
 		if (c == '.') {
 			sb.append((char) c);
+			checkNumberLength();
 			next();
 			int fraction = readDigits(sb);
 			if(fraction==0) { // No decimal character added (ex: 1.)
-				checkStrict();
+				checkStrict("A '.' not followed by a digit");
 			}
 			digits += fraction;
 		}
 		// Even lenient, ".", "-." or ".e5" are not numbers
 		checkNumberDigits(digits);
 		if (c != 'E' && c != 'e') {
-			if(defaultDecimalParsing) {
-				Number n = readDecimalFast(sb);
-				if(n!=null) {
-					return n;
-				}
-			}
-			String num = sb.toString();
-			return jsonFactory.parseDecimal(num);
+			return toDecimal(sb);
 		}
 		sb.append('E');
+		checkNumberLength();
 		next();
 		if (c == '+' || c == '-' || c >= '0' && c <= '9') {
 			boolean sign = c == '+' || c == '-';
@@ -1008,21 +1051,56 @@ public abstract class JsonParser {
 			next();
 			if(readDigits(sb)==0 && sign) {
 				// "1e+": the exponent has no digit
-				throw new ParseException(this, c==EOI ? ERROR_UNEXPECTED_EOF : ERROR_UNEXPECTED_CHAR, getPosition()-1, c==EOI ? "EOF" : Character.valueOf((char)c));
-			}
-			if(defaultDecimalParsing) {
-				Number n = readDecimalFast(sb);
-				if(n!=null) {
-					return n;
+				if(c==EOI) {
+					throw unexpectedEOF();
 				}
+				throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (char)c);
 			}
-			return jsonFactory.parseDecimal(sb.toString());
+			return toDecimal(sb);
 		}
-		throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, c==EOI ? "EOF" : Character.valueOf((char)c));
+		if(c==EOI) {
+			throw unexpectedEOF();
+		}
+		throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (char)c);
+	}
+	private Number toDecimal(MSB sb) {
+		if(defaultDecimalParsing) {
+			Number n = readDecimalFast(sb);
+			if(n!=null) {
+				return n;
+			}
+		}
+		String num = sb.toString();
+		try {
+			return jsonFactory.parseDecimal(num);
+		} catch(RuntimeException e) {
+			throw invalidNumber(num, e);
+		}
+	}
+	// The factory could not convert a number literal (a custom factory, or an exponent
+	// out of the BigDecimal range): a parse error at the start of the literal
+	private ParseException invalidNumber(String literal, RuntimeException e) {
+		if(e instanceof ParseException pe) {
+			return pe;
+		}
+		String reason = e.getMessage();
+		if(e.getCause()!=null && e.getCause().getMessage()!=null) {
+			reason = e.getCause().getMessage();
+		}
+		ParseException pe = new ParseException(this, ERROR_SYNTAX, numberStart, "Invalid number "+ParseException.clip(literal)+(reason!=null ? " ("+reason+")" : ""), e);
+		return pe;
+	}
+	private void checkNumberLength() {
+		if(sb.p>maxNumberLength) {
+			throw new ParseException(this, ERROR_SYNTAX, numberStart, "Number literal longer than "+maxNumberLength+" characters");
+		}
 	}
 	private void checkNumberDigits(int digits) {
 		if(digits==0) {
-			throw new ParseException(this, c==EOI ? ERROR_UNEXPECTED_EOF : ERROR_UNEXPECTED_CHAR, getPosition()-1, c==EOI ? "EOF" : Character.valueOf((char)c));
+			if(c==EOI) {
+				throw unexpectedEOF();
+			}
+			throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (char)c);
 		}
 	}
 	/**
@@ -1173,6 +1251,7 @@ public abstract class JsonParser {
 			}
 			count++;
 			sb.append((char) c);
+			checkNumberLength();
 			next();
 		}
 	}
@@ -1184,6 +1263,7 @@ public abstract class JsonParser {
 			}
 			count++;
 			sb.append((char) c);
+			checkNumberLength();
 			next();
 		}
 	}
@@ -1193,6 +1273,7 @@ public abstract class JsonParser {
 				return;
 			}
 			sb.append((char) c);
+			checkNumberLength();
 			next();
 		}
 	}
@@ -1204,7 +1285,7 @@ public abstract class JsonParser {
 	//
 	
 	private void readComment() throws JsonException, IOException {
-		checkStrict();
+		checkStrict("A comment");
 		/* assert (c == '/') */
 		next();
 		if(c=='*') {
@@ -1213,8 +1294,11 @@ public abstract class JsonParser {
 		} else if(c=='/') {
 			next();
 			readSinglelineComment();
+		} else if(c==EOI) {
+			throw unexpectedEOF();
 		} else {
-			throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, "Bad comment start - should be /* or //");
+			// '/' not followed by '*' or '/'
+			throw new ParseException(this, ERROR_UNEXPECTED_CHAR, getPosition()-1, (char)c);
 		}
 	}
 	private void readSinglelineComment() throws JsonException, IOException {
@@ -1241,7 +1325,7 @@ public abstract class JsonParser {
 					// closes the comment ("**/"), which used to be skipped
 					continue;
 				case EOI:
-					throw new ParseException(this, ERROR_UNEXPECTED_EOF, getPosition()-1, "EOF");
+					throw unexpectedEOF();
 			}
 			next();
 		}
@@ -1252,6 +1336,35 @@ public abstract class JsonParser {
 	// Utilities
 	//
 	
+	/**
+	 * Read the keyword starting with the current character (true, false or null), without
+	 * creating a String when the keyword and the character after it are in the buffer.
+	 */
+	private void readKeyword(String keyword) throws JsonException, IOException {
+		final char[] b = buffer;
+		final int p = bufferPos;		// Position of the second character
+		final int len = keyword.length();
+		if(p+len-1<bufferLength) {
+			int i = 1;
+			while(i<len && b[p+i-1]==keyword.charAt(i)) {
+				i++;
+			}
+			if(i==len) {
+				char next = b[p+len-1];
+				if(!((next>='a' && next<='z') || (next>='A' && next<='Z'))) {
+					this.c = next;
+					this.bufferPos = p+len;
+					return;
+				}
+			}
+		}
+		int position = getPosition()-1;
+		String xs = readAlphaKeyword();
+		if(!keyword.equals(xs)) {
+			throw new ParseException(this, ERROR_UNEXPECTED_TOKEN, position, ParseException.clip(xs));
+		}
+	}
+
 	private String readAlphaKeyword() throws JsonException, IOException {
 		final char[] b = buffer;
 		final int l = bufferLength;

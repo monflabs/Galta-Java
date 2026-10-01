@@ -73,11 +73,28 @@ public abstract class JsonStringifier {
 	    }
 	}
 
+	/**
+	 * Write at most maxCharacters characters, then stop walking the value. The text is cut
+	 * before an escape sequence or a surrogate pair that would not fit entirely, so it can
+	 * be a few characters shorter than the limit.
+	 */
 	public static class LimitedStringSerializer extends StringSerializer {
+		// Thrown to stop the walk once the limit is reached (no stack trace: preallocated)
+		@SuppressWarnings("serial")
+		private static final class LimitReached extends RuntimeException {
+			LimitReached() {
+				super(null, null, false, false);
+			}
+		}
+		private static final LimitReached LIMIT_REACHED = new LimitReached();
+		// The text is flushed by blocks of this size, so the walk stops soon after the limit
+		private static final int LIMITED_BUFFER_SIZE = 256;
+
 		private int maxCharacters;
 		private boolean truncated;
 		public LimitedStringSerializer(int maxCharacters) {
-			this.maxCharacters = maxCharacters;
+			this.maxCharacters = Math.max(0, maxCharacters);
+			useBufferSize(LIMITED_BUFFER_SIZE);
 		}
 		public boolean isTruncated() {
 			return truncated;
@@ -85,16 +102,54 @@ public abstract class JsonStringifier {
 	    @Override
 		public String stringify(Object o) throws IOException {
 	    	this.truncated = false;
-	    	return super.stringify(o);
+	    	this.sb = new StringBuilder(Math.min(maxCharacters, 512));
+	    	try {
+	    		write(o);
+	    	} catch(LimitReached e) {
+	    		// The text is complete up to the limit
+	    	}
+	    	return sb.toString();
 	    }
 	    @Override
 	    protected void flushBuffer(char[] buffer, int len) throws IOException {
-	    	if(!truncated) {
-		    	int l = Math.min(len, maxCharacters-sb.length());
-		    	truncated = l<len;
-		    	if(l>0) {
-		    		sb.append(buffer, 0, l);
-		    	}
+	    	if(truncated) {
+	    		throw LIMIT_REACHED;
+	    	}
+	    	int l = Math.min(len, maxCharacters-sb.length());
+	    	if(l>0) {
+	    		sb.append(buffer, 0, l);
+	    	}
+	    	if(l<len) {
+	    		truncated = true;
+	    		cutIncompleteSequence(sb);
+	    		throw LIMIT_REACHED;
+	    	}
+	    }
+	    // Remove from the end of the text a lone high surrogate (the first half of a pair)
+	    // or the beginning of an escape sequence cut by the limit
+	    private static void cutIncompleteSequence(StringBuilder sb) {
+	    	int len = sb.length();
+	    	if(len>0 && Character.isHighSurrogate(sb.charAt(len-1))) {
+	    		sb.setLength(--len);
+	    	}
+	    	// An escape sequence is at most 6 characters (backslash u and 4 hex digits): look
+	    	// for a backslash in the last 5 characters. The backslashes come in pairs ("\\")
+	    	// when escaped: an odd count of consecutive backslashes ending at index k means
+	    	// that the one at k starts an escape sequence
+	    	for(int k=len-1; k>=Math.max(0, len-5); k--) {
+	    		if(sb.charAt(k)=='\\') {
+	    			int run = 0;
+	    			for(int j=k; j>=0 && sb.charAt(j)=='\\'; j--) {
+	    				run++;
+	    			}
+	    			if((run&1)==1) {
+	    				int escapeLength = k+1<len && sb.charAt(k+1)=='u' ? 6 : 2;
+	    				if(k+escapeLength>len) {
+	    					sb.setLength(k);
+	    				}
+	    			}
+	    			break;
+	    		}
 	    	}
 	    }
 	}
@@ -117,6 +172,31 @@ public abstract class JsonStringifier {
     private boolean serializeNulls = true;
     private boolean sortProperties;
     private boolean outputReferences;
+    private boolean escapeNonAscii;
+    // When not null, a circular reference is written as this string instead of throwing
+    private String circularReferenceMarker;
+
+    /**
+     * Default maximum nesting depth of the objects and arrays written: a deeper value is
+     * rejected with a NestingTooDeepException rather than overflowing the Java stack (the
+     * writer is recursive). Same as the parser's default.
+     */
+    public static final int DEFAULT_MAX_DEPTH = 1000;
+    /**
+     * The highest depth setMaxDepth() accepts.
+     */
+    public static final int MAX_DEPTH_LIMIT = 2000;
+    private int maxDepth = DEFAULT_MAX_DEPTH;
+
+    /**
+     * Thrown when the value to write nests objects and arrays deeper than the maximum depth.
+     */
+    @SuppressWarnings("serial")
+    public static class NestingTooDeepException extends JsonException {
+    	public NestingTooDeepException(String msg, Object... params) {
+    		super(null, msg, params);
+    	}
+    }
     
     private int initialIndentLevel;
     private int indentLevel;
@@ -167,6 +247,12 @@ public abstract class JsonStringifier {
      * Keep the whole text in memory, in a buffer starting with the given size and growing
      * as needed: flushBuffer() is not called and the text is read with getBufferedText().
      */
+    /**
+     * The size of the buffer flushed with flushBuffer().
+     */
+    protected void useBufferSize(int size) {
+    	this.buffer = new char[Math.max(16, size)];
+    }
     protected void useGrowableBuffer(int initialSize) {
     	this.growableBuffer = true;
     	this.buffer = new char[Math.max(16, initialSize)];
@@ -190,6 +276,44 @@ public abstract class JsonStringifier {
 
 	public void setCompact(boolean compact) {
 		this.compact = compact;
+	}
+
+	public boolean isEscapeNonAscii() {
+		return escapeNonAscii;
+	}
+
+	/**
+	 * When true, every character above 126 is written as a backslash-u escape (a surrogate
+	 * pair as two escapes), so the output is pure ASCII. By default, only the characters
+	 * JSON.stringify() escapes are: the control characters, '"', '\\' and the lone
+	 * surrogates.
+	 */
+	public void setEscapeNonAscii(boolean escapeNonAscii) {
+		this.escapeNonAscii = escapeNonAscii;
+	}
+
+	public int getMaxDepth() {
+		return maxDepth;
+	}
+
+	/**
+	 * Set the maximum nesting depth of the objects and arrays, capped at MAX_DEPTH_LIMIT.
+	 */
+	public void setMaxDepth(int maxDepth) {
+		this.maxDepth = Math.max(0, Math.min(maxDepth, MAX_DEPTH_LIMIT));
+	}
+
+	public String getCircularReferenceMarker() {
+		return circularReferenceMarker;
+	}
+
+	/**
+	 * Write a container that contains itself as this string (like "[circular]") instead
+	 * of throwing a JsonException.CircularReference. Meant for display (toString()), the
+	 * output doesn't round trip.
+	 */
+	public void setCircularReferenceMarker(String circularReferenceMarker) {
+		this.circularReferenceMarker = circularReferenceMarker;
 	}
 
 	public boolean isOutputReferences() {
@@ -284,7 +408,13 @@ public abstract class JsonStringifier {
 	        		return;
 	        	}
 	        }
-	    	outLiteral(o);
+	    	try {
+	    		outLiteral(o);
+	    	} catch(StackOverflowError e) {
+	    		// Safety net: the depth limit should prevent it, unless the thread stack is
+	    		// very small or a replacer recurses
+	    		throw new NestingTooDeepException("Value nested too deeply for the stringifier stack");
+	    	}
 	    	if(!growableBuffer) {
 	    		flushBuffer(buffer, bufferLength);
 	    	}
@@ -407,10 +537,11 @@ public abstract class JsonStringifier {
     private void outNullLiteral() throws IOException{
         out("null"); 
     }
-    // Characters written as is in a string literal: printable ASCII, but '"' and '\\'
+    // Characters written as is in a string literal: printable ASCII, but '"' and '\\' (DEL
+    // is written as is unless escapeNonAscii is set)
     private static final boolean[] PLAIN_CHAR = new boolean[128];
     static {
-    	for(int c=32; c<128; c++) {
+    	for(int c=32; c<127; c++) {
     		PLAIN_CHAR[c] = c!='"' && c!='\\';
     	}
     }
@@ -418,9 +549,15 @@ public abstract class JsonStringifier {
         out('\"');
         int len = s.length();
         int run = 0; // Start of the current run of plain characters
+        final boolean escapeNonAscii = this.escapeNonAscii;
         for(int i=0; i<len; i++) {
             char c = s.charAt(i);
-            if(c<128 && PLAIN_CHAR[c]) {
+            if(c<128) {
+            	if(PLAIN_CHAR[c] || (c==127 && !escapeNonAscii)) {
+            		continue;
+            	}
+            } else if(!escapeNonAscii && !Character.isSurrogate(c)) {
+            	// Written as is, like JSON.stringify() does (U+2028 and U+2029 included)
             	continue;
             }
             if(run<i) {
@@ -450,7 +587,7 @@ public abstract class JsonStringifier {
                 } break;
                 default: {
                     // Ensure that it will be transmitted correctly...
-                    if(Character.isHighSurrogate(c) && i+1<len && Character.isLowSurrogate(s.charAt(i+1))) {
+                    if(!escapeNonAscii && Character.isHighSurrogate(c) && i+1<len && Character.isLowSurrogate(s.charAt(i+1))) {
                         // Per spec's QuoteJSONString: a COMPLETE, valid
                         // surrogate pair (a well-formed astral character)
                         // must be output as its raw UTF-16 code units
@@ -519,7 +656,69 @@ public abstract class JsonStringifier {
     			}
     		}
     	}
-		out(JsonUtil.toString(n));
+    	if(n instanceof java.math.BigInteger || n instanceof java.math.BigDecimal
+    			|| n instanceof Short || n instanceof Byte) {
+    		out(JsonUtil.toString(n));
+    		return;
+    	}
+    	// Another Number class: its toString() may not be a JSON number ("NaN", "1,5"...)
+    	String text = JsonUtil.toString(n);
+    	if(!isJsonNumber(text)) {
+    		double v = n.doubleValue();
+    		if(Double.isNaN(v) || Double.isInfinite(v)) {
+    			outNullLiteral();
+    			return;
+    		}
+    		text = JsonUtil.toString(Double.valueOf(v));
+    	}
+		out(text);
+    }
+    /**
+     * Check a text against the JSON number grammar:
+     * -?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?
+     */
+    static boolean isJsonNumber(String s) {
+    	int len = s.length();
+    	int i = 0;
+    	if(i<len && s.charAt(i)=='-') {
+    		i++;
+    	}
+    	if(i>=len) {
+    		return false;
+    	}
+    	if(s.charAt(i)=='0') {
+    		i++;
+    	} else if(s.charAt(i)>='1' && s.charAt(i)<='9') {
+    		while(i<len && s.charAt(i)>='0' && s.charAt(i)<='9') {
+    			i++;
+    		}
+    	} else {
+    		return false;
+    	}
+    	if(i<len && s.charAt(i)=='.') {
+    		i++;
+    		int start = i;
+    		while(i<len && s.charAt(i)>='0' && s.charAt(i)<='9') {
+    			i++;
+    		}
+    		if(i==start) {
+    			return false;
+    		}
+    	}
+    	if(i<len && (s.charAt(i)=='e' || s.charAt(i)=='E')) {
+    		i++;
+    		if(i<len && (s.charAt(i)=='+' || s.charAt(i)=='-')) {
+    			i++;
+    		}
+    		int start = i;
+    		while(i<len && s.charAt(i)>='0' && s.charAt(i)<='9') {
+    			i++;
+    		}
+    		if(i==start) {
+    			return false;
+    		}
+    	}
+    	return i==len;
     }
     private final char[] digits = new char[20];
     // "00", "01", ... "99": two digits per division
@@ -574,6 +773,9 @@ public abstract class JsonStringifier {
         out(b?"true":"false"); 
     }    
     private void outObjectLiteral(JsonObject container) throws IOException, JsonException {
+    	if(processedCount>=maxDepth) {
+    		throw new NestingTooDeepException("Objects and arrays nested deeper than {0} levels",maxDepth);
+    	}
     	// Checked before the cycles: a reference to a parent (a recursive structure) is
     	// written as a reference, not a cycle, and the same target may be referenced twice
     	if(outputReferences) {
@@ -586,6 +788,10 @@ public abstract class JsonStringifier {
     		}
     	}
     	if(isProcessed(container)) {
+    		if(circularReferenceMarker!=null) {
+    			outStringLiteral(circularReferenceMarker);
+    			return;
+    		}
     		// Don't call container.toString() here: a genuinely circular container's
     		// own toString() recurses into itself just as infinitely, causing a
     		// StackOverflowError while merely trying to describe the error.
@@ -802,6 +1008,9 @@ public abstract class JsonStringifier {
     }
     
     private void outArrayLiteral(JsonArray container) throws IOException, JsonException {
+    	if(processedCount>=maxDepth) {
+    		throw new NestingTooDeepException("Objects and arrays nested deeper than {0} levels",maxDepth);
+    	}
     	// Checked before the cycles: a reference to a parent (a recursive structure) is
     	// written as a reference, not a cycle, and the same target may be referenced twice
     	if(outputReferences) {
@@ -814,6 +1023,10 @@ public abstract class JsonStringifier {
     		}
     	}
     	if(isProcessed(container)) {
+    		if(circularReferenceMarker!=null) {
+    			outStringLiteral(circularReferenceMarker);
+    			return;
+    		}
     		// See outObjectLiteral() above for why toString() isn't used here.
     		throw new JsonException.CircularReference(null,"Circular reference detected in array of type {0}",container.getClass().getName());
     	}

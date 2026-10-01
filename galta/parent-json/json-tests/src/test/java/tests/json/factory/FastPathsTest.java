@@ -266,7 +266,8 @@ public class FastPathsTest extends ProjectTestCase {
 	// Stringifier: strings and numbers
 	//
 
-	// The original string literal output, kept as the reference
+	// The reference string literal output (QuoteJSONString, as JSON.stringify()): only the
+	// control characters, '"', '\\' and the lone surrogates are escaped
 	private static String referenceString(String s) {
 		StringBuilder b = new StringBuilder("\"");
 		int len = s.length();
@@ -281,7 +282,7 @@ public class FastPathsTest extends ProjectTestCase {
 				case '\r': b.append("\\r"); break;
 				case '\t': b.append("\\t"); break;
 				default:
-					if(c>=32 && c<128) {
+					if(c>=32 && !Character.isSurrogate(c)) {
 						b.append(c);
 					} else if(Character.isHighSurrogate(c) && i+1<len && Character.isLowSurrogate(s.charAt(i+1))) {
 						b.append(c).append(s.charAt(++i));

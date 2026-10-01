@@ -22,7 +22,10 @@ import java.io.Reader;
 import java.io.Writer;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -237,47 +240,88 @@ public abstract class JsonFactory {
 	// native implementation.
 	//
 	
+	//
+	// The three sources follow the same rules: the lenient parser is used, a leading byte
+	// order mark is skipped, an empty or blank input (whitespace and comments only) parses
+	// as null, and a syntax error is a ParseException. parse(String) throws it as is, the
+	// Reader and InputStream variants wrap it in a JsonException (with the same message)
+	// whose cause is the ParseException.
+	//
+
 	public Object parse(InputStream json) {
 		return parse(json,StandardCharsets.UTF_8);
 	}
 	public Object parse(InputStream json, Charset charSet) {
+		return parse(json, charSet, false);
+	}
+	/**
+	 * Parse a stream. In strict mode, the strict parser is used (standard JSON only, an
+	 * empty input is an error) and an invalid byte sequence for the charset is an error,
+	 * instead of being decoded as U+FFFD (the replacement character).
+	 */
+	public Object parse(InputStream json, Charset charSet, boolean strict) {
 		if(json==null) {
-			throw new JsonException(null);
+			throw new JsonException(null,"The JSON stream to parse is null");
 		}
-		try {
-			JsonParser.ReaderParser parser = new JsonParser.ReaderParser(this);
-			return parser.parse( charSet!=null ? new InputStreamReader(json,charSet) :  new InputStreamReader(json));
-        } catch(IOException | ParseException | StackOverflowError ex) {
-        	// StackOverflowError: a deeply nested content, like "[[[[[[[[[...."
-		    throw new JsonException(ex,"Error when parsing JSON stream");
+		Charset cs = charSet!=null ? charSet : Charset.defaultCharset();
+		Reader reader;
+		if(strict) {
+			CharsetDecoder decoder = cs.newDecoder()
+					.onMalformedInput(CodingErrorAction.REPORT)
+					.onUnmappableCharacter(CodingErrorAction.REPORT);
+			reader = new InputStreamReader(json,decoder);
+		} else {
+			reader = new InputStreamReader(json,cs);
 		}
+		return parse(reader, strict, "stream");
 	}
 	public Object parse(Reader json) {
+		return parse(json, false);
+	}
+	/**
+	 * Parse the content of a Reader, with the strict parser (standard JSON only, an empty
+	 * input is an error) when strict is true.
+	 */
+	public Object parse(Reader json, boolean strict) {
+		return parse(json, strict, "reader");
+	}
+	private Object parse(Reader json, boolean strict, String source) {
 		if(json==null) {
-			throw new JsonException(null);
+			throw new JsonException(null,"The JSON {0} to parse is null",source);
 		}
+		JsonParser.ReaderParser parser = new JsonParser.ReaderParser(this);
+		parser.setStrict(strict);
 		try {
-			JsonParser.ReaderParser parser = new JsonParser.ReaderParser(this);
 			return parser.parse(json);
-        } catch(IOException | ParseException | StackOverflowError ex) {
-        	// StackOverflowError: a deeply nested content, like "[[[[[[[[[...."
-		    throw new JsonException(ex,"Error when parsing JSON stream");
+		} catch(ParseException ex) {
+		    throw new JsonException(ex,"Error when parsing JSON "+source+": "+ex.getMessage());
+		} catch(CharacterCodingException ex) {
+		    throw new JsonException(ex,"Error when parsing JSON "+source+": invalid byte sequence for the charset ("+ex+")");
+		} catch(IOException ex) {
+		    throw new JsonException(ex,"Error when parsing JSON "+source+": "+ex.getMessage());
 		}
 	}
 	public Object parse(String json) {
-		if(StringUtil.isEmpty(json)) {
-			throw new JsonException(null);
+		return parse(json, false);
+	}
+	/**
+	 * Parse a String, with the strict parser (standard JSON only, an empty input is an
+	 * error) when strict is true.
+	 */
+	public Object parse(String json, boolean strict) {
+		if(json==null) {
+			throw new JsonException(null,"The JSON string to parse is null");
 		}
 		try {
 			JsonParser.StringParser parser = new JsonParser.StringParser(this);
+			parser.setStrict(strict);
 			return parser.parse(json);
-        } catch(JsonException ex) {
-        	throw ex;
-        } catch(IOException | RuntimeException | StackOverflowError ex) {
-        	// StackOverflowError: a deeply nested content, like "[[[[[[[[[....". Other
-        	// errors (OutOfMemoryError...) are not wrapped
-		    throw new JsonException(ex,"Error when parsing JSON string"); 
-		}		
+		} catch(JsonException ex) {
+			throw ex;
+		} catch(IOException | RuntimeException ex) {
+			// A String is never read with an IOException
+		    throw new JsonException(ex,"Error when parsing JSON string: "+ex.getMessage());
+		}
 	}
 
 	
@@ -293,8 +337,10 @@ public abstract class JsonFactory {
 	public void stringify(Writer writer, Object value, boolean compact) {
 		try {
 			JsonStringifier.WriterSerializer w = new JsonStringifier.WriterSerializer();
-			w.setCompact(compact);
+			// The configuration first: the explicit compact argument wins, as in the other
+			// stringify methods
 			configureJsonStringifier(w);
+			w.setCompact(compact);
 			w.stringify(writer,value);
         } catch(IOException ex) {
 		    throw new JsonException(ex,"Error when serializing JSON content"); 
@@ -345,7 +391,24 @@ public abstract class JsonFactory {
 	public String toDebugString(Object value) {		
 		return stringify(value, true);
 	}
-	
+
+	/**
+	 * The pretty JSON text of a value, for display (the toString() of the containers): a
+	 * container that contains itself is written as the string "[circular]" instead of
+	 * throwing a JsonException.CircularReference.
+	 */
+	public String toDisplayString(Object value) {
+		try {
+			JsonStringifier.StringSerializer w = new JsonStringifier.StringSerializer();
+			configureJsonStringifier(w);
+			w.setCompact(false);
+			w.setCircularReferenceMarker("[circular]");
+			return w.stringify(value);
+		} catch(IOException ex) {
+		    throw new JsonException(ex,"Error when serializing JSON content");
+		}
+	}
+
 	protected void configureJsonStringifier(JsonStringifier configure) {
 	}
 
@@ -921,6 +984,11 @@ public abstract class JsonFactory {
 					return (double)v;
 				}
 			} catch (NumberFormatException e) {}
+			if(radix==10 && overflowInteger()!=OVERFLOW_INTEGER.BIGINT) {
+				// Same correctly rounded value as new BigInteger(s).doubleValue(), in a time
+				// linear with the length (the BigInteger conversion is not)
+				return Double.parseDouble(s);
+			}
 			// We cannot parse the int directly to a double because it has some precision issues
 			// when doing d*radix+digit.
 			// We go through a BigInteger, which may not the most efficient but the use cases should be
@@ -940,19 +1008,26 @@ public abstract class JsonFactory {
 	}
 
 	private Number _parseValidDecimal(String s) {
-		try {
-			DECIMAL def = defaultDecimal();
-			if (def==DECIMAL.BIGDEC) {
+		DECIMAL def = defaultDecimal();
+		if (def==DECIMAL.BIGDEC) {
+			try {
 				return new BigDecimal(s);
+			} catch(NumberFormatException e) {
+				// The exponent is out of the BigDecimal range (an int scale), like 1e3000000000
+				throw new JsonException(e,"Number {0} is out of the BigDecimal range",s);
 			}
-			double d = Double.parseDouble(s);
-			if(overflowDecimal()==OVERFLOW_DECIMAL.BIGDEC && !fitsDouble(s, d)) {
-				return new BigDecimal(s);
-			}
-			return d;
-		} catch(Exception e) {
-			throw JsonException.wrap(e);
 		}
+		double d = Double.parseDouble(s);
+		if(overflowDecimal()==OVERFLOW_DECIMAL.BIGDEC && !fitsDouble(s, d)) {
+			try {
+				return new BigDecimal(s);
+			} catch(NumberFormatException e) {
+				// The exponent is out of the BigDecimal range (an int scale), like
+				// 1e3000000000: the double value (Infinity or 0), like JSON.parse()
+				return d;
+			}
+		}
+		return d;
 	}
 
 	/**

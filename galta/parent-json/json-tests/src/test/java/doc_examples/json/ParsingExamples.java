@@ -174,9 +174,64 @@ public class ParsingExamples extends ProjectTestCase {
 		JsonException je = assertThrows(JsonException.class,
 				() -> JsonFactory.get().parse(new StringReader("{\"a\":}")));
 		assertTrue(je.getCause() instanceof ParseException);
+		assertEquals("Error when parsing JSON reader: JsonParser: Unexpected character '}' (125) at position 5.", je.getMessage());
 
-		assertThrows(JsonException.class, () -> JsonFactory.get().parse(""));
+		// Empty or blank input is null for the lenient parser, an error for the strict one
+		assertNull(JsonFactory.get().parse(""));
 		assertNull(JsonFactory.get().parse("  \n "));
+		assertNull(JsonFactory.get().parse(new StringReader("")));
+		assertThrows(ParseException.class, () -> JsonFactory.get().parse("", true));
+
+		// The end of input is reported at the input length
+		ParseException eof = assertThrows(ParseException.class, () -> JsonFactory.get().parse("[1, 2"));
+		assertEquals(5, eof.getPosition());
+		assertTrue(eof.getMessage().startsWith("JsonParser: Unexpected end of input at position 5."));
+
+		// Strict mode names the construct
+		ParseException strict = assertThrows(ParseException.class, () -> JsonFactory.get().parse("[1, 2, ]", true));
+		assertTrue(strict.getMessage().startsWith("JsonParser: A trailing comma is not allowed in strict mode, at position 7."));
+	}
+
+	public void testByteOrderMark() throws Exception {
+		JsonFactory f = JsonFactory.get();
+		assertEquals(JsonArray.of(1), f.parse("\uFEFF[1]"));                       // skipped by the lenient parser
+		assertEquals(JsonArray.of(1), f.parse(new StringReader("\uFEFF[1]")));
+		byte[] utf8 = {(byte)0xEF, (byte)0xBB, (byte)0xBF, '[', '1', ']'};
+		assertEquals(JsonArray.of(1), f.parse(new ByteArrayInputStream(utf8)));
+		assertThrows(ParseException.class, () -> f.parse("\uFEFF[1]", true));     // rejected in strict mode
+	}
+
+	public void testStrictStream() throws Exception {
+		byte[] invalid = {'"', (byte)0xFF, '"'};                        // not UTF-8
+		Object lenient = JsonFactory.get().parse(new ByteArrayInputStream(invalid));
+		assertEquals("\uFFFD", lenient);                                // the replacement character
+		assertThrows(JsonException.class,
+				() -> JsonFactory.get().parse(new ByteArrayInputStream(invalid), StandardCharsets.UTF_8, true));
+	}
+
+	public void testLimits() throws Exception {
+		JsonFactory f = JsonFactory.get();
+		// Number literals: at most 1000 characters by default
+		ParseException tooLong = assertThrows(ParseException.class, () -> f.parse("[" + "9".repeat(1001) + "]"));
+		assertEquals(1, tooLong.getPosition());
+		JsonParser.StringParser parser = new JsonParser.StringParser(f);
+		parser.setMaxNumberLength(5000);
+		assertEquals(new BigInteger("9".repeat(1001)), parser.parse("9".repeat(1001)));
+
+		// An exponent out of the BigDecimal range: the double value
+		assertEquals(Double.POSITIVE_INFINITY, f.parse("1e3000000000"));
+		assertEquals(0.0, f.parse("1e-3000000000"));
+
+		// Nesting depth, parsing and writing
+		assertThrows(ParseException.class, () -> f.parse("[".repeat(1001) + "]".repeat(1001)));
+		JsonArray deep = JsonArray.create();
+		JsonArray last = deep;
+		for(int i=0; i<1000; i++) {
+			JsonArray child = JsonArray.create();
+			last.add(child);
+			last = child;
+		}
+		assertThrows(JsonStringifier.NestingTooDeepException.class, () -> deep.stringify());
 	}
 
 	public void testReviver() throws Exception {
@@ -254,10 +309,15 @@ public class ParsingExamples extends ProjectTestCase {
 		assertEquals("\"root\"", root.stringify(JsonArray.of(1)));
 	}
 
-	public void testEscaping() {
+	public void testEscaping() throws Exception {
 		String s = "Line\n\"q\" é / \u0001 😀";
-		assertEquals("\"Line\\n\\\"q\\\" \\u00e9 / \\u0001 😀\"", JsonFactory.get().stringify(s));
+		assertEquals("\"Line\\n\\\"q\\\" é / \\u0001 😀\"", JsonFactory.get().stringify(s));
 		assertEquals(s, JsonFactory.get().parse(JsonFactory.get().stringify(s)));
+		assertEquals("\"\\ud800\"", JsonFactory.get().stringify("\ud800"));    // a lone surrogate
+
+		JsonStringifier.StringSerializer ascii = new JsonStringifier.StringSerializer();
+		ascii.setEscapeNonAscii(true);
+		assertEquals("\"\\u00e9 \\ud83d\\ude00\"", ascii.stringify("é 😀"));    // pure ASCII output
 	}
 
 	public void testNaNAndInfinity() {
@@ -272,6 +332,7 @@ public class ParsingExamples extends ProjectTestCase {
 		JsonArray a = JsonArray.create();
 		a.add(a);
 		assertThrows(JsonException.CircularReference.class, () -> a.stringify());
+		assertEquals("[\n  \"[circular]\"\n]", a.toString());        // toString() doesn't throw
 	}
 
 	public void testCheckedFactory() {

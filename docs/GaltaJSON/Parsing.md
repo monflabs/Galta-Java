@@ -33,6 +33,29 @@ JsonObject.parse("[]");    // throws JsonException: "The JSON text is not an obj
 JsonObject.parse("null");  // null
 ```
 
+The three sources follow the same rules. An empty or blank input (whitespace and comments only) parses as `null`. A leading byte order mark (`U+FEFF`) is skipped, whatever the source; it is not JSON whitespace anywhere else. A `null` source throws a `JsonException`.
+
+Sample: `doc_examples/json/ParsingExamples.java` (`testByteOrderMark`)
+
+```java
+JsonFactory f = JsonFactory.get();
+f.parse("\uFEFF[1]");                          // [1]: skipped by the lenient parser
+f.parse(new StringReader("\uFEFF[1]"));        // [1]
+byte[] utf8 = {(byte)0xEF, (byte)0xBB, (byte)0xBF, '[', '1', ']'};
+f.parse(new ByteArrayInputStream(utf8));       // [1]
+f.parse("\uFEFF[1]", true);                    // throws ParseException: rejected in strict mode
+```
+
+An `InputStream` is decoded with an `InputStreamReader`: by default an invalid byte sequence for the charset becomes `U+FFFD`, the replacement character. `parse(stream, charset, true)` parses strictly and rejects it instead.
+
+Sample: `doc_examples/json/ParsingExamples.java` (`testStrictStream`)
+
+```java
+byte[] invalid = {'"', (byte)0xFF, '"'};                        // not UTF-8
+JsonFactory.get().parse(new ByteArrayInputStream(invalid));     // "\uFFFD"
+JsonFactory.get().parse(new ByteArrayInputStream(invalid), StandardCharsets.UTF_8, true);   // throws JsonException
+```
+
 ## Lenient syntax
 
 On top of standard JSON, the parser accepts:
@@ -48,7 +71,7 @@ On top of standard JSON, the parser accepts:
 | `NaN`, `Infinity`, `+Infinity`, `-Infinity` | `[NaN, -Infinity]` |
 | `\'` and `\xHH` escapes, raw control characters inside strings | `"\x41"` |
 
-An unquoted key spelled `null` becomes the `null` key.
+An unquoted key is a name, even when it is spelled `null`: `{null: 1}` has the key `"null"` (a JSON key is never `null`).
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testLenientSyntax`)
 
@@ -95,7 +118,7 @@ JsonFactory.get().parse("\"it\\'s\"");                // "it's"
 
 ### Strict mode
 
-Strict mode rejects every extension above. It is a property of the parser, not of the factory: create a `JsonParser.StringParser` (or `JsonParser.ReaderParser` for a `Reader`) on a factory and call `setStrict(true)`. A parser instance is not thread-safe.
+Strict mode rejects every extension above, as well as an empty input and a byte order mark. The factory parses strictly with `parse(text, true)`, `parse(reader, true)` and `parse(stream, charset, true)`; for more options (a reviver, the limits below), create a `JsonParser.StringParser` (or `JsonParser.ReaderParser` for a `Reader`) on a factory and call `setStrict(true)`. A parser instance is not thread-safe. The error message names the rejected construct: `JsonParser: A trailing comma is not allowed in strict mode, at position 7.`
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testStrictMode`)
 
@@ -146,7 +169,7 @@ A number literal becomes the smallest fitting type:
 | `-0` | `Double` (`-0.0`) |
 | `NaN`, `Infinity` | `Double` |
 
-The decision depends on the value, not on the length of the literal: `3.141592653589793` (a double's shortest representation) is a `Double`, `3.14159265358979323846`, `1e400` and `1e-400` are `BigDecimal`s. Code that needs a `double` should read numbers with `getDouble()` or `asDouble()`, which accept any `Number`.
+The decision depends on the value, not on the length of the literal: `3.141592653589793` (a double's shortest representation) is a `Double`, `3.14159265358979323846`, `1e400` and `1e-400` are `BigDecimal`s. Code that needs a `double` should read numbers with `getDouble()` or `asDouble()`, which accept any `Number`. An exponent beyond the `BigDecimal` range (`1e3000000000`) gives the `double` value, `Infinity` or `0`, like `JSON.parse()`; a factory whose decimals are always `BigDecimal` reports it as a `ParseException`.
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testNumberMapping`)
 
@@ -214,7 +237,18 @@ Containers created by such a factory are the default ones, so their `factory()` 
 
 ## Errors
 
-A syntax error raises a `ParseException` (a `JsonException`) with the zero-based character position, an error type (`ERROR_UNEXPECTED_CHAR`, `ERROR_UNEXPECTED_EOF`, `ERROR_UNEXPECTED_STRICT`, ...) and a message that quotes the offending line when the input can be re-read. `parse(String)` throws it directly; `parse(Reader)` and `parse(InputStream)` wrap it in a `JsonException` whose cause is the `ParseException`. An empty string is rejected; blank input (whitespace only) parses as `null`.
+A syntax error raises a `ParseException` (a `JsonException`) with the zero-based character position, an error type and a message. The end of input is reported at the input length.
+
+| Error type | Message, `getUnexpectedObject()` |
+|---|---|
+| `ERROR_UNEXPECTED_CHAR` | `Unexpected character 'x' (120) at position 4.`, the `Character` |
+| `ERROR_UNEXPECTED_TOKEN` | `Unexpected token 'tru' at position 0.`, the word |
+| `ERROR_UNEXPECTED_EOF` | `Unexpected end of input at position 5.`, `null` |
+| `ERROR_UNEXPECTED_UNICODE` | `Invalid hexadecimal digit 'x' in an escape sequence at position 5.`, the `Character` |
+| `ERROR_UNEXPECTED_STRICT` | `A trailing comma is not allowed in strict mode, at position 7.`, the construct |
+| `ERROR_SYNTAX` | Limits and invalid numbers: `Number literal longer than 1000 characters, at position 1.`, the description |
+
+When the parser owns the source text (a `String`), the message also quotes the lines around the error with a caret under it; a long line is clipped to 80 characters on each side of the error, so a minified document doesn't make a huge message. `parse(String)` throws the `ParseException` directly; `parse(Reader)` and `parse(InputStream)` wrap it in a `JsonException` whose message repeats it and whose cause is the `ParseException`.
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testParseErrors`)
 
@@ -229,9 +263,47 @@ e.getMessage();       // "JsonParser: Unexpected character '}' (125) at position
 JsonException je = assertThrows(JsonException.class,
         () -> JsonFactory.get().parse(new StringReader("{\"a\":}")));
 je.getCause();        // the ParseException
+je.getMessage();      // "Error when parsing JSON reader: JsonParser: Unexpected character '}' (125) at position 5."
 
-JsonFactory.get().parse("");          // throws JsonException
+// Empty or blank input is null for the lenient parser, an error for the strict one
+JsonFactory.get().parse("");          // null
 JsonFactory.get().parse("  \n ");     // null
+JsonFactory.get().parse("", true);    // throws ParseException
+
+// The end of input is reported at the input length
+JsonFactory.get().parse("[1, 2");     // ParseException at position 5: "JsonParser: Unexpected end of input at position 5."
+
+// Strict mode names the construct
+JsonFactory.get().parse("[1, 2, ]", true);   // "JsonParser: A trailing comma is not allowed in strict mode, at position 7."
+```
+
+### Limits
+
+The parser and the stringifier refuse content that would exhaust the Java stack or take an unbounded time:
+
+| Limit | Default | Setter | Exceeded |
+|---|---|---|---|
+| Nesting depth of objects and arrays, parsing | 1000 (`JsonParser.DEFAULT_MAX_DEPTH`) | `JsonParser.setMaxDepth()`, capped at `MAX_DEPTH_LIMIT` (2000) | `ParseException` (`ERROR_SYNTAX`) |
+| Length of a number literal, in characters | 1000 (`JsonParser.DEFAULT_MAX_NUMBER_LENGTH`) | `JsonParser.setMaxNumberLength()`, `0` for no limit | `ParseException` (`ERROR_SYNTAX`) |
+| Nesting depth, stringifying | 1000 (`JsonStringifier.DEFAULT_MAX_DEPTH`) | `JsonStringifier.setMaxDepth()`, capped at `MAX_DEPTH_LIMIT` (2000) | `JsonStringifier.NestingTooDeepException` (a `JsonException`) |
+
+The number length limit exists because converting a huge literal to a `BigInteger` or a `BigDecimal` takes a time that grows faster than its length (a million digits took tens of seconds); remove it only when the factory converts numbers to doubles, which is linear. A thread with a small stack gets the same exceptions, never a `StackOverflowError`.
+
+Sample: `doc_examples/json/ParsingExamples.java` (`testLimits`)
+
+```java
+JsonFactory f = JsonFactory.get();
+f.parse("[" + "9".repeat(1001) + "]");          // throws ParseException at position 1
+JsonParser.StringParser parser = new JsonParser.StringParser(f);
+parser.setMaxNumberLength(5000);
+parser.parse("9".repeat(1001));                 // a BigInteger
+
+f.parse("1e3000000000");                        // Infinity: out of the BigDecimal range
+f.parse("1e-3000000000");                       // 0.0
+
+f.parse("[".repeat(1001) + "]".repeat(1001));   // throws ParseException
+JsonArray deep = ...;                           // 1001 nested arrays
+deep.stringify();                               // throws JsonStringifier.NestingTooDeepException
 ```
 
 ## Stringifying
@@ -239,7 +311,7 @@ JsonFactory.get().parse("  \n ");     // null
 | Call | Output |
 |---|---|
 | `container.stringify()` | Compact JSON |
-| `container.stringify(false)`, `container.toString()` | Pretty JSON, two-space indentation |
+| `container.stringify(false)`, `container.toString()` | Pretty JSON, two-space indentation (`toString()` never throws on a cycle) |
 | `JsonFactory.get().stringify(value)` / `stringify(value, compact)` | Any value, compact by default |
 | `JsonFactory.get().stringify(writer, value)` / `stringify(writer, value, compact)` | Writes to a `Writer` |
 | `JsonFactory.get().stringifySorted(value)` | Compact, object keys sorted |
@@ -276,7 +348,9 @@ The pretty form of `o`:
 }
 ```
 
-A value that is not a JSON value (any other Java object) is written as the JSON string of its `toString()`. Numbers are written the JavaScript way, exactly as `JSON.stringify` writes them: `1.0` becomes `1`, `0.0001` stays `0.0001`, `1e21` becomes `1e+21` and 2^62 becomes `4611686018427388000` (shortest digits, see [DtoA](/Utilities/NumbersAndTypes)). A container that contains itself raises a `JsonException.CircularReference` instead of recursing forever.
+`container.stringify()` goes through the container's factory, so the factory's `configureJsonStringifier()` applies.
+
+A value that is not a JSON value (any other Java object) is written as the JSON string of its `toString()`. Numbers are written the JavaScript way, exactly as `JSON.stringify` writes them: `1.0` becomes `1`, `0.0001` stays `0.0001`, `1e21` becomes `1e+21` and 2^62 becomes `4611686018427388000` (shortest digits, see [DtoA](/Utilities/NumbersAndTypes)). A `Number` of another class is written with its `toString()` when that is a valid JSON number, else as its `doubleValue()` (`null` when that is `NaN` or infinite): the output is always valid JSON. A container that contains itself raises a `JsonException.CircularReference` instead of recursing forever; its `toString()` writes the inner occurrence as the string `"[circular]"` instead.
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testCircularReference`)
 
@@ -284,11 +358,12 @@ Sample: `doc_examples/json/ParsingExamples.java` (`testCircularReference`)
 JsonArray a = JsonArray.create();
 a.add(a);
 a.stringify();          // throws JsonException.CircularReference
+a.toString();           // [\n  "[circular]"\n]
 ```
 
 ### Stringifier options
 
-For more control, use a `JsonStringifier` directly: `JsonStringifier.StringSerializer` returns a `String`, `JsonStringifier.WriterSerializer` writes to a `Writer` (`stringify(writer, value)`), and `JsonStringifier.LimitedStringSerializer(max)` stops after `max` characters. Both `stringify` methods declare `IOException`.
+For more control, use a `JsonStringifier` directly: `JsonStringifier.StringSerializer` returns a `String`, `JsonStringifier.WriterSerializer` writes to a `Writer` (`stringify(writer, value)`), and `JsonStringifier.LimitedStringSerializer(max)` returns at most `max` characters: it stops walking the value soon after the limit, so a preview of a huge value is cheap, and never cuts an escape sequence or a surrogate pair (the text can then be a few characters shorter than `max`); `isTruncated()` tells whether something was left out. Both `stringify` methods declare `IOException`.
 
 | Setter | Default | Effect |
 |---|---|---|
@@ -300,6 +375,9 @@ For more control, use a `JsonStringifier` directly: `JsonStringifier.StringSeria
 | `setSerializeNulls(boolean)` | `true` | When `false`, object properties holding `null` are skipped (array items are kept) |
 | `setReplacer(Replacer)` | none | `(container, key, value) -> newValue`, called for every value, the top-level one with key `""`; return `Replacer.IGNORE` to skip the property or item |
 | `setOutputReferences(boolean)` | `false` | Write a container that carries a [JSON reference](/GaltaJSON/Pointers#json-references) as `{"$ref": ...}` |
+| `setEscapeNonAscii(boolean)` | `false` | Escape every character above 126, for a pure ASCII output |
+| `setMaxDepth(int)` | 1000 | The maximum nesting depth, see [Limits](/GaltaJSON/Parsing#limits) |
+| `setCircularReferenceMarker(String)` | none | Write a circular reference as this string instead of throwing |
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testStringifierOptions`)
 
@@ -339,14 +417,19 @@ root.stringify(JsonArray.of(1));                // "\"root\"": the top-level val
 
 ### Escaping
 
-Strings are written with `\"`, `\\`, `\b`, `\f`, `\n`, `\r` and `\t`; any other character below 32 or above 127 becomes a `\uXXXX` escape (lowercase hexadecimal), except complete surrogate pairs (emoji and other astral characters), which are written as is. `/` is not escaped. The output is therefore pure ASCII apart from astral characters.
+Strings are escaped exactly like `JSON.stringify()` does: `\"`, `\\`, `\b`, `\f`, `\n`, `\r` and `\t`, the other characters below 32 and the lone surrogates (a surrogate not part of a pair) as `\uXXXX` escapes (lowercase hexadecimal). Every other character is written as is: accented letters, CJK, emoji, `U+2028`/`U+2029` and DEL (127). `/` is not escaped. `setEscapeNonAscii(true)` gives a pure ASCII output, with every character above 126 escaped (an astral character as its two surrogates).
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testEscaping`)
 
 ```java
 String s = "Line\n\"q\" é / \u0001 😀";
-JsonFactory.get().stringify(s);     // "Line\n\"q\" é / \u0001 😀"   (as JSON text)
+JsonFactory.get().stringify(s);     // "Line\n\"q\" é / \u0001 😀"   (as JSON text: é and 😀 as is)
 JsonFactory.get().parse(JsonFactory.get().stringify(s)).equals(s);   // true
+JsonFactory.get().stringify("\ud800");                // "\ud800": a lone surrogate
+
+JsonStringifier.StringSerializer ascii = new JsonStringifier.StringSerializer();
+ascii.setEscapeNonAscii(true);
+ascii.stringify("é 😀");            // "\u00e9 \ud83d\ude00"   (pure ASCII)
 ```
 
 ### NaN and Infinity
@@ -398,10 +481,13 @@ A custom factory usually extends `JavaJsonFactory` (its constructor is protected
 
 - `stringify()` is compact and `toString()` is pretty.
 - Long decimals parse as `BigDecimal`; read numbers through `getDouble()`, `getBigDecimal()` or `getNumber()` rather than casting.
-- `parse(String)` throws `ParseException`, the `Reader` and `InputStream` variants a wrapping `JsonException`: catch `JsonException` to handle both.
+- `parse(String)` throws `ParseException`, the `Reader` and `InputStream` variants a wrapping `JsonException` (same message): catch `JsonException` to handle both.
 - `NaN` and `Infinity` are written as `null`: they don't round trip.
 - A JSON object key is never `null`: `put(null, ...)` throws a `NullPointerException`.
-- Objects and arrays nest at most `JsonParser.DEFAULT_MAX_DEPTH` (1000) levels deep (`setMaxDepth()`); deeper content is a parse error.
+- Objects and arrays nest at most 1000 levels deep, when parsing (a `ParseException`) and when stringifying (a `NestingTooDeepException`, so a container built in Java can be too deep to write); see [Limits](/GaltaJSON/Parsing#limits).
+- A number literal longer than 1000 characters is a parse error unless `setMaxNumberLength()` raises the limit.
+- An empty or blank input parses as `null` (lenient mode): check the result when an input is required, or parse strictly.
+- By default an `InputStream` that is not valid in its charset is decoded with `U+FFFD` replacement characters; use `parse(stream, charset, true)` to reject it.
 
 ## Source
 

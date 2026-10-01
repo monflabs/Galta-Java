@@ -103,7 +103,8 @@ public abstract class AbstractJsonObject extends AbstractMap<String,Object> impl
 
 	@Override
 	public String toString() {
-		return stringify(false);
+		// Pretty, and a circular reference doesn't throw
+		return factory().toDisplayString(this);
 	}
 	
 	@Override

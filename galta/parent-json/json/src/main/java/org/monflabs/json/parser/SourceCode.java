@@ -86,6 +86,14 @@ public class SourceCode {
     	return extractSourceCode(builder, nLines, errpos, OPT_LINENUMBER|OPT_LINEERRPTR);
     }
     public StringBuilder extractSourceCode(StringBuilder builder, int nLines, LineCol errpos, int options) {
+    	return extractSourceCode(builder, nLines, errpos, options, -1);
+    }
+    /**
+     * Same as above, displaying at most maxColumns characters on each side of the error
+     * column (a negative value displays the whole lines): a clipped part is replaced by
+     * "...".
+     */
+    public StringBuilder extractSourceCode(StringBuilder builder, int nLines, LineCol errpos, int options, int maxColumns) {
         if (source!=null && !source.isEmpty()) {
             int pos = 0;
             int errline = errpos.getLine();
@@ -105,12 +113,32 @@ public class SourceCode {
                 		builder.append(padLeft(Integer.toString(line), 4, ' '));
                 		builder.append(": ");
                 	}
-	                builder.append(source.substring(start, pos));
+                	// The displayed part of the line: [from,to) relative to its start
+                	int lineLength = pos-start;
+                	int from = 0;
+                	int to = lineLength;
+                	if(maxColumns>=0) {
+                		from = Math.max(0, Math.min(errcol-1, lineLength)-maxColumns);
+                		to = Math.min(lineLength, Math.max(errcol-1, 0)+maxColumns);
+                		if(to<from) {
+                			to = from;
+                		}
+                	}
+                	if(from>0) {
+                		builder.append("...");
+                	}
+	                builder.append(source, start+from, start+to);
+                	if(to<lineLength) {
+                		builder.append("...");
+                	}
                 	if((options&OPT_LINEERRPTR)!=0) {
 		                if(errline == line) {
 			                builder.append("\n      "); // line #
+			                if(from>0) {
+			                	builder.append("   ");
+			                }
 			                // errcol is 1-based: errcol-1 characters before the caret
-			                for(int i=0; i<errcol-1; i++) {
+			                for(int i=from; i<errcol-1; i++) {
 			                	char c = start+i<source.length() ?  source.charAt(start+i) : 0;
 			                	builder.append(c=='\t'?c:' ');
 			                }

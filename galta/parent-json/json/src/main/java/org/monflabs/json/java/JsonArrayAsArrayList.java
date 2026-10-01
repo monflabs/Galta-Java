@@ -111,7 +111,8 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 	
 	@Override
 	public String toString() {
-		return stringify(false);
+		// Pretty, and a circular reference doesn't throw
+		return factory().toDisplayString(this);
 	}
 	
 	@Override

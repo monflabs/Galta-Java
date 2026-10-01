@@ -15,6 +15,8 @@
  */
 package tests.json.streams;
 
+import static org.junit.Assert.assertThrows;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -24,6 +26,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.monflabs.json.JsonArray;
+import org.monflabs.json.JsonException;
+import org.monflabs.json.JsonObject;
 import org.monflabs.json.jsonpath.JsonValues;
 import org.monflabs.json.stream.CsvMapping;
 import org.monflabs.json.stream.CsvMapping.QuoteStrategy;
@@ -91,7 +95,21 @@ public class CollectorsAndCsvTest extends ProjectTestCase {
 		// A long value, and a non row value
 		String big = "v".repeat(5000);
 		assertEquals(big+",\""+big+",\"", CsvMapping.toCsvStrings().apply(List.of(big, big+",")));
-		assertEquals("", CsvMapping.toCsvStrings().apply("not a row"));
+		assertThrows(JsonException.class, () -> CsvMapping.toCsvStrings().apply("not a row"));
 		assertEquals("", CsvMapping.toCsvStrings().apply(null));
+	}
+
+	public void testCsvRowsAndCells() {
+		// A Map (a JsonObject) is a row of its values, a Set or another Collection too
+		assertEquals("1,Ada", CsvMapping.toCsvStrings().apply(JsonObject.parse("{\"id\":1,\"name\":\"Ada\"}")));
+		assertEquals("x", CsvMapping.toCsvStrings().apply(java.util.Set.of("x")));
+		assertEquals("a,b", CsvMapping.toCsvStrings().apply(new java.util.ArrayDeque<>(List.of("a", "b"))));
+		// Nested containers are compact JSON, not the multi-line toString()
+		assertEquals("\"{\"\"a\"\":[1,2]}\"", CsvMapping.toCsvStrings().apply(List.of(JsonObject.parse("{\"a\":[1,2]}"))));
+		assertEquals("[]", CsvMapping.toCsvStrings().apply(List.of(JsonArray.create())));
+		// Formula injection: only text cells, only when asked
+		List<Object> row = List.of("=1+1", "+1", "-1", "@SUM(A1)", "\tx", "plain", -5, 3);
+		assertEquals("=1+1,+1,-1,@SUM(A1),\"\tx\",plain,-5,3", CsvMapping.toCsvStrings().apply(row));
+		assertEquals("'=1+1,'+1,'-1,'@SUM(A1),'\tx,plain,-5,3", CsvMapping.toCsvStrings(',', QuoteStrategy.REQUIRED, true).apply(row));
 	}
 }

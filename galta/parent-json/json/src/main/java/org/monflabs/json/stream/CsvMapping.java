@@ -16,9 +16,13 @@
 package org.monflabs.json.stream;
 
 import java.lang.reflect.Array;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
+import org.monflabs.json.JsonContainer;
+import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonUtil;
 
 /**
@@ -56,13 +60,25 @@ public class CsvMapping {
 		return toCsvStrings(',',QuoteStrategy.REQUIRED);
 	}
 	/**
-	 * A function converting a row (a List or an array) to a CSV line.
-	 * The function is stateless and can be used by a parallel stream.
+	 * A function converting a row to a CSV line. A row is a List or another Collection
+	 * (its iteration order), an array, or a Map like a JsonObject (its values, in the map
+	 * order); a null row is an empty line. Another row type is rejected with a
+	 * JsonException. A cell holding a JSON object or array is written as its compact JSON
+	 * text. The function is stateless and can be used by a parallel stream.
 	 */
 	public static Function<Object, String> toCsvStrings(char fieldSeparator, QuoteStrategy quoteStrategy) {
+		return toCsvStrings(fieldSeparator, quoteStrategy, false);
+	}
+	/**
+	 * Same as above. When escapeFormulas is true, a text cell starting with '=', '+', '-',
+	 * '@', a tab or a carriage return is prefixed with a single quote, so a spreadsheet
+	 * opening the file doesn't evaluate it as a formula (CSV injection). Numbers are not
+	 * changed.
+	 */
+	public static Function<Object, String> toCsvStrings(char fieldSeparator, QuoteStrategy quoteStrategy, boolean escapeFormulas) {
 		// One encoder per thread (and per function): its buffers are reused from row to row,
 		// and never shared between threads
-		ThreadLocal<CsvStringHandler> handler = ThreadLocal.withInitial(() -> new CsvStringHandler(fieldSeparator,quoteStrategy));
+		ThreadLocal<CsvStringHandler> handler = ThreadLocal.withInitial(() -> new CsvStringHandler(fieldSeparator,quoteStrategy,escapeFormulas));
 		return row -> handler.get().toCsvString(row);
 	}
 	
@@ -71,14 +87,16 @@ public class CsvMapping {
 
 		private QuoteStrategy quoteStrategy;
 		private char fieldSeparator;
+		private boolean escapeFormulas;
 		
 		private int ptr;
 		private char[] buffer = new char[512];
 		private char[] valueBuffer = new char[128];
 		
-		CsvStringHandler(char fieldSeparator, QuoteStrategy quoteStrategy) {
+		CsvStringHandler(char fieldSeparator, QuoteStrategy quoteStrategy, boolean escapeFormulas) {
 			this.fieldSeparator = fieldSeparator;
 			this.quoteStrategy = quoteStrategy;
+			this.escapeFormulas = escapeFormulas;
 		}
 		
 		private void ensureCapacity(int cap) {
@@ -122,6 +140,22 @@ public class CsvMapping {
 					}
 					return String.valueOf(buffer, 0, ptr);
 				}
+				// A JsonObject is a Map: its values, in order
+				Collection<?> cells = row instanceof Map<?,?> map ? map.values()
+						: row instanceof Collection<?> c ? c : null;
+				if(cells==null) {
+					throw new JsonException(null,"Cannot convert a {0} to a CSV line: a row must be a List, a Collection, an array or a Map",row.getClass().getName());
+				}
+				boolean first = true;
+				for(Object cell: cells) {
+					if(!first) {
+		            	ensureCapacity(1);
+		            	buffer[ptr++] = fieldSeparator;
+					}
+					first = false;
+					writeCell(cell);
+				}
+				return String.valueOf(buffer, 0, ptr);
 			}
 			return "";
 		}
@@ -160,8 +194,15 @@ public class CsvMapping {
 	        
 	        // We convert the non string values to a string
 	        // Note that even Numbers have to be checked for encoding as they can contain a ',' as the decimal separator
-        	// A number is written as in JSON (1e10 is 10000000000, not 1.0E10)
-        	String str = value instanceof Number n ? JsonUtil.toString(n) : value.toString();
+        	// A number is written as in JSON (1e10 is 10000000000, not 1.0E10), a JSON
+        	// container as its compact JSON text (its toString() is the pretty form)
+        	String str = value instanceof Number n ? JsonUtil.toString(n) : value instanceof JsonContainer jc ? jc.stringify() : value.toString();
+        	if(escapeFormulas && !(value instanceof Number) && !str.isEmpty()) {
+        		char first = str.charAt(0);
+        		if(first=='=' || first=='+' || first=='-' || first=='@' || first=='\t' || first=='\r') {
+        			str = "'"+str;
+        		}
+        	}
         	int length = str.length();
 
         	if(length==0) {

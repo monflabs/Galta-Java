@@ -181,9 +181,13 @@ public class CollectionsExamples extends ProjectTestCase {
 			.collect(Collectors.toList());
 		assertEquals(List.of("1,Ada", "2,Grace"), lines);
 
-		// An object is not a row
-		assertEquals("", CsvMapping.toCsvStrings().apply(people.get(0)));
+		// An object is a row of its values, in order
+		assertEquals("1,Ada", CsvMapping.toCsvStrings().apply(people.get(0)));
 		// A Java array is a row
 		assertEquals("1,a", CsvMapping.toCsvStrings().apply(new Object[] {1, "a"}));
+		// A container cell is compact JSON, quoted as needed
+		assertEquals("1,\"[1,2]\"", CsvMapping.toCsvStrings().apply(List.of(1, JsonArray.of(1, 2))));
+		// Formula injection protection (off by default)
+		assertEquals("'=SUM(A1),-1", CsvMapping.toCsvStrings(',', QuoteStrategy.REQUIRED, true).apply(List.of("=SUM(A1)", -1)));
 	}
 }
