@@ -26,19 +26,22 @@ import org.monflabs.json.jsonpath.JsonValues;
 
 
 /**
- * Json Object implemented as a Map wrapper.
+ * Base class for a JsonObject adapting a foreign object (a third-party library's object
+ * node): the subclass gives access to the native storage (nativeGet(), nativePut()...)
+ * and the factory converts the values.
  */
 public abstract class AbstractJsonObject extends AbstractMap<String,Object> implements JsonObject {
 
 	public AbstractJsonObject() {
 	}
 
+	/**
+	 * A shallow copy, with its own native storage. Object.clone() would share the
+	 * storage of this object (the copy and the original would see each other's
+	 * changes), so the subclass must implement it.
+	 */
 	@Override
-	public JsonObject clone() {
-		try {
-			return (JsonObject)super.clone();
-		} catch(CloneNotSupportedException ex) { throw new IllegalStateException(ex); }
-	}
+	public abstract JsonObject clone();
 
 	@Override
 	public boolean equals(Object o) {
@@ -66,6 +69,30 @@ public abstract class AbstractJsonObject extends AbstractMap<String,Object> impl
 	public abstract Object nativeGet(String key);
 	public abstract Object nativePut(String key, Object value);
 	public abstract Object nativeRemove(String key);
+	/**
+	 * Whether the key exists, even with a null value. The default implementation is a
+	 * scan of the entries when the value is null: a subclass should override it when
+	 * the native storage has a direct lookup.
+	 */
+	public boolean nativeContainsKey(String key) {
+		if(!factory().isNativeNull(nativeGet(key))) {
+			return true;
+		}
+		for(Entry<String,Object> e: entrySet()) {
+			if(key.equals(e.getKey())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// A JSON object key cannot be null
+	private static String checkKey(String key) {
+		if(key==null) {
+			throw new NullPointerException("A JSON object key cannot be null");
+		}
+		return key;
+	}
 	
 	
 
@@ -80,7 +107,16 @@ public abstract class AbstractJsonObject extends AbstractMap<String,Object> impl
 	}
 	
 	@Override
+	public boolean containsKey(Object key) {
+		return key instanceof String s && nativeContainsKey(s);
+	}
+
+	@Override
 	public Object get(Object key) {
+		// Map.get() contract: a key of another type is simply not there
+		if(!(key instanceof String)) {
+			return null;
+		}
 		Object v = nativeGet((String)key);
 		if(v==null) {
 			return null;
@@ -92,14 +128,14 @@ public abstract class AbstractJsonObject extends AbstractMap<String,Object> impl
 	 */
 	@Override
     public final Object put(String key, Object value) {
-		if(key==null) {
-			throw new NullPointerException("A JSON object key cannot be null");
-		}
-		Object prev = nativePut(key, factory().toNativeJsonPrimitive(value));
+		Object prev = nativePut(checkKey(key), factory().toNativeJsonPrimitive(value));
 		return prev!=null ? factory().toJavaPrimitive(prev) : null;
     }
 	@Override
     public final Object remove(Object key) {
+		if(!(key instanceof String)) {
+			return null;
+		}
 		Object r = nativeRemove((String)key);
 		return factory().toJavaPrimitive(r);
     }
@@ -330,76 +366,76 @@ public abstract class AbstractJsonObject extends AbstractMap<String,Object> impl
 	@Override
 	public JsonObject putValue(String key, Object value) {
 		//put(key, value);
-		nativePut(key, factory().toNativeJsonPrimitive(value));
+		nativePut(checkKey(key), factory().toNativeJsonPrimitive(value));
 		return this;
 	}
 
 	@Override
 	public JsonObject putNull(String key) {
 		//put(key, null);
-		nativePut(key, factory().toNativeNull());
+		nativePut(checkKey(key), factory().toNativeNull());
 		return this;
 	}
 
 	@Override
 	public JsonObject put(String key, boolean value) {
-		nativePut(key, factory().toNativeBoolean(value));
+		nativePut(checkKey(key), factory().toNativeBoolean(value));
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, byte value) {
-		nativePut(key, factory().toNativeByte(value));
+		nativePut(checkKey(key), factory().toNativeByte(value));
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, short value) {
-		nativePut(key, factory().toNativeShort(value));
+		nativePut(checkKey(key), factory().toNativeShort(value));
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, int value) {
-		nativePut(key, factory().toNativeInt(value));
+		nativePut(checkKey(key), factory().toNativeInt(value));
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, long value) {
-		nativePut(key, factory().toNativeLong(value));
+		nativePut(checkKey(key), factory().toNativeLong(value));
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, float value) {
-		nativePut(key, factory().toNativeFloat(value));
+		nativePut(checkKey(key), factory().toNativeFloat(value));
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, double value) {
-		nativePut(key, factory().toNativeDouble(value));
+		nativePut(checkKey(key), factory().toNativeDouble(value));
 		return this;
 	}
 
 	@Override
 	public JsonObject put(String key, Boolean value) {
-		nativePut(key, value!=null ? factory().toNativeBoolean(value) : factory().toNativeNull());
+		nativePut(checkKey(key), value!=null ? factory().toNativeBoolean(value) : factory().toNativeNull());
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, String value) {
-		nativePut(key, value!=null ? factory().toNativeString(value) : factory().toNativeNull());
+		nativePut(checkKey(key), value!=null ? factory().toNativeString(value) : factory().toNativeNull());
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, Number value) {
-		nativePut(key, value!=null ? factory().toNativeNumber(value) : factory().toNativeNull());
+		nativePut(checkKey(key), value!=null ? factory().toNativeNumber(value) : factory().toNativeNull());
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, JsonObject value) {
-		nativePut(key, value!=null ? factory().toNativeObject(value) : factory().toNativeNull());
+		nativePut(checkKey(key), value!=null ? factory().toNativeObject(value) : factory().toNativeNull());
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, JsonArray value) {
-		nativePut(key, value!=null ? factory().toNativeArray(value) : factory().toNativeNull());
+		nativePut(checkKey(key), value!=null ? factory().toNativeArray(value) : factory().toNativeNull());
 		return this;
 	}
 
@@ -407,14 +443,14 @@ public abstract class AbstractJsonObject extends AbstractMap<String,Object> impl
 	public JsonObject put(String key, ObjectConsumer action) {
 		JsonObject jo = factory().createObject();
 		action.accept(jo);
-		nativePut(key, jo.toNativeJsonPrimitive());
+		nativePut(checkKey(key), jo.toNativeJsonPrimitive());
 		return this;
 	}
 	@Override
 	public JsonObject put(String key, ArrayConsumer action) {
 		JsonArray ja = factory().createArray();
 		action.accept(ja);
-		nativePut(key, ja.toNativeJsonPrimitive());
+		nativePut(checkKey(key), ja.toNativeJsonPrimitive());
 		return this;
 	}
 	

@@ -136,6 +136,7 @@ public class JsonTestSuite  {
 		suite.addTestSuite(JsonReferenceTest.class);
 		suite.addTestSuite(tests.json.jsonreference.JsonReferenceResolveTest.class);
 		suite.addTestSuite(CoreRegressionTest.class);
+		suite.addTestSuite(tests.json.regression.CoreModelFixesTest.class);
 
 		// jsonschema
 		suite.addTestSuite(JsonSchemaTest.class);

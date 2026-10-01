@@ -50,11 +50,13 @@ public class ParsingExamples extends ProjectTestCase {
 		assertEquals(42, factory.parse("42"));
 		assertNull(factory.parse("null"));
 
-		// The typed shortcuts cast the result
+		// The typed shortcuts check the type of the result
 		JsonObject o = JsonObject.parse("{}");
 		JsonArray a = JsonArray.parse("[]");
 		assertTrue(o.isEmpty() && a.isEmpty());
-		assertThrows(ClassCastException.class, () -> JsonObject.parse("[]"));
+		JsonException e = assertThrows(JsonException.class, () -> JsonObject.parse("[]"));
+		assertEquals("The JSON text is not an object but array", e.getMessage());
+		assertNull(JsonObject.parse("null"));
 	}
 
 	public void testLenientSyntax() {

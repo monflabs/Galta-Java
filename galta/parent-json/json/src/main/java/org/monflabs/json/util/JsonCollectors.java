@@ -15,6 +15,8 @@
  */
 package org.monflabs.json.util;
 
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collector;
 
 import org.monflabs.json.JsonArray;
@@ -23,11 +25,23 @@ import org.monflabs.json.jsonpath.JsonValues;
 
 /**
  * Predefined Json stream collector.
+ * <p>
+ * The collectors that create their own array ({@link #toJsonArray()},
+ * {@link #toJsonArray(JsonFactory)}...) can be reused: each collection returns a new array.
+ * The ones that fill an explicit target array ({@link #toJsonArray(JsonArray)},
+ * {@link #toJsonArrayValues(JsonArray)}) append to that same array every time they are used,
+ * so they are meant to be used once.
  */
 public final class JsonCollectors {
-	
+
 	private JsonCollectors() {}
 
+	private static final Set<Collector.Characteristics> IDENTITY = Set.of(Collector.Characteristics.IDENTITY_FINISH);
+
+	/**
+	 * Collects into the given array (the values are appended to it). Single use: a
+	 * second collection appends to the same array again.
+	 */
 	public static final Collector<Object,JsonArray,JsonArray> toJsonArray(JsonArray array) {
 		// The supplier must create a fresh accumulator each time (a parallel stream
 		// calls it once per split, then combines): returning the target array itself
@@ -35,36 +49,61 @@ public final class JsonCollectors {
 		return new CollectorImpl<Object,JsonArray,JsonArray>(
 			() -> array.factory().createArray(),
 			(JsonArray a, Object v) -> a.addValue(v),
-			(JsonArray left, JsonArray right) -> { left.addAll(right); return left; }, 
+			(JsonArray left, JsonArray right) -> { left.addAll(right); return left; },
 			(JsonArray a) -> { array.addAll(a); return array; },
-			java.util.Set.of()
-		); 
+			Set.of()
+		);
 	}
 	public static final Collector<Object,JsonArray,JsonArray> toJsonArray() {
 		return toJsonArray(JsonFactory.get());
 	}
+	/**
+	 * Collects into a new array created by the factory, for each collection.
+	 */
 	public static final Collector<Object,JsonArray,JsonArray> toJsonArray(JsonFactory factory) {
-		return toJsonArray(factory.createArray());
+		return new CollectorImpl<Object,JsonArray,JsonArray>(
+			factory::createArray,
+			(JsonArray a, Object v) -> a.addValue(v),
+			(JsonArray left, JsonArray right) -> { left.addAll(right); return left; },
+			Function.identity(),
+			IDENTITY
+		);
 	}
 
-	
+
+	/**
+	 * Collects the values into the given array. Single use: a second collection appends
+	 * to the same array again.
+	 */
 	public static final Collector<JsonValues,JsonValues,JsonValues> toJsonArrayValues(JsonArray array) {
 		return new CollectorImpl<JsonValues,JsonValues,JsonValues>(
 			() -> JsonValues.of(array.factory().createArray()),
 			// Every value of v: none for an empty JsonValues, all of them for a list
-			(JsonValues a, JsonValues v) -> 
+			(JsonValues a, JsonValues v) ->
 				v.rawForEach(o -> a.arrayValue().addValue(o)),
-			(left, right) -> { 
-				left.arrayValue().addAll(right.arrayValue()); return left; 
+			(left, right) -> {
+				left.arrayValue().addAll(right.arrayValue()); return left;
 			},
 			(a) -> { array.addAll(a.arrayValue()); return JsonValues.of(array); },
-			java.util.Set.of()
-		); 
+			Set.of()
+		);
 	}
 	public static final Collector<JsonValues,JsonValues,JsonValues> toJsonArrayValues() {
 		return toJsonArrayValues(JsonFactory.get());
 	}
+	/**
+	 * Collects the values into a new array created by the factory, for each collection.
+	 */
 	public static final Collector<JsonValues,JsonValues,JsonValues> toJsonArrayValues(JsonFactory factory) {
-		return toJsonArrayValues(factory.createArray());
+		return new CollectorImpl<JsonValues,JsonValues,JsonValues>(
+			() -> JsonValues.of(factory.createArray()),
+			(JsonValues a, JsonValues v) ->
+				v.rawForEach(o -> a.arrayValue().addValue(o)),
+			(left, right) -> {
+				left.arrayValue().addAll(right.arrayValue()); return left;
+			},
+			Function.identity(),
+			IDENTITY
+		);
 	}
 }

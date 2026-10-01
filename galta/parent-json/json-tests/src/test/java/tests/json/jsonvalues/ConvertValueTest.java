@@ -229,8 +229,9 @@ public class ConvertValueTest extends ProjectTestCase {
 		assertFalse(v_long.isArray());		
 		
 		assertEquals(34343434343434L,v_long.numberValue());
-		assertEquals((byte)10,v_long.byteValue());
-		assertEquals((short)21514,v_long.shortValue());
+		// Saturated, like intValue(): not the wrapped low bits (10 and 21514)
+		assertEquals(Byte.MAX_VALUE,v_long.byteValue());
+		assertEquals(Short.MAX_VALUE,v_long.shortValue());
 		assertEquals(Integer.MAX_VALUE,v_long.intValue()); // saturated, not wrapped
 		assertEquals(34343434343434L,v_long.longValue());
 		assertEquals(34343434343434.0f,v_long.floatValue());
@@ -249,8 +250,8 @@ public class ConvertValueTest extends ProjectTestCase {
 		assertThrows( JsonException.class, () -> v_long.zonedDateTimeValue());
 
 		assertEquals(34343434343434L,v_long.numberValue(10L));
-		assertEquals((byte)10,v_long.byteValue((byte)10));
-		assertEquals((short)21514,v_long.shortValue((short)12));
+		assertEquals(Byte.MAX_VALUE,v_long.byteValue((byte)10));
+		assertEquals(Short.MAX_VALUE,v_long.shortValue((short)12));
 		assertEquals(Integer.MAX_VALUE,v_long.intValue(10)); // saturated, not wrapped
 		assertEquals(34343434343434L,v_long.longValue(10L));
 		assertEquals(34343434343434.0f,v_long.floatValue(10L));

@@ -62,10 +62,10 @@ public interface JsonArray extends JsonContainer, List<Object> {
 	}
 	
 	public static JsonArray parse(String json) {
-		return (JsonArray)JsonFactory.get().parse(json);
+		return JsonUtil.parsedAs(JsonFactory.get().parse(json), JsonArray.class);
 	}
 	public static JsonArray parse(Reader json) {
-		return (JsonArray)JsonFactory.get().parse(json);
+		return JsonUtil.parsedAs(JsonFactory.get().parse(json), JsonArray.class);
 	}
 		
 	@Override

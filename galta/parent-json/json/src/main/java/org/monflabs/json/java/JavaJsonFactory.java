@@ -17,9 +17,11 @@ package org.monflabs.json.java;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.IdentityHashMap;
 import java.util.Map;
 
 import org.monflabs.json.JsonArray;
+import org.monflabs.json.JsonContainer;
 import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonFactory;
 import org.monflabs.json.JsonObject;
@@ -145,14 +147,14 @@ public class JavaJsonFactory extends JsonFactory {
 	@Override
 	public BigInteger asBigInteger(Object nativeValue) {
 		if(nativeValue instanceof Number n) {
-			return JsonUtil.toBigInteger(n);
+			return JsonUtil.bigIntegerValue(n, true);
 		}
 		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
 	}
 	@Override
 	public BigDecimal asBigDecimal(Object nativeValue) {
 		if(nativeValue instanceof Number n) {
-			return JsonUtil.toBigDecimal(n);
+			return JsonUtil.bigDecimalValue(n, true);
 		}
 		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
 	}
@@ -281,32 +283,64 @@ public class JavaJsonFactory extends JsonFactory {
 	// Json Clone
 	//
 	
+	/**
+	 * A deep copy, made of containers created by this factory. The JSON references
+	 * (getReference()) are kept, as clone() does. A container that contains itself
+	 * throws a {@link JsonException.CircularReference}.
+	 */
 	@SuppressWarnings("unchecked")
 	@Override
 	public  <T> T deepClone(Object value) {
-		return (T)toJavaPrimitive(_deepClone(toNativeJsonPrimitive(value)));
+		return (T)toJavaPrimitive(_deepClone(toNativeJsonPrimitive(value), 0, null));
 	}
-	private Object _deepClone(Object value) {
+	// The containers on the current path, tracked once the recursion is deep (a cycle
+	// always gets deep): no cost for the usual documents
+	private static final int CYCLE_CHECK_DEPTH = 200;
+	private Object _deepClone(Object value, int depth, IdentityHashMap<Object,Boolean> path) {
 		if(value==null) {
 			return null;
 		}
 		if(value instanceof String || value instanceof Number || value instanceof Boolean) {
 			return value;
 		}
-		if(value instanceof JsonObject map) {
-			JsonObject result = createObject();
-			for(Map.Entry<String,Object> e: ((Map<String,Object>)map).entrySet()) {
-				result.put(e.getKey(), _deepClone(e.getValue()));
+		if(value instanceof JsonObject || value instanceof JsonArray) {
+			if(depth>=CYCLE_CHECK_DEPTH) {
+				if(path==null) {
+					path = new IdentityHashMap<>();
+				}
+				if(path.put(value, Boolean.TRUE)!=null) {
+					throw new JsonException.CircularReference(null,"Circular reference detected in {0} of type {1}",
+							value instanceof JsonArray ? "array" : "object", value.getClass().getName());
+				}
 			}
-			return result;
-		}
-		if(value instanceof JsonArray list) {
-			JsonArray result = createArray(list.size());
-			for(Object v: list){
-				result.add(_deepClone(v));
+			try {
+				if(value instanceof JsonObject map) {
+					JsonObject result = createObject();
+					for(Map.Entry<String,Object> e: ((Map<String,Object>)map).entrySet()) {
+						result.put(e.getKey(), _deepClone(e.getValue(), depth+1, path));
+					}
+					copyReference(map, result);
+					return result;
+				}
+				JsonArray list = (JsonArray)value;
+				JsonArray result = createArray(list.size());
+				for(Object v: list){
+					result.add(_deepClone(v, depth+1, path));
+				}
+				copyReference(list, result);
+				return result;
+			} finally {
+				if(path!=null) {
+					path.remove(value);
+				}
 			}
-			return result;
 		}
 		throw new JsonException(null,"Cannot clone object of type {0}",value.getClass());
+	}
+	private void copyReference(JsonContainer from, JsonContainer to) {
+		String ref = from.getReference();
+		if(ref!=null && supportsReferences()) {
+			to.setReference(ref);
+		}
 	}
 }

@@ -47,7 +47,7 @@ import org.monflabs.util.StringUtil;
  * Json Array implemented as an ArrayLisy.
  */
 @SuppressWarnings("serial")
-public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray, JavaJsonContainer {
+public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray {
 
 	private String reference;
 
@@ -130,39 +130,44 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 	}
 
 	
+	// The is*() tests don't throw for an index out of range: like a missing key of an
+	// object, there is no value (isNull() is true, the others false)
+	private Object peek(int index) {
+		return has(index) ? jsonGet(index) : null;
+	}
 	@Override
 	public boolean isNull(int index) {
-		Object v=jsonGet(index);
+		Object v=peek(index);
 		return v==null;
 	}
 	@Override
 	public boolean isBoolean(int index) {
-		Object v=jsonGet(index);
+		Object v=peek(index);
 		return v!=null && v.getClass()==Boolean.class;
 	}
 	@Override
 	public boolean isNumber(int index) {
-		Object v=jsonGet(index);
+		Object v=peek(index);
 		return v instanceof Number;
 	}
 	@Override
 	public boolean isString(int index) {
-		Object v=jsonGet(index);
+		Object v=peek(index);
 		return v!=null && v.getClass()==String.class;
 	}
 	@Override
 	public boolean isContainer(int index) {
-		Object v=jsonGet(index);
+		Object v=peek(index);
 		return v instanceof JsonObject || v instanceof JsonArray;
 	}
 	@Override
 	public boolean isObject(int index) {
-		Object v=jsonGet(index);
+		Object v=peek(index);
 		return v instanceof JsonObject;
 	}
 	@Override
 	public boolean isArray(int index) {
-		Object v=jsonGet(index);
+		Object v=peek(index);
 		return v instanceof JsonArray;
 	}
 
@@ -229,7 +234,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o;
 		}
 		// Generate an error message...
-		return JsonUtil.checkBoolean(v);
+		return JsonUtil.checkBoolean(v, index);
 	}
 	@Override
 	public Number getNumber(int index) {
@@ -238,25 +243,25 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o;
 		}
 		// Generate an error message...
-		return JsonUtil.checkNumber(v);
+		return JsonUtil.checkNumber(v, index);
 	}
 	@Override
 	public byte getByte(int index) {
 		Object v=jsonGet(index);
 		if(v instanceof Number o) {
-			return o.byteValue();
+			return JsonUtil.clampToByte(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkByte(v);
+		return JsonUtil.checkByte(v, index);
 	}
 	@Override
 	public short getShort(int index) {
 		Object v=jsonGet(index);
 		if(v instanceof Number o) {
-			return o.shortValue();
+			return JsonUtil.clampToShort(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkShort(v);
+		return JsonUtil.checkShort(v, index);
 	}
 	@Override
 	public int getInt(int index) {
@@ -265,7 +270,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return JsonUtil.clampToInt(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkInt(v);
+		return JsonUtil.checkInt(v, index);
 	}
 	@Override
 	public long getLong(int index) {
@@ -274,7 +279,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return JsonUtil.clampToLong(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkLong(v);
+		return JsonUtil.checkLong(v, index);
 	}
 	@Override
 	public float getFloat(int index) {
@@ -283,7 +288,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o.floatValue();
 		}
 		// Generate an error message...
-		return JsonUtil.checkFloat(v);
+		return JsonUtil.checkFloat(v, index);
 	}
 	@Override
 	public double getDouble(int index) {
@@ -292,7 +297,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o.doubleValue();
 		}
 		// Generate an error message...
-		return JsonUtil.checkDouble(v);
+		return JsonUtil.checkDouble(v, index);
 	}
 	
 	@Override
@@ -302,7 +307,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o;
 		}
 		// Generate an error message...
-		return JsonUtil.checkBoolean(v);
+		return JsonUtil.checkBoolean(v, index);
 	}
 	@Override
 	public Byte getByteObject(int index) {
@@ -311,10 +316,10 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o;
 		}
 		if(v instanceof Number o) {
-			return o.byteValue();
+			return JsonUtil.clampToByte(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkByte(v);
+		return JsonUtil.checkByte(v, index);
 	}
 	@Override
 	public Short getShortObject(int index) {
@@ -323,10 +328,10 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o;
 		}
 		if(v instanceof Number o) {
-			return o.shortValue();
+			return JsonUtil.clampToShort(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkShort(v);
+		return JsonUtil.checkShort(v, index);
 	}
 	@Override
 	public Integer getIntObject(int index) {
@@ -338,7 +343,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return JsonUtil.clampToInt(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkInt(v);
+		return JsonUtil.checkInt(v, index);
 	}
 	@Override
 	public Long getLongObject(int index) {
@@ -350,7 +355,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return JsonUtil.clampToLong(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkLong(v);
+		return JsonUtil.checkLong(v, index);
 	}
 	@Override
 	public Float getFloatObject(int index) {
@@ -362,7 +367,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o.floatValue();
 		}
 		// Generate an error message...
-		return JsonUtil.checkFloat(v);
+		return JsonUtil.checkFloat(v, index);
 	}
 	@Override
 	public Double getDoubleObject(int index) {
@@ -374,7 +379,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o.doubleValue();
 		}
 		// Generate an error message...
-		return JsonUtil.checkDouble(v);
+		return JsonUtil.checkDouble(v, index);
 	}
 	@Override
 	public BigInteger getBigInteger(int index) {
@@ -382,7 +387,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 		if(v instanceof BigInteger o) {
 			return o;
 		}
-		return JsonUtil.checkBigInteger(v);
+		return JsonUtil.checkBigInteger(v, index);
 	}	
 	@Override
 	public BigDecimal getBigDecimal(int index) {
@@ -390,7 +395,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 		if(v instanceof BigDecimal o) {
 			return o;
 		}
-		return JsonUtil.checkBigDecimal(v);
+		return JsonUtil.checkBigDecimal(v, index);
 	}	
 	@Override
 	public String getString(int index) {
@@ -399,7 +404,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			return o;
 		}
 		// Generate an error message...
-		return JsonUtil.checkString(v);
+		return JsonUtil.checkString(v, index);
 	}
 	@Override
 	public JsonObject getObject(int index) {
@@ -407,7 +412,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 		if(v instanceof JsonObject o) {
 			return o;
 		}
-		return JsonUtil.checkObject(v);
+		return JsonUtil.checkObject(v, index);
 	}
 	@Override
 	public JsonArray getArray(int index) {
@@ -415,7 +420,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 		if(v instanceof JsonArray a) {
 			return a;
 		}
-		return JsonUtil.checkArray(v);
+		return JsonUtil.checkArray(v, index);
 	}
 	
 	@Override
@@ -453,7 +458,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o;
 				}
 				// Generate an error message...
-				return JsonUtil.checkBoolean(v);
+				return JsonUtil.checkBoolean(v, index);
 			}
 		}
 		return defaultValue;
@@ -467,7 +472,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o;
 				}
 				// Generate an error message...
-				return JsonUtil.checkNumber(v);
+				return JsonUtil.checkNumber(v, index);
 			}
 		}
 		return defaultValue;
@@ -478,10 +483,10 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			Object v=jsonGet(index);
 			if(v!=null) {
 				if(v instanceof Number o) {
-					return o.byteValue();
+					return JsonUtil.clampToByte(o);
 				}
 				// Generate an error message...
-				return JsonUtil.checkByte(v);
+				return JsonUtil.checkByte(v, index);
 			}
 		}
 		return defaultValue;
@@ -492,10 +497,10 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 			Object v=jsonGet(index);
 			if(v!=null) {
 				if(v instanceof Number o) {
-					return o.shortValue();
+					return JsonUtil.clampToShort(o);
 				}
 				// Generate an error message...
-				return JsonUtil.checkShort(v);
+				return JsonUtil.checkShort(v, index);
 			}
 		}
 		return defaultValue;
@@ -509,7 +514,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return JsonUtil.clampToInt(o);
 				}
 				// Generate an error message...
-				return JsonUtil.checkInt(v);
+				return JsonUtil.checkInt(v, index);
 			}
 		}
 		return defaultValue;
@@ -523,7 +528,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return JsonUtil.clampToLong(o);
 				}
 				// Generate an error message...
-				return JsonUtil.checkLong(v);
+				return JsonUtil.checkLong(v, index);
 			}
 		}
 		return defaultValue;
@@ -537,7 +542,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o.floatValue();
 				}
 				// Generate an error message...
-				return JsonUtil.checkFloat(v);
+				return JsonUtil.checkFloat(v, index);
 			}
 		}
 		return defaultValue;
@@ -551,7 +556,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o.doubleValue();
 				}
 				// Generate an error message...
-				return JsonUtil.checkDouble(v);
+				return JsonUtil.checkDouble(v, index);
 			}
 		}
 		return defaultValue;
@@ -566,7 +571,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o;
 				}
 				// Generate an error message...
-				return JsonUtil.checkBoolean(v);
+				return JsonUtil.checkBoolean(v, index);
 			}
 		}
 		return defaultValue;
@@ -580,10 +585,10 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o;
 				}
 				if(v instanceof Number o) {
-					return o.byteValue();
+					return JsonUtil.clampToByte(o);
 				}
 				// Generate an error message...
-				return JsonUtil.checkByte(v);
+				return JsonUtil.checkByte(v, index);
 			}
 		}
 		return defaultValue;
@@ -597,10 +602,10 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o;
 				}
 				if(v instanceof Number o) {
-					return o.shortValue();
+					return JsonUtil.clampToShort(o);
 				}
 				// Generate an error message...
-				return JsonUtil.checkShort(v);
+				return JsonUtil.checkShort(v, index);
 			}
 		}
 		return defaultValue;
@@ -617,7 +622,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return JsonUtil.clampToInt(o);
 				}
 				// Generate an error message...
-				return JsonUtil.checkInt(v);
+				return JsonUtil.checkInt(v, index);
 			}
 		}
 		return defaultValue;
@@ -634,7 +639,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return JsonUtil.clampToLong(o);
 				}
 				// Generate an error message...
-				return JsonUtil.checkLong(v);
+				return JsonUtil.checkLong(v, index);
 			}
 		}
 		return defaultValue;
@@ -651,7 +656,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o.floatValue();
 				}
 				// Generate an error message...
-				return JsonUtil.checkFloat(v);
+				return JsonUtil.checkFloat(v, index);
 			}
 		}
 		return defaultValue;
@@ -668,7 +673,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o.doubleValue();
 				}
 				// Generate an error message...
-				return JsonUtil.checkDouble(v);
+				return JsonUtil.checkDouble(v, index);
 			}
 		}
 		return defaultValue;
@@ -684,7 +689,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o;
 				}
 				// Generate an error message...
-				return JsonUtil.checkBigInteger(v);
+				return JsonUtil.checkBigInteger(v, index);
 			}
 		}
 		return defaultValue;
@@ -698,7 +703,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o;
 				}
 				// Generate an error message...
-				return JsonUtil.checkBigDecimal(v);
+				return JsonUtil.checkBigDecimal(v, index);
 			}
 		}
 		return defaultValue;
@@ -712,7 +717,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o;
 				}
 				// Generate an error message...
-				return JsonUtil.checkString(v);
+				return JsonUtil.checkString(v, index);
 			}
 		}
 		return defaultValue;
@@ -726,7 +731,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return o;
 				}
 				// Generate an error message...
-				return JsonUtil.checkObject(v);
+				return JsonUtil.checkObject(v, index);
 			}
 		}
 		return defaultValue;
@@ -740,7 +745,7 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 					return a;
 				}
 				// Generate an error message...
-				return JsonUtil.checkArray(v);
+				return JsonUtil.checkArray(v, index);
 			}
 		}
 		return defaultValue;

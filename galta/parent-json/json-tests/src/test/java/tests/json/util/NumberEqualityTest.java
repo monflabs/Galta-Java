@@ -186,4 +186,93 @@ public class NumberEqualityTest extends ProjectTestCase {
 		assertEquals(12, JsonUtil.asNumber(" 12 ").intValue());
 		assertEquals(7, JsonUtil.asInt(null, 7));
 	}
+
+	// eq(a,b) implies hash(a)==hash(b), for the values where a double/float is compared
+	// through its shortest decimal (integral values beyond the exact range)
+	private static void assertHashContract(Object a, Object b) {
+		if(JsonUtil.eq(a, b)) {
+			assertEquals(a+" ("+a.getClass().getSimpleName()+") hash "+b+" ("+b.getClass().getSimpleName()+")",
+					JsonUtil.hashCode(a), JsonUtil.hashCode(b));
+		}
+	}
+	private static List<Number> equivalents(double d) {
+		List<Number> l = new ArrayList<>();
+		l.add(d);
+		BigDecimal shortest = BigDecimal.valueOf(d);
+		l.add(shortest);
+		l.add(new BigDecimal(d));   // the exact binary value
+		BigInteger bi = shortest.toBigInteger();
+		l.add(bi);
+		l.add(new BigDecimal(d).toBigInteger());
+		if(bi.bitLength()<64) {
+			l.add(bi.longValue());
+		}
+		if(Math.abs(d)<0x1p63) {
+			l.add((long)d);
+		}
+		return l;
+	}
+	private static List<Number> equivalents(float f) {
+		List<Number> l = new ArrayList<>();
+		l.add(f);
+		l.add((double)f);
+		BigDecimal shortest = new BigDecimal(Float.toString(f));
+		l.add(shortest);
+		l.add(new BigDecimal(f));
+		l.add(shortest.toBigInteger());
+		if(Math.abs(f)<0x1p63f) {
+			l.add((long)f);
+			l.add(shortest.toBigInteger().longValue());
+		}
+		return l;
+	}
+	private static void assertHashContract(List<Number> values) {
+		for(Number x: values) {
+			for(Number y: values) {
+				assertHashContract(x, y);
+			}
+		}
+	}
+
+	public void testHashContractForLargeIntegralDoubles() {
+		// 2^60 as a double is the decimal 1152921504606846980 for eq(), which is the long
+		// 1152921504606846980 (not 2^60): the hash must follow
+		double d60 = 0x1p60;
+		long shortest60 = BigDecimal.valueOf(d60).longValueExact();
+		assertEquals(1152921504606847000L, shortest60);
+		assertEq(d60, shortest60);
+		assertEq(d60, BigInteger.valueOf(shortest60));
+		assertEq(d60, new BigDecimal("1.152921504606847E18"));
+		assertNotEq(d60, 1L<<60);
+		assertEq(0x1p53, 1L<<53);
+		assertEq(0x1p55, new BigDecimal(BigDecimal.valueOf(0x1p55).toBigInteger()));
+		// Floats beyond 2^24
+		assertEq(0x1p40f, 1099511600000L);   // Float.toString(2^40) is 1.0995116E12
+		assertNotEq(0x1p40f, 1L<<40);
+		assertEq((float)(1<<25), 1<<25);
+
+		double[] doubles = {0x1p53, 0x1p53+2, 0x1p54, 0x1p55, 0x1p55+8, 0x1p60, 0x1p62+1024, 0x1p63, 0x1p64, 1e17, 1e18, 1e19, 1e20, 1e23,
+				9007199254740993.0, 123456789012345678.0, -0x1p60, -1e19, Double.MAX_VALUE, 0x1p52+0.5, 4503599627370497.0};
+		for(double d: doubles) {
+			assertHashContract(equivalents(d));
+		}
+		float[] floats = {0x1p24f, 0x1p24f+2, 0x1p25f, 0x1p30f, 0x1p40f, 0x1p62f, 0x1p63f, 0x1p70f, 1e10f, 1e20f, 3.4e38f, -0x1p40f, 16777217f, 123456789f};
+		for(float f: floats) {
+			assertHashContract(equivalents(f));
+		}
+		// Random integral doubles and floats of every magnitude, with their equivalents
+		Random r = new Random(7);
+		for(int i=0; i<5000; i++) {
+			double d = Math.rint(r.nextDouble()*Math.pow(2, r.nextInt(70)));
+			if(r.nextBoolean()) {
+				d = -d;
+			}
+			assertHashContract(equivalents(d));
+			float f = (float)d;
+			assertHashContract(equivalents(f));
+			List<Number> mixed = new ArrayList<>(equivalents(d));
+			mixed.addAll(equivalents(f));
+			assertHashContract(mixed);
+		}
+	}
 }

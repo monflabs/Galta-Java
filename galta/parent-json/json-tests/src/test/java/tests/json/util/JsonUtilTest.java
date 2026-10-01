@@ -204,7 +204,10 @@ public class JsonUtilTest extends ProjectTestCase {
 
 	public void testOf() throws Exception {
 		assertEquals( JsonFactory.get().parse("{}"), JsonFactory.get().of() );
-		assertEquals( JsonFactory.get().parse("{'a':null}"), JsonFactory.get().of("a") );
+		assertEquals( JsonFactory.get().parse("{'a':null}"), JsonFactory.get().of("a",null) );
+		// A key without a value, a key that is not a string: an error, not a:null or a ClassCastException
+		assertThrows( JsonException.class, () -> JsonFactory.get().of("a") );
+		assertThrows( JsonException.class, () -> JsonFactory.get().of(1,2) );
 		assertEquals( JsonFactory.get().parse("{'a':123}"), JsonFactory.get().of("a",123) );
 		assertEquals( JsonFactory.get().parse("{'a':123, b:456}"), JsonFactory.get().of("a",123,"b",456) );
 		assertEquals( JsonFactory.get().parse("{'a':123, b:{c:true}}"), JsonFactory.get().of("a",123,"b",JsonFactory.get().of("c",true)) );

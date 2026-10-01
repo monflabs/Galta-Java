@@ -15,15 +15,6 @@
  */
 package org.monflabs.json;
 
-import static org.monflabs.json.JsonNumberType.NUMBER_BIGDECIMAL;
-import static org.monflabs.json.JsonNumberType.NUMBER_BIGINTEGER;
-import static org.monflabs.json.JsonNumberType.NUMBER_BYTE;
-import static org.monflabs.json.JsonNumberType.NUMBER_DOUBLE;
-import static org.monflabs.json.JsonNumberType.NUMBER_FLOAT;
-import static org.monflabs.json.JsonNumberType.NUMBER_INTEGER;
-import static org.monflabs.json.JsonNumberType.NUMBER_LONG;
-import static org.monflabs.json.JsonNumberType.NUMBER_NAN;
-import static org.monflabs.json.JsonNumberType.NUMBER_SHORT;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -38,6 +29,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -104,13 +97,13 @@ public abstract class JsonUtil extends TypeUtil {
 	}
 	public static byte checkByte(Object object) {
 		if(object instanceof Number n) {
-			return toByte(n);
+			return clampToByte(n);
 		}
 		throw new JsonException(null,"Value {0} is not a number",toDebugString(object));
 	}
 	public static short checkShort(Object object) {
 		if(object instanceof Number n) {
-			return toShort(n);
+			return clampToShort(n);
 		}
 		throw new JsonException(null,"Value {0} is not a number",toDebugString(object));
 	}
@@ -140,13 +133,13 @@ public abstract class JsonUtil extends TypeUtil {
 	}
 	public static BigInteger checkBigInteger(Object object) {
 		if(object instanceof Number n) {
-			return toBigInteger(n);
+			return bigIntegerValue(n, true);
 		}
 		throw new JsonException(null,"Value {0} is not a number",toDebugString(object));
 	}
 	public static BigDecimal checkBigDecimal(Object object) {
 		if(object instanceof Number n) {
-			return toBigDecimal(n);
+			return bigDecimalValue(n, true);
 		}
 		throw new JsonException(null,"Value {0} is not a number",toDebugString(object));
 	}
@@ -174,6 +167,203 @@ public abstract class JsonUtil extends TypeUtil {
 		}
 		throw new JsonException(null,"Value {0} is not an array",toDebugString(object));
 	}
+
+	//
+	// The same checks, for the value of a key or an index: the message says where the
+	// value comes from
+	//
+	private static JsonException at(JsonException e, String where) {
+		return new JsonException(null, e.getMessage()+" ("+where+")");
+	}
+	private static String keyLocation(String key) {
+		return "key \""+key+"\"";
+	}
+	private static String indexLocation(int index) {
+		return "index "+index;
+	}
+	public static boolean checkBoolean(Object value, String key) {
+		try {
+			return checkBoolean(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static boolean checkBoolean(Object value, int index) {
+		try {
+			return checkBoolean(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static byte checkByte(Object value, String key) {
+		try {
+			return checkByte(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static byte checkByte(Object value, int index) {
+		try {
+			return checkByte(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static short checkShort(Object value, String key) {
+		try {
+			return checkShort(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static short checkShort(Object value, int index) {
+		try {
+			return checkShort(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static int checkInt(Object value, String key) {
+		try {
+			return checkInt(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static int checkInt(Object value, int index) {
+		try {
+			return checkInt(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static long checkLong(Object value, String key) {
+		try {
+			return checkLong(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static long checkLong(Object value, int index) {
+		try {
+			return checkLong(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static float checkFloat(Object value, String key) {
+		try {
+			return checkFloat(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static float checkFloat(Object value, int index) {
+		try {
+			return checkFloat(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static double checkDouble(Object value, String key) {
+		try {
+			return checkDouble(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static double checkDouble(Object value, int index) {
+		try {
+			return checkDouble(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static BigInteger checkBigInteger(Object value, String key) {
+		try {
+			return checkBigInteger(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static BigInteger checkBigInteger(Object value, int index) {
+		try {
+			return checkBigInteger(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static BigDecimal checkBigDecimal(Object value, String key) {
+		try {
+			return checkBigDecimal(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static BigDecimal checkBigDecimal(Object value, int index) {
+		try {
+			return checkBigDecimal(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static Number checkNumber(Object value, String key) {
+		try {
+			return checkNumber(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static Number checkNumber(Object value, int index) {
+		try {
+			return checkNumber(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static String checkString(Object value, String key) {
+		try {
+			return checkString(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static String checkString(Object value, int index) {
+		try {
+			return checkString(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static JsonObject checkObject(Object value, String key) {
+		try {
+			return checkObject(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static JsonObject checkObject(Object value, int index) {
+		try {
+			return checkObject(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static JsonArray checkArray(Object value, String key) {
+		try {
+			return checkArray(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static JsonArray checkArray(Object value, int index) {
+		try {
+			return checkArray(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+
 	public static LocalDate checkLocalDate(Object value) {
 		String s = checkString(value);
 		return parseLocalDate(s);
@@ -197,6 +387,16 @@ public abstract class JsonUtil extends TypeUtil {
 	public static ZonedDateTime checkZonedDateTime(Object value) {
 		String s = checkString(value);
 		return parseZonedDateTime(s);
+	}
+
+	// The typed parse() shortcuts: a JSON text of another type is a JsonException, not a
+	// ClassCastException. The JSON text null is still null
+	static <T> T parsedAs(Object value, Class<T> type) {
+		if(value==null || type.isInstance(value)) {
+			return type.cast(value);
+		}
+		String expected = type==JsonObject.class ? "an object" : type==JsonArray.class ? "an array" : "an object or an array";
+		throw new JsonException(null,"The JSON text is not {0} but {1}",expected,JsonType.typeOf(value).toString().toLowerCase());
 	}
 
 	public static String toDebugString(Object o) {
@@ -445,7 +645,16 @@ public abstract class JsonUtil extends TypeUtil {
 	
 	//
 	// Some conversion methods
-	// These methods are *never* failing but return the default value in case of
+	// These methods are *never* failing but return the default value when the value
+	// cannot be converted.
+	//
+	// A string is converted the same way by every method: it is trimmed, then parsed
+	// as a number by asNumber() (decimal, exponent, 0x/0o/0b prefixes, NaN, Infinity),
+	// and the resulting number is converted like a Number value. So " 12.7 " is 12 for
+	// asInt(), asLong() and asBigInteger(), 12.7 for asDouble() and asBigDecimal(), and
+	// a string that doesn't parse ("1f", "abc", "") gives the default value.
+	// A number is converted with saturation: an out of range value gives the min/max of
+	// the target type, NaN gives 0, a decimal value is truncated toward 0.
 	//
 
 	public static Number asNumber(Object v) {
@@ -455,105 +664,86 @@ public abstract class JsonUtil extends TypeUtil {
 		if(v instanceof Number n) {
 			return n;
 		} else if(v instanceof String s) {
-			try {
-				return JsonUtil.parseNumber(s.trim());
-			} catch(Exception e) {}
+			Number n = parseNumberOrNull(s);
+			if(n!=null) {
+				return n;
+			}
 		} else if(v instanceof Boolean b) {
 			return b ? 1 : 0;
 		}
 		return defaultValue;
 	}
-	
+	// The single string parsing rule of the as*() methods
+	private static Number parseNumberOrNull(String s) {
+		String t = s.strip();
+		if(t.isEmpty()) {
+			return null;
+		}
+		try {
+			return JsonFactory.get().parseNumber(t,0);
+		} catch(Exception e) {
+			return null;
+		}
+	}
+
 	public static int asInt(Object v) {
 		return asInt(v, 0);
 	}
 	public static int asInt(Object v, int defaultValue) {
-		if(v instanceof Number n) {
-			return clampToInt(n);
-		} else if(v instanceof String s) {
-			// Same parsing as asNumber(): " 12 " is 12, "1.5" is 1
-			Number n = asNumber(s.trim(), null);
-			if(n!=null) {
-				return clampToInt(n);
-			}
-		} else if(v instanceof Boolean b) {
-			return b ? 1 : 0;
-		}
-		return defaultValue;
+		Number n = asNumber(v, null);
+		return n!=null ? clampToInt(n) : defaultValue;
 	}
-	
+
 	public static long asLong(Object v) {
 		return asLong(v, 0);
 	}
 	public static long asLong(Object v, long defaultValue) {
-		if(v instanceof Number n) {
-			return clampToLong(n);
-		} else if(v instanceof String s) {
-			// Same parsing as asNumber(): " 12 " is 12, "1.5" is 1
-			Number n = asNumber(s.trim(), null);
-			if(n!=null) {
-				return clampToLong(n);
-			}
-		} else if(v instanceof Boolean b) {
-			return b ? 1 : 0;
-		}
-		return defaultValue;
+		Number n = asNumber(v, null);
+		return n!=null ? clampToLong(n) : defaultValue;
 	}
-	
+
 	public static double asDouble(Object v) {
 		return asDouble(v, 0);
 	}
 	public static double asDouble(Object v, double defaultValue) {
-		if(v instanceof Number n) {
-			return JsonUtil.toDouble(n);
-		} else if(v instanceof String s) {
-			try {
-				return Double.parseDouble(s);
-			} catch(Exception e) {}
-		} else if(v instanceof Boolean b) {
-			return b ? 1 : 0;
-		}
-		return defaultValue;
+		Number n = asNumber(v, null);
+		return n!=null ? n.doubleValue() : defaultValue;
 	}
-	
+
 	public static BigInteger asBigInteger(Object v) {
 		return asBigInteger(v, BigInteger.ZERO);
 	}
 	public static BigInteger asBigInteger(Object v, BigInteger defaultValue) {
-		if(v instanceof Number n) {
-			return JsonUtil.toBigInteger(n);
-		} else if(v instanceof String s) {
-			try {
-				return new BigInteger(s);
-			} catch(Exception e) {}
-		} else if(v instanceof Boolean b) {
-			return b ? BigInteger.ONE : BigInteger.ZERO;
-		}
-		return defaultValue;
+		Number n = asNumber(v, null);
+		return n!=null ? bigIntegerValue(n, false) : defaultValue;
 	}
-	
+
 	public static BigDecimal asBigDecimal(Object v) {
 		return asBigDecimal(v, BigDecimal.ZERO);
 	}
 	public static BigDecimal asBigDecimal(Object v, BigDecimal defaultValue) {
-		if(v instanceof Number n) {
-			return JsonUtil.toBigDecimal(n);
-		} else if(v instanceof String s) {
-			try {
-				return new BigDecimal(s);
-			} catch(Exception e) {}
-		} else if(v instanceof Boolean b) {
-			return b ? BigDecimal.ONE : BigDecimal.ZERO;
-		}
-		return defaultValue;
+		Number n = asNumber(v, null);
+		return n!=null ? bigDecimalValue(n, false) : defaultValue;
 	}
-	
+
 	public static boolean asBoolean(Object v) {
 		return asBoolean(v, false);
 	}
+	/**
+	 * A number is true when it is not 0 (or NaN). A string is false when it is empty,
+	 * "0" or "false" (ignoring the case), true otherwise: unlike the number, the string
+	 * "0.0" is true.
+	 */
 	public static boolean asBoolean(Object v, boolean defaultValue) {
 		if(v instanceof Number n) {
-			// Not toInt(): 0.5 and 2^32 are truthy, NaN is not
+			// Not toInt(): 0.5 and 2^32 are truthy, NaN is not. A big number is
+			// tested by its sign: doubleValue() underflows 1e-400 to 0
+			if(n instanceof BigDecimal bd) {
+				return bd.signum()!=0;
+			}
+			if(n instanceof BigInteger bi) {
+				return bi.signum()!=0;
+			}
 			double d = n.doubleValue();
 			return d!=0 && !Double.isNaN(d);
 		} else if(v instanceof String s) {
@@ -566,7 +756,7 @@ public abstract class JsonUtil extends TypeUtil {
 		}
 		return defaultValue;
 	}
-	
+
 	public static String asString(Object v) {
 		return asString(v, "");
 	}
@@ -581,8 +771,50 @@ public abstract class JsonUtil extends TypeUtil {
 		return defaultValue;
 	}
 
-	
-	
+	/**
+	 * The BigInteger value of a number: the integer part of its decimal value, a double
+	 * being its shortest decimal representation (1e23 is 10^23, as with
+	 * {@link #bigDecimalValue(Number, boolean)} and {@link #eq(Object, Object)}).
+	 * NaN and infinities have no BigInteger value: they throw a JsonException when
+	 * strict, else NaN is 0 and an infinity is Long.MIN_VALUE/MAX_VALUE.
+	 */
+	public static BigInteger bigIntegerValue(Number n, boolean strict) {
+		if(n instanceof BigInteger bi) {
+			return bi;
+		}
+		if(isIntegral(n)) {
+			return BigInteger.valueOf(n.longValue());
+		}
+		if(isNaN(n) || isInfinite(n)) {
+			if(strict) {
+				throw new JsonException(null,"Value {0} cannot be converted to a BigInteger",n);
+			}
+			return toBigInteger(n);
+		}
+		if(n instanceof BigDecimal || n instanceof Double || n instanceof Float) {
+			return toBigDecimal(n).toBigInteger();
+		}
+		// Other Number implementations (AtomicLong, LazilyParsedNumber...)
+		return toBigInteger(n);
+	}
+	/**
+	 * The BigDecimal value of a number, a double being its shortest decimal
+	 * representation (0.1 is 0.1). NaN and infinities have no BigDecimal value: they
+	 * throw a JsonException when strict, else NaN is 0 and an infinity is
+	 * -Double.MAX_VALUE/Double.MAX_VALUE.
+	 */
+	public static BigDecimal bigDecimalValue(Number n, boolean strict) {
+		if(strict && (isNaN(n) || isInfinite(n))) {
+			throw new JsonException(null,"Value {0} cannot be converted to a BigDecimal",n);
+		}
+		return toBigDecimal(n);
+	}
+	private static boolean isInfinite(Number n) {
+		return (n instanceof Double d && d.isInfinite()) || (n instanceof Float f && f.isInfinite());
+	}
+
+
+
 	//
 	// Number utilities
 	//
@@ -600,67 +832,7 @@ public abstract class JsonUtil extends TypeUtil {
     	return null;
     }
 
-	public static JsonNumberType promoteNumber(JsonNumberType t1, JsonNumberType t2) {
-		boolean i1 = t1.ordinal()<=NUMBER_BIGINTEGER.ordinal();
-		boolean i2 = t2.ordinal()<=NUMBER_BIGINTEGER.ordinal();
-		if(i1!=i2) {
-			if(i1) {
-				t1 = promoteIntegerToDecimal(t1);
-			}
-			if(i2) {
-				t2 = promoteIntegerToDecimal(t2);
-			}
-		}
-		return JsonNumberType.values()[Math.max(t1.ordinal(),t2.ordinal())];
-	}
-	@SuppressWarnings("incomplete-switch")
-	public static JsonNumberType promoteIntegerToDecimal(JsonNumberType t) {
-		switch(t) {
-			case NUMBER_BYTE: 
-			case NUMBER_SHORT: 
-			case NUMBER_INTEGER: 
-			case NUMBER_LONG: // Could be BigDecimal, but we keep it like JS 
-				return NUMBER_DOUBLE;
-			case NUMBER_NAN:
-				return NUMBER_NAN;
-		};
-		return NUMBER_BIGDECIMAL;
-	}
-	public static JsonNumberType numberType(Number o) {
-		if(o instanceof Integer) {
-			return NUMBER_INTEGER;
-		}
-		if(o instanceof Double d) {
-			if(d.isNaN()) {
-				return NUMBER_NAN;
-			}
-			return NUMBER_DOUBLE;
-		}
-		if(o instanceof Long) {
-			return NUMBER_LONG;
-		}
-		if(o instanceof BigDecimal) {
-			return NUMBER_BIGDECIMAL;
-		}
-		if(o instanceof BigInteger) {
-			return NUMBER_BIGINTEGER;
-		}
-		if(o instanceof Short) {
-			return NUMBER_SHORT;
-		}
-		if(o instanceof Byte) {
-			return NUMBER_BYTE;
-		}
-		if(o instanceof Float f) {
-			if(f.isNaN()) {
-				return NUMBER_NAN;
-			}
-			return NUMBER_FLOAT;
-		}
-		throw new JsonException(null,"Unsupported JSON number type {0}", o.getClass());
-	}
 
-	
 	//
 	// Object comparison
 	//
@@ -678,18 +850,20 @@ public abstract class JsonUtil extends TypeUtil {
 		return l>Integer.MAX_VALUE ? Integer.MAX_VALUE : l<Integer.MIN_VALUE ? Integer.MIN_VALUE : (int)l;
 	}
 	/**
-	 * The short value of a number, saturated like {@link #clampToInt(Number)}.
-	 */
-	public static short clampToShort(Number n) {
-		int i = clampToInt(n);
-		return i>Short.MAX_VALUE ? Short.MAX_VALUE : i<Short.MIN_VALUE ? Short.MIN_VALUE : (short)i;
-	}
-	/**
-	 * The byte value of a number, saturated like {@link #clampToInt(Number)}.
+	 * The byte value of a number, saturated like {@link #clampToInt(Number)}: 300 is
+	 * Byte.MAX_VALUE, not 44.
 	 */
 	public static byte clampToByte(Number n) {
 		int i = clampToInt(n);
 		return i>Byte.MAX_VALUE ? Byte.MAX_VALUE : i<Byte.MIN_VALUE ? Byte.MIN_VALUE : (byte)i;
+	}
+	/**
+	 * The short value of a number, saturated like {@link #clampToInt(Number)}: 70000 is
+	 * Short.MAX_VALUE, not 4464.
+	 */
+	public static short clampToShort(Number n) {
+		int i = clampToInt(n);
+		return i>Short.MAX_VALUE ? Short.MAX_VALUE : i<Short.MIN_VALUE ? Short.MIN_VALUE : (short)i;
 	}
 	/**
 	 * The long value of a number, saturated like {@link #clampToInt(Number)}.
@@ -706,6 +880,9 @@ public abstract class JsonUtil extends TypeUtil {
 	}
 
 	public static boolean eq(Object o1, Object o2) {
+		return eq(o1, o2, 0, null);
+	}
+	private static boolean eq(Object o1, Object o2, int depth, CycleGuard guard) {
 		if(o1==o2) {
 			return true;
 		}
@@ -716,57 +893,74 @@ public abstract class JsonUtil extends TypeUtil {
 		if(o1 instanceof Number n1 && o2 instanceof Number n2) {
 			return eqNumber(n1, n2);
 		}
-		if(o1.getClass()==o2.getClass()) {
-			if(o1.equals(o2)) {
-				return true;
-			}
-			if(!(o1 instanceof JsonArray || o1 instanceof JsonObject)) {
-				return false;
-			}
-		}
 		if(o1 instanceof JsonArray l1 && o2 instanceof JsonArray l2) {
-			return equalsArray(l1, l2);
+			return equalsArray(l1, l2, depth, guard);
 		}
 		if(o1 instanceof JsonObject m1 && o2 instanceof JsonObject m2) {
-			return equalsObject(m1, m2);
+			return equalsObject(m1, m2, depth, guard);
+		}
+		if(o1.getClass()==o2.getClass()) {
+			return o1.equals(o2);
 		}
 		return false;
 	}
 	public static boolean equalsArray(JsonArray l1, JsonArray l2) {
-    	int s1 = l1.size();
-    	int s2 = l2.size();
-    	if(s1==s2) {
-    		for(int i=0; i<s1; i++) {
-    			if(!JsonUtil.eq(l1.get(i), l2.get(i))) {
-    				return false;
-    			}
-    		}
-    		return true;
-    	}
-        return false;
-    }
+		return equalsArray(l1, l2, 0, null);
+	}
+	private static boolean equalsArray(JsonArray l1, JsonArray l2, int depth, CycleGuard guard) {
+		if(l1==l2) {
+			return true;
+		}
+		int s1 = l1.size();
+		int s2 = l2.size();
+		if(s1!=s2) {
+			return false;
+		}
+		guard = CycleGuard.enter(guard, depth, l1, l2);
+		try {
+			for(int i=0; i<s1; i++) {
+				if(!eq(l1.get(i), l2.get(i), depth+1, guard)) {
+					return false;
+				}
+			}
+			return true;
+		} finally {
+			CycleGuard.exit(guard, l1, l2);
+		}
+	}
 	public static boolean equalsObject(JsonObject m1, JsonObject m2) {
-    	int s1 = m1.size();
-    	int s2 = m2.size();
-    	if(s1==s2) {
-    		for(Map.Entry<String,Object> e: m1.entrySet()) {
-    			String key = e.getKey();
-    			Object value = e.getValue();
-    			if(value==null) {
-                    if (m2.get(key)!=null || !m2.containsKey(key)) {
-                        return false;
-                    }
-    			} else {
-	    			if(!JsonUtil.eq(value, m2.get(key))) {
-	    				return false;
-	    			}
-    			}
-    		}
-    		return true;
-    	}
-        return false;
-    }
-	
+		return equalsObject(m1, m2, 0, null);
+	}
+	private static boolean equalsObject(JsonObject m1, JsonObject m2, int depth, CycleGuard guard) {
+		if(m1==m2) {
+			return true;
+		}
+		int s1 = m1.size();
+		int s2 = m2.size();
+		if(s1!=s2) {
+			return false;
+		}
+		guard = CycleGuard.enter(guard, depth, m1, m2);
+		try {
+			for(Map.Entry<String,Object> e: m1.entrySet()) {
+				String key = e.getKey();
+				Object value = e.getValue();
+				if(value==null) {
+					if (m2.get(key)!=null || !m2.containsKey(key)) {
+						return false;
+					}
+				} else {
+					if(!eq(value, m2.get(key), depth+1, guard)) {
+						return false;
+					}
+				}
+			}
+			return true;
+		} finally {
+			CycleGuard.exit(guard, m1, m2);
+		}
+	}
+
 	public static boolean ne(Object o1, Object o2) {
 		return !eq(o1, o2);
 	}
@@ -781,8 +975,14 @@ public abstract class JsonUtil extends TypeUtil {
 	 * same value when it is an integer in the int range, like the Double holding it
 	 * otherwise. So a container only made of strings, booleans, nulls, int-range integers
 	 * and non integral doubles has the same hash code as the equivalent JDK collection.
+	 * <p>
+	 * A container that contains itself throws a {@link JsonException.CircularReference},
+	 * as do {@link #eq(Object, Object)} and stringify().
 	 */
 	public static int hashCode(Object o) {
+		return hashCode(o, 0, null);
+	}
+	private static int hashCode(Object o, int depth, CycleGuard guard) {
 		if(o==null) {
 			return 0;
 		}
@@ -790,22 +990,75 @@ public abstract class JsonUtil extends TypeUtil {
 			return hashNumber(n);
 		}
 		if(o instanceof JsonArray a) {
-			int h = 1;
-			int sz = a.size();
-			for(int i=0; i<sz; i++) {
-				h = 31*h + hashCode(a.get(i));
+			guard = CycleGuard.enter(guard, depth, a, null);
+			try {
+				int h = 1;
+				int sz = a.size();
+				for(int i=0; i<sz; i++) {
+					h = 31*h + hashCode(a.get(i), depth+1, guard);
+				}
+				return h;
+			} finally {
+				CycleGuard.exit(guard, a, null);
 			}
-			return h;
 		}
 		if(o instanceof JsonObject jo) {
-			// Order independent, like equalsObject()
-			int h = 0;
-			for(Map.Entry<String,Object> e: jo.entrySet()) {
-				h += e.getKey().hashCode() ^ hashCode(e.getValue());
+			guard = CycleGuard.enter(guard, depth, jo, null);
+			try {
+				// Order independent, like equalsObject()
+				int h = 0;
+				for(Map.Entry<String,Object> e: jo.entrySet()) {
+					h += e.getKey().hashCode() ^ hashCode(e.getValue(), depth+1, guard);
+				}
+				return h;
+			} finally {
+				CycleGuard.exit(guard, jo, null);
 			}
-			return h;
 		}
 		return o.hashCode();
+	}
+
+	/**
+	 * Detects the containers that contain themselves, without any cost for the usual
+	 * documents: the containers are only tracked once the recursion is deep, and a
+	 * cycle always gets deep. A container met again on the current path is a cycle.
+	 */
+	static final class CycleGuard {
+		static final int CHECK_DEPTH = 200;
+		private final IdentityHashMap<Object,Boolean> path = new IdentityHashMap<>();
+
+		static CycleGuard enter(CycleGuard guard, int depth, Object c1, Object c2) {
+			if(depth<CHECK_DEPTH) {
+				return guard;
+			}
+			if(guard==null) {
+				guard = new CycleGuard();
+			}
+			guard.push(c1);
+			if(c2!=null && c2!=c1) {
+				try {
+					guard.push(c2);
+				} catch(RuntimeException e) {
+					guard.path.remove(c1);
+					throw e;
+				}
+			}
+			return guard;
+		}
+		static void exit(CycleGuard guard, Object c1, Object c2) {
+			if(guard!=null) {
+				guard.path.remove(c1);
+				if(c2!=null) {
+					guard.path.remove(c2);
+				}
+			}
+		}
+		private void push(Object c) {
+			if(path.put(c, Boolean.TRUE)!=null) {
+				throw new JsonException.CircularReference(null,"Circular reference detected in {0} of type {1}",
+						c instanceof JsonArray ? "array" : "object", c.getClass().getName());
+			}
+		}
 	}
 	public static boolean gt(Object o1, Object o2) {
 		return compare(o1, o2)>0;
@@ -1012,10 +1265,12 @@ public abstract class JsonUtil extends TypeUtil {
 			if(Double.isNaN(v) || Double.isInfinite(v) || v!=Math.rint(v)) {
 				return Double.hashCode(v); // NaN, infinities and non integers
 			}
-			if(Math.abs(v)<0x1p63) {
+			if(Math.abs(v)<=0x1p53) {
+				// Exact: its shortest decimal is the integer itself
 				return hashIntegral((long)v); // also makes -0.0 hash as 0
 			}
-			// A huge integer: hashed below like the equivalent BigInteger
+			// Beyond 2^53, eq() compares a double through its shortest decimal (2^60 is
+			// 1152921504606846980, not 1152921504606846976): hash that decimal below
 		}
 		if(n instanceof Float f && (f.isNaN() || f.isInfinite())) {
 			return Double.hashCode(f.doubleValue());

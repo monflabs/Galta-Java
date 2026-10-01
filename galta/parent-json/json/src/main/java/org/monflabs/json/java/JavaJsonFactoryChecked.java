@@ -37,7 +37,7 @@ public class JavaJsonFactoryChecked extends JavaJsonFactory {
 
 	@Override
 	public JsonArray createArray(int initialCapacity) {
-		return new JsonArrayAsArrayListChecked();
+		return new JsonArrayAsArrayListChecked(initialCapacity);
 	}
 
 }

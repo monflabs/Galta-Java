@@ -31,7 +31,7 @@ import org.monflabs.json.jsonpath.JsonValues;
  * Json Object implemented as a Map wrapper.
  */
 @SuppressWarnings("serial")
-public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> implements JsonObject, JavaJsonContainer {
+public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> implements JsonObject {
 	
 	private String reference;
 	
@@ -205,7 +205,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o;
 		}
 		// Generate an error message...
-		return JsonUtil.checkBoolean(v);
+		return JsonUtil.checkBoolean(v, key);
 	}
 	@Override
 	public Number getNumber(String key) {
@@ -214,25 +214,25 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o;
 		}
 		// Generate an error message...
-		return JsonUtil.checkNumber(v);
+		return JsonUtil.checkNumber(v, key);
 	}
 	@Override
 	public byte getByte(String key) {
 		Object v=get(key);
 		if(v instanceof Number o) {
-			return o.byteValue();
+			return JsonUtil.clampToByte(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkByte(v);
+		return JsonUtil.checkByte(v, key);
 	}
 	@Override
 	public short getShort(String key) {
 		Object v=get(key);
 		if(v instanceof Number o) {
-			return o.shortValue();
+			return JsonUtil.clampToShort(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkShort(v);
+		return JsonUtil.checkShort(v, key);
 	}
 	@Override
 	public int getInt(String key) {
@@ -241,7 +241,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return JsonUtil.clampToInt(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkInt(v);
+		return JsonUtil.checkInt(v, key);
 	}
 	@Override
 	public long getLong(String key) {
@@ -250,7 +250,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return JsonUtil.clampToLong(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkLong(v);
+		return JsonUtil.checkLong(v, key);
 	}
 	@Override
 	public float getFloat(String key) {
@@ -259,7 +259,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o.floatValue();
 		}
 		// Generate an error message...
-		return JsonUtil.checkFloat(v);
+		return JsonUtil.checkFloat(v, key);
 	}
 	@Override
 	public double getDouble(String key) {
@@ -268,7 +268,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o.doubleValue();
 		}
 		// Generate an error message...
-		return JsonUtil.checkDouble(v);
+		return JsonUtil.checkDouble(v, key);
 	}
 	
 	@Override
@@ -278,7 +278,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o;
 		}
 		// Generate an error message...
-		return JsonUtil.checkBoolean(v);
+		return JsonUtil.checkBoolean(v, key);
 	}
 	@Override
 	public Byte getByteObject(String key) {
@@ -287,10 +287,10 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o;
 		}
 		if(v instanceof Number o) {
-			return o.byteValue();
+			return JsonUtil.clampToByte(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkByte(v);
+		return JsonUtil.checkByte(v, key);
 	}
 	@Override
 	public Short getShortObject(String key) {
@@ -299,10 +299,10 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o;
 		}
 		if(v instanceof Number o) {
-			return o.shortValue();
+			return JsonUtil.clampToShort(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkShort(v);
+		return JsonUtil.checkShort(v, key);
 	}
 	@Override
 	public Integer getIntObject(String key) {
@@ -314,7 +314,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return JsonUtil.clampToInt(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkInt(v);
+		return JsonUtil.checkInt(v, key);
 	}
 	@Override
 	public Long getLongObject(String key) {
@@ -326,7 +326,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return JsonUtil.clampToLong(o);
 		}
 		// Generate an error message...
-		return JsonUtil.checkLong(v);
+		return JsonUtil.checkLong(v, key);
 	}
 	@Override
 	public Float getFloatObject(String key) {
@@ -338,7 +338,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o.floatValue();
 		}
 		// Generate an error message...
-		return JsonUtil.checkFloat(v);
+		return JsonUtil.checkFloat(v, key);
 	}
 	@Override
 	public Double getDoubleObject(String key) {
@@ -350,7 +350,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o.doubleValue();
 		}
 		// Generate an error message...
-		return JsonUtil.checkDouble(v);
+		return JsonUtil.checkDouble(v, key);
 	}
 	@Override
 	public BigInteger getBigInteger(String key) {
@@ -358,7 +358,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 		if(v instanceof BigInteger o) {
 			return o;
 		}
-		return JsonUtil.checkBigInteger(v);
+		return JsonUtil.checkBigInteger(v, key);
 	}	
 	@Override
 	public BigDecimal getBigDecimal(String key) {
@@ -366,7 +366,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 		if(v instanceof BigDecimal o) {
 			return o;
 		}
-		return JsonUtil.checkBigDecimal(v);
+		return JsonUtil.checkBigDecimal(v, key);
 	}	
 	@Override
 	public String getString(String key) {
@@ -375,7 +375,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 			return o;
 		}
 		// Generate an error message...
-		return JsonUtil.checkString(v);
+		return JsonUtil.checkString(v, key);
 	}
 	@Override
 	public JsonObject getObject(String key) {
@@ -383,7 +383,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 		if(v instanceof JsonObject o) {
 			return o;
 		}
-		return JsonUtil.checkObject(v);
+		return JsonUtil.checkObject(v, key);
 	}
 	@Override
 	public JsonArray getArray(String key) {
@@ -391,7 +391,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 		if(v instanceof JsonArray a) {
 			return a;
 		}
-		return JsonUtil.checkArray(v);
+		return JsonUtil.checkArray(v, key);
 	}
 
 	@Override
@@ -402,7 +402,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o;
 			}
 			// Generate an error message...
-			return JsonUtil.checkBoolean(v);
+			return JsonUtil.checkBoolean(v, key);
 		}
 		return defaultValue;
 	}
@@ -414,7 +414,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o;
 			}
 			// Generate an error message...
-			return JsonUtil.checkNumber(v);
+			return JsonUtil.checkNumber(v, key);
 		}
 		return defaultValue;
 	}
@@ -423,10 +423,10 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 		Object v=get(key);
 		if(v!=null) {
 			if(v instanceof Number o) {
-				return o.byteValue();
+				return JsonUtil.clampToByte(o);
 			}
 			// Generate an error message...
-			return JsonUtil.checkByte(v);
+			return JsonUtil.checkByte(v, key);
 		}
 		return defaultValue;
 	}
@@ -435,10 +435,10 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 		Object v=get(key);
 		if(v!=null) {
 			if(v instanceof Number o) {
-				return o.shortValue();
+				return JsonUtil.clampToShort(o);
 			}
 			// Generate an error message...
-			return JsonUtil.checkShort(v);
+			return JsonUtil.checkShort(v, key);
 		}
 		return defaultValue;
 	}
@@ -450,7 +450,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return JsonUtil.clampToInt(o);
 			}
 			// Generate an error message...
-			return JsonUtil.checkInt(v);
+			return JsonUtil.checkInt(v, key);
 		}
 		return defaultValue;
 	}
@@ -462,7 +462,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return JsonUtil.clampToLong(o);
 			}
 			// Generate an error message...
-			return JsonUtil.checkLong(v);
+			return JsonUtil.checkLong(v, key);
 		}
 		return defaultValue;
 	}
@@ -474,7 +474,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o.floatValue();
 			}
 			// Generate an error message...
-			return JsonUtil.checkFloat(v);
+			return JsonUtil.checkFloat(v, key);
 		}
 		return defaultValue;
 	}
@@ -486,7 +486,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o.doubleValue();
 			}
 			// Generate an error message...
-			return JsonUtil.checkDouble(v);
+			return JsonUtil.checkDouble(v, key);
 		}
 		return defaultValue;
 	}
@@ -499,7 +499,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o;
 			}
 			// Generate an error message...
-			return JsonUtil.checkBoolean(v);
+			return JsonUtil.checkBoolean(v, key);
 		}
 		return defaultValue;
 	}
@@ -511,10 +511,10 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o;
 			}
 			if(v instanceof Number o) {
-				return o.byteValue();
+				return JsonUtil.clampToByte(o);
 			}
 			// Generate an error message...
-			return JsonUtil.checkByte(v);
+			return JsonUtil.checkByte(v, key);
 		}
 		return defaultValue;
 	}
@@ -526,10 +526,10 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o;
 			}
 			if(v instanceof Number o) {
-				return o.shortValue();
+				return JsonUtil.clampToShort(o);
 			}
 			// Generate an error message...
-			return JsonUtil.checkShort(v);
+			return JsonUtil.checkShort(v, key);
 		}
 		return defaultValue;
 	}
@@ -544,7 +544,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return JsonUtil.clampToInt(o);
 			}
 			// Generate an error message...
-			return JsonUtil.checkInt(v);
+			return JsonUtil.checkInt(v, key);
 		}
 		return defaultValue;
 	}
@@ -559,7 +559,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return JsonUtil.clampToLong(o);
 			}
 			// Generate an error message...
-			return JsonUtil.checkLong(v);
+			return JsonUtil.checkLong(v, key);
 		}
 		return defaultValue;
 	}
@@ -574,7 +574,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o.floatValue();
 			}
 			// Generate an error message...
-			return JsonUtil.checkFloat(v);
+			return JsonUtil.checkFloat(v, key);
 		}
 		return defaultValue;
 	}
@@ -589,7 +589,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o.doubleValue();
 			}
 			// Generate an error message...
-			return JsonUtil.checkDouble(v);
+			return JsonUtil.checkDouble(v, key);
 		}
 		return defaultValue;
 	}
@@ -603,7 +603,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o;
 			}
 			// Generate an error message...
-			return JsonUtil.checkBigInteger(v);
+			return JsonUtil.checkBigInteger(v, key);
 		}
 		return defaultValue;
 	}	
@@ -615,7 +615,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o;
 			}
 			// Generate an error message...
-			return JsonUtil.checkBigDecimal(v);
+			return JsonUtil.checkBigDecimal(v, key);
 		}
 		return defaultValue;
 	}	
@@ -627,7 +627,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o;
 			}
 			// Generate an error message...
-			return JsonUtil.checkString(v);
+			return JsonUtil.checkString(v, key);
 		}
 		return defaultValue;
 	}
@@ -639,7 +639,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return o;
 			}
 			// Generate an error message...
-			return JsonUtil.checkObject(v);
+			return JsonUtil.checkObject(v, key);
 		}
 		return defaultValue;
 	}
@@ -651,7 +651,7 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 				return a;
 			}
 			// Generate an error message...
-			return JsonUtil.checkArray(v);
+			return JsonUtil.checkArray(v, key);
 		}
 		return defaultValue;
 	}

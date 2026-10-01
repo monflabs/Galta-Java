@@ -50,10 +50,10 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 	}
 	
 	public static JsonObject parse(String json) {
-		return (JsonObject)JsonFactory.get().parse(json);
+		return JsonUtil.parsedAs(JsonFactory.get().parse(json), JsonObject.class);
 	}
 	public static JsonObject parse(Reader json) {
-		return (JsonObject)JsonFactory.get().parse(json);
+		return JsonUtil.parsedAs(JsonFactory.get().parse(json), JsonObject.class);
 	}
 	
 	@Override
@@ -221,7 +221,8 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 		return getOrCreateObject(key,null);
 	}
 	public default JsonObject getOrCreateObject(String key, ObjectConsumer action) {
-		if(!containsKey(key)) {
+		// A missing key or a null value: both create the object
+		if(get(key)==null) {
 			JsonObject o = factory().createObject();
 			if(action!=null) {
 				action.accept(o);
@@ -234,7 +235,8 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 		return getOrCreateArray(key,null);
 	}
 	public default JsonArray getOrCreateArray(String key, ArrayConsumer action) {
-		if(!containsKey(key)) {
+		// A missing key or a null value: both create the array
+		if(get(key)==null) {
 			JsonArray o = factory().createArray();
 			if(action!=null) {
 				action.accept(o);
@@ -262,7 +264,6 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 	@Override
 	public Object put(String key, Object value);
 	
-	// To be removed!
 	public default JsonObject putValue(String key, Object value) {
 		put(key,value);
 		return this;
@@ -332,6 +333,9 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 		return JsonUtil.asNumber(get(key));
 	}
 	public default Number asNumber(String key, int defaultValue) {
+		return JsonUtil.asNumber(get(key),defaultValue);
+	}
+	public default Number asNumber(String key, Number defaultValue) {
 		return JsonUtil.asNumber(get(key),defaultValue);
 	}
 	

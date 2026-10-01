@@ -83,10 +83,10 @@ public interface JsonContainer extends Cloneable {
 	//
 	// Shortcuts
 	public static JsonContainer parse(String json) {
-		return (JsonContainer)JsonFactory.get().parse(json);
+		return JsonUtil.parsedAs(JsonFactory.get().parse(json), JsonContainer.class);
 	}
 	public static JsonContainer parse(Reader json) {
-		return (JsonContainer)JsonFactory.get().parse(json);
+		return JsonUtil.parsedAs(JsonFactory.get().parse(json), JsonContainer.class);
 	}
 
 	public default String stringify() {
@@ -229,7 +229,7 @@ public interface JsonContainer extends Cloneable {
 			}
     	} else if(value instanceof JsonArray a) {
     		int idx = a.actualIndex(index);
-    		if(a.has(idx)) {
+    		if(idx>=0 && idx<a.size()) { // idx is already adjusted: not has(idx)
     			values.add(a.get(idx));
     		}
     		int count = a.size();
@@ -247,7 +247,7 @@ public interface JsonContainer extends Cloneable {
 			}
     	} else if(value instanceof JsonArray a) {
     		int idx = a.actualIndex(index);
-    		if(a.has(idx)) {
+    		if(idx>=0 && idx<a.size()) { // idx is already adjusted: not has(idx)
     			a.set(idx,v);
     		}
 			int sz = a.size();

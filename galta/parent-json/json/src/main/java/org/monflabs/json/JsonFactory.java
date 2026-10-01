@@ -42,7 +42,7 @@ import org.monflabs.util.StringUtil;
 public abstract class JsonFactory {
 	
 	public static final class StaticFactory implements JsonFactoryService {
-		private JsonFactory instance;
+		private final JsonFactory instance;
 		StaticFactory(JsonFactory instance) {
 			this.instance = instance;
 		}
@@ -354,12 +354,22 @@ public abstract class JsonFactory {
 	// Factories
 	//
 	
+	/**
+	 * An object from key/value pairs: of("a", 1, "b", 2). The keys must be strings and
+	 * every key needs a value (a JsonException otherwise).
+	 */
 	public JsonObject of(Object...values) {
+		if((values.length&1)!=0) {
+			throw new JsonException(null,"JsonObject.of() takes key/value pairs, but got an odd number of arguments ({0}): the key {1} has no value",
+					values.length,JsonUtil.toDebugString(values[values.length-1]));
+		}
 		JsonObject o = createObject();
 		for(int i=0; i<values.length; i+=2) {
-			String key = (String)values[i];
-			Object value = (i+1)<values.length ? values[i+1] : null;
-			o.putValue(key, value);
+			if(!(values[i] instanceof String key)) {
+				throw new JsonException(null,"JsonObject.of() takes key/value pairs, but the key at position {0} is not a String: {1}",
+						i,JsonUtil.toDebugString(values[i]));
+			}
+			o.putValue(key, values[i+1]);
 		}
 		return o;
 	}

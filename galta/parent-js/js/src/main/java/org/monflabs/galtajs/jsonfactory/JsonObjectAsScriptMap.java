@@ -23,7 +23,6 @@ import org.monflabs.galtajs.jsonfactory.internal.JSObjectInternal;
 import org.monflabs.json.JsonArray;
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.JsonUtil;
-import org.monflabs.json.java.JavaJsonContainer;
 import org.monflabs.json.jsonpath.JsonValues;
 
 
@@ -32,7 +31,7 @@ import org.monflabs.json.jsonpath.JsonValues;
  * 
  * Content copied: from org.monflabs.json.java.JsonObjectAsLinkedMap on top of BaseJsonObjectMap 
  */
-public abstract class JsonObjectAsScriptMap extends StringPropertyMap implements JsonObject, JavaJsonContainer, JSObjectInternal {
+public abstract class JsonObjectAsScriptMap extends StringPropertyMap implements JsonObject, JSObjectInternal {
 	
 	private String reference;
 
