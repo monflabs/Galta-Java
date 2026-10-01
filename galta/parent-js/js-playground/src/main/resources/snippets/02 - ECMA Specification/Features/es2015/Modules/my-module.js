@@ -7,7 +7,7 @@ function add(...args) {
     return args.reduce((num, tot) => tot + num);
 }
 
-export function multiply(...args) {
+function multiply(...args) {
     return args.reduce((num, tot) => tot * num);
 }
 
