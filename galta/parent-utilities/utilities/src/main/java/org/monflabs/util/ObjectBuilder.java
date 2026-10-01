@@ -15,21 +15,37 @@
  */
 package org.monflabs.util;
 
-import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.monflabs.util.builder.Required;
 
 /**
  * Base class for builders.
  * <p>
- * {@link #build()} always calls {@link #validate()}. The {@link Required} field annotations are a
- * development-time check only: they are validated when {@link DebugMode#isDebugMode()} is true
- * (a debugger is attached) and are <b>not</b> checked in production. A builder that must reject
- * missing values in production has to check them in {@link #validate()}.
- */ 
+ * {@link #build()} checks the fields annotated with {@link Required} (none may be null),
+ * then calls {@link #validate()}, then {@link #_build()}. The {@link Required} check used to
+ * run only with a debugger attached ({@link DebugMode}): it now always runs.
+ */
 public abstract class ObjectBuilder<T> {
-	
+
+	// The @Required fields of each builder class, its super classes included
+	private static final ClassValue<Field[]> REQUIRED_FIELDS = new ClassValue<>() {
+		@Override
+		protected Field[] computeValue(Class<?> type) {
+			List<Field> required = new ArrayList<>();
+			for( Class<?> c = type; c!=null && c!=Object.class; c=c.getSuperclass() ) {
+				for(Field f: c.getDeclaredFields()) {
+					if(f.isAnnotationPresent(Required.class)) {
+						f.setAccessible(true);
+						required.add(f);
+					}
+				}
+			}
+			return required.toArray(new Field[required.size()]);
+		}
+	};
 
 //	// Convenience for the fluid patter
 //	public ObjectBuilder<T> configure(Consumer<ObjectBuilder<T>> configurator) {
@@ -37,43 +53,32 @@ public abstract class ObjectBuilder<T> {
 //		return this;
 //	}
 
-	
+
 	protected void validate() {
 	}
 
 	public final T build() {
-		if(DebugMode.isDebugMode()) {
-			_validateAnnotations();
-		}
+		_validateAnnotations();
 		validate();
 		return _build();
 	}
 
+	/**
+	 * Checks the fields annotated with {@link Required}.
+	 * @throws ObjectBuilderException naming the first required field that is null
+	 */
 	protected void _validateAnnotations() {
 		try {
-			for( Class<?> c = getClass(); c!=Object.class; c=c.getSuperclass() ) {
-				Field[] fields = c.getDeclaredFields();
-				for(int i=0; i<fields.length; i++) {
-					Field f = fields[i];
-					Annotation[] annotations = f.getAnnotations();
-					if(annotations.length>0) {
-						f.setAccessible(true);
-						Object v = f.get(this);
-						for(Annotation a: annotations) {
-							if(a.annotationType()==Required.class) {
-								if(v==null) {
-									throw new ObjectBuilderException(null, "Field {0} is required", f.getName());
-								}
-							}
-						}
-					}
+			for(Field f: REQUIRED_FIELDS.get(getClass())) {
+				if(f.get(this)==null) {
+					throw new ObjectBuilderException(null, "Field {0} is required", f.getName());
 				}
 			}
 		} catch(IllegalAccessException e) {
 			throw new ObjectBuilderException(e, "Internal error while validating the builder annotations");
 		}
 	}
-	
+
 	protected abstract T _build();
 
 	

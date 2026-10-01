@@ -211,7 +211,6 @@ public class RuntimeExamples extends ProjectTestCase {
 		}
 		@Override
 		protected void validate() {
-			assertNotNull(host, "host");
 			if (port <= 0) {
 				throw exception("Invalid port {0}", port);
 			}
@@ -227,7 +226,7 @@ public class RuntimeExamples extends ProjectTestCase {
 		assertEquals(8080, c.port);
 
 		ObjectBuilderException e = assertThrows(ObjectBuilderException.class, () -> new ConnectionBuilder().build());
-		assertEquals("Object host cannot be null", e.getMessage());
+		assertEquals("Field host is required", e.getMessage());   // @Required
 		e = assertThrows(ObjectBuilderException.class, () -> new ConnectionBuilder().host("h").port(0).build());
 		assertEquals("Invalid port 0", e.getMessage());
 	}

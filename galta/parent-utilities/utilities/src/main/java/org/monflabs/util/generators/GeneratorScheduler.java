@@ -33,6 +33,22 @@ public class GeneratorScheduler {
 		return Executors.newVirtualThreadPerTaskExecutor();
 	}
 
+	/**
+	 * An unbounded executor of daemon platform threads, for generator bodies that yield
+	 * while holding a monitor ({@code synchronized}): on JDK 21 to 23 such a virtual
+	 * thread pins its carrier thread for as long as it is parked, and the application
+	 * deadlocks once every carrier is pinned (fixed in JDK 24 by JEP 491). Each parked
+	 * body then holds a platform thread, so close the generators.
+	 * Pass it to {@link GeneratorImpl#create(ExecutorService, java.util.function.Function)}.
+	 */
+	public static ExecutorService createPlatformExecutor() {
+		return Executors.newCachedThreadPool(r -> {
+			Thread t = new Thread(r, "generator");
+			t.setDaemon(true);
+			return t;
+		});
+	}
+
 	public static synchronized ExecutorService getExecutorService() {
 		if(executor==null) {
 			executor = createExecutor();

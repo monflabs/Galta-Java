@@ -62,14 +62,32 @@ public class BuilderAndPerformanceTest extends ProjectTestCase {
 		assertTrue(e.getMessage(), e.getMessage().contains("Invalid age -1"));
 	}
 
-	public void testRequiredIsDebugOnly() throws Exception {
-		// Documented: @Required is a development-time check, only enforced in debug mode
-		PersonBuilder b = new PersonBuilder().age(3);
-		if(DebugMode.isDebugMode()) {
-			assertThrows(ObjectBuilderException.class, () -> b.build());
-		} else {
-			assertEquals("null:3", b.build());
+	static class EmployeeBuilder extends PersonBuilder {
+		@Required
+		String company;
+		@SuppressWarnings("unused")
+		String optional;
+		EmployeeBuilder company(String company) {
+			this.company = company;
+			return this;
 		}
+		@Override
+		protected String _build() {
+			return super._build()+"@"+company;
+		}
+	}
+
+	public void testRequiredAlwaysChecked() throws Exception {
+		// @Required used to be checked only with a debugger attached
+		PersonBuilder b = new PersonBuilder().age(3);
+		ObjectBuilderException e = assertThrows(ObjectBuilderException.class, () -> b.build());
+		assertEquals("Field name is required", e.getMessage());
+		// Inherited fields are checked too
+		e = assertThrows(ObjectBuilderException.class, () -> new EmployeeBuilder().company("acme").age(3).build());
+		assertEquals("Field name is required", e.getMessage());
+		e = assertThrows(ObjectBuilderException.class, () -> ((EmployeeBuilder)new EmployeeBuilder().name("ann").age(3)).build());
+		assertEquals("Field company is required", e.getMessage());
+		assertEquals("ann:3@acme", ((EmployeeBuilder)new EmployeeBuilder().company("acme").name("ann").age(3)).build());
 	}
 
 	private static String captureOut(Runnable r) {

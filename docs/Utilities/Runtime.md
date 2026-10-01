@@ -32,9 +32,13 @@ try (Generator<Integer, String> g = GeneratorImpl.create(y -> {
 
 ### How it runs
 
-The body runs on its own thread and hands each value to the consumer through a rendezvous, so the body and the consumer never run at the same time. `GeneratorImpl.create(body)` uses a shared executor that creates a virtual thread per generator when the JVM has them (Java 21 and later) and falls back to a cached thread pool otherwise (it then prints a notice to `System.err`). `create(executor, body)` uses the executor you pass. Each step is a thread hand-off: cheap with virtual threads, but still far more expensive than a hand-written iterator, so generators suit bodies whose control flow is hard to turn into a state machine.
+The body runs on its own thread and hands each value to the consumer through a rendezvous, so the body and the consumer never run at the same time. `GeneratorImpl.create(body)` uses a shared executor (`GeneratorScheduler.getExecutorService()`) that creates a virtual thread per generator. `create(executor, body)` uses the executor you pass. Each step is a thread hand-off: cheap with virtual threads, but still far more expensive than a hand-written iterator, so generators suit bodies whose control flow is hard to turn into a state machine.
 
-Nothing runs at creation time: the body starts on the first `hasNext()`, `next()`, `next(value)`, `throwInto` or `returnWith`.
+Nothing runs at creation time: the body starts on the first `hasNext()`, `next()`, `next(value)`, `throwInto` or `returnWith`. Its thread is created then, so an `InheritableThreadLocal` is inherited from the thread that first resumes the generator, not from the one that created it; plain thread locals of the consumer are never visible to the body.
+
+!> **The executor must be unbounded.** A body paused in `yield` keeps its thread until it completes or is closed. With a bounded pool (`Executors.newFixedThreadPool(n)`), once `n` generators are paused the next one never starts and its consumer waits forever; a warning is logged (`System.Logger`) when a body has not started after 10 seconds. Use the default executor, a virtual-thread-per-task executor, or `GeneratorScheduler.createPlatformExecutor()`.
+
+!> **Don't yield inside `synchronized` code on JDK 21 to 23.** A virtual thread that parks while holding a monitor pins its carrier thread, and the default executor runs bodies on virtual threads. A body paused in `yield` inside a `synchronized` block or method keeps its carrier pinned until it is resumed; once every carrier (one per core by default) is pinned, no virtual thread can run any more and the application deadlocks. JDK 24 removes the limitation (JEP 491). Otherwise use a `ReentrantLock`, or run such bodies on platform threads with `GeneratorImpl.create(GeneratorScheduler.createPlatformExecutor(), body)`.
 
 Sample: `doc_examples/util/RuntimeExamples.java` (`testGeneratorIsLazy`)
 
@@ -132,6 +136,10 @@ try (Generator<Integer, Void> g = GeneratorImpl.create(y -> {
 ### Closing
 
 A body paused in `yield` keeps its thread parked. `close()` (or try-with-resources) resumes it with `returnWith(null)` so its `finally` blocks run and the thread ends. It is safe on a generator that never started or has already completed. Resuming a generator from inside its own body (calling its `next()` while it runs) throws `GeneratorExecutingException` instead of deadlocking.
+
+If the body yields again while it unwinds (a `yield` in a `finally` block, or a `catch` that swallows the `GeneratorReturnSignal`), `close()` does not wait: the body is driven in the background. It is asked to return once more; if it yields yet again, the `yield` throws a `GeneratorAbandonedError` (an `Error`, so that a `catch (RuntimeException e)` lets it through); a body that still yields after that is left parked in that `yield`, rather than having both threads spin forever.
+
+Interrupting the consumer while it waits for the body, or resuming the generator while the consumer's interrupt flag is set, abandons the generator the same way: the call throws a `java.util.concurrent.CancellationException`, the interrupt flag stays set, and the generator is then completed (`hasNext()` returns `false`).
 
 Sample: `doc_examples/util/RuntimeExamples.java` (`testCloseAndExecutor`)
 
@@ -244,7 +252,7 @@ assertEquals("outer\ninner", Console.getMessage(e));   // the whole cause chain
 
 ## ObjectBuilder
 
-`ObjectBuilder<T>` is a base class for fluent builders. A subclass holds the settings, implements `_build()`, and may override `validate()`; `build()` calls `validate()` and then `_build()`. `exception(msg, args...)` and `assertNotNull(value, name)` create or throw an `ObjectBuilderException` with a `StringFormat` message.
+`ObjectBuilder<T>` is a base class for fluent builders. A subclass holds the settings, implements `_build()`, and may override `validate()`; `build()` checks the `@Required` fields, then calls `validate()` and `_build()`. `exception(msg, args...)` and `assertNotNull(value, name)` create or throw an `ObjectBuilderException` with a `StringFormat` message.
 
 Sample: `doc_examples/util/RuntimeExamples.java` (`Connection`, `ConnectionBuilder`, `testObjectBuilder`)
 
@@ -273,7 +281,6 @@ public static class ConnectionBuilder extends ObjectBuilder<Connection> {
     }
     @Override
     protected void validate() {
-        assertNotNull(host, "host");
         if (port <= 0) {
             throw exception("Invalid port {0}", port);
         }
@@ -288,9 +295,9 @@ Connection c = new ConnectionBuilder().host("example.com").port(8080).build();
 assertEquals(8080, c.port);
 
 ObjectBuilderException e = assertThrows(ObjectBuilderException.class, () -> new ConnectionBuilder().build());
-assertEquals("Object host cannot be null", e.getMessage());
+assertEquals("Field host is required", e.getMessage());   // @Required
 e = assertThrows(ObjectBuilderException.class, () -> new ConnectionBuilder().host("h").port(0).build());
 assertEquals("Invalid port 0", e.getMessage());
 ```
 
-Fields annotated with `@Required` (`org.monflabs.util.builder`) are checked for `null` by `build()` only when the JVM runs with a debugger agent (a `jdwp` argument), as a development aid. Do not rely on the annotation for validation; check in `validate()` as above.
+Fields annotated with `@Required` (`org.monflabs.util.builder`), including the inherited ones, are checked for `null` by every `build()`: a `null` one throws an `ObjectBuilderException` "Field name is required". (It used to run only with a debugger attached.) Other rules belong in `validate()`, as above.
