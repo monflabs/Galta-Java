@@ -102,7 +102,7 @@ doc.getObject("store").getObject("bicycle");   // {"color":"blue","price":19.95,
 `read(path, type)` goes through the mapping provider:
 
 - For `Map`, `List` and `Object`, it *copies* the result into plain `LinkedHashMap` (key order kept) / `ArrayList` instances. `JsonObject` / `JsonArray` return the GaltaJSON value itself.
-- Numbers convert between numeric types (`Integer`, `Long`, `Double`, `BigDecimal`...), and a numeric string converts to a number. A conversion that would lose information, a fraction or an out-of-range value, throws a Jayway `MappingException` instead of truncating.
+- Numbers convert between numeric types (`Integer`, `Long`, `Double`, `BigDecimal`...), and a numeric string converts to a number. A conversion that would lose information throws a Jayway `MappingException` instead of truncating or rounding: a fraction or an out-of-range value to an integer type, and to `Double`/`Float` a value whose decimal form is not kept (`9007199254740993`, a 20-digit `BigDecimal`, `1e300` as a float). `0.1` converts, as the double's shortest form is `0.1`.
 - `String` gives the string form of any value; `Boolean` accepts a boolean or `"true"`/`"false"`.
 - Any other incompatible conversion throws a `MappingException`.
 - A `TypeRef` maps to its raw type (`new TypeRef<List<String>>(){}` maps like `List.class`); the elements are not converted.
@@ -118,7 +118,7 @@ String color = JsonPath.using(conf).parse(doc).read("$.store.bicycle.color", Str
 
 ## `JaywayJsonPath`
 
-`JaywayJsonPath` wraps a compiled Jayway path and returns its results as `JsonValues`, the result type of the built-in engine, so both can be used interchangeably. A path that matches nothing gives an empty `JsonValues` rather than an exception. It always reads with `MonfLabsJsonPathConfiguration.configuration()`, whatever Jayway's JVM-wide defaults are, so no `initialize()` call is needed. JSON Pointers are not supported (`read(json, true)` throws a `JsonException`).
+`JaywayJsonPath` wraps a compiled Jayway path and returns its results as `JsonValues`, the result type of the built-in engine, so both can be used interchangeably. The result has the same shape as with the built-in engine: a path that matches nothing gives an empty `JsonValues` (`EMPTY`) rather than an exception, even an indefinite one, a single match is a `VALUE`, and several are a `LIST`. It always reads with `MonfLabsJsonPathConfiguration.configuration()`, whatever Jayway's JVM-wide defaults are, so no `initialize()` call is needed. JSON Pointers are not supported (`read(json, true)` throws a `JsonException`).
 
 Sample: `doc_examples/jsonpath/JaywayExamples.java` (`testJaywayJsonPath`)
 

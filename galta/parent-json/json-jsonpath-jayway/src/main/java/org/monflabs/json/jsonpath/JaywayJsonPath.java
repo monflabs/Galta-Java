@@ -63,7 +63,11 @@ public class JaywayJsonPath {
 				if(jsonPath.isDefinite()) {
 					return new JsonValues((Object)jsonPath.read(json, MonfLabsJsonPathConfiguration.configuration()));
 				} else {
-					return new JsonValues((List<?>)jsonPath.read(json, MonfLabsJsonPathConfiguration.configuration()));
+					// Like the built-in engine: no match is EMPTY, a single match a VALUE
+					List<Object> l = jsonPath.read(json, MonfLabsJsonPathConfiguration.configuration());
+					JsonValues r = new JsonValues();
+					r._addCollection(l);
+					return r;
 				}
 			} catch(PathNotFoundException ex) {
 				return new JsonValues();

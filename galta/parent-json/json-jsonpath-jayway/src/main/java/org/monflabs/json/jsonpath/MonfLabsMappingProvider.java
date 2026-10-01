@@ -38,8 +38,9 @@ import com.jayway.jsonpath.spi.mapper.MappingProvider;
  * JSON containers are returned as is when a Galta container type is requested, or converted
  * to <code>List</code>/<code>Map</code> (key order preserved) for <code>Object</code>,
  * <code>List</code> and <code>Map</code>. Numbers are converted between numeric types, but a
- * conversion that would lose information (a fraction, or a value out of range) throws a
- * {@link MappingException}, as does any other incompatible conversion. Any value maps to
+ * conversion that would lose information (a fraction, a value out of range, or digits that a
+ * double or a float cannot hold) throws a {@link MappingException}, as does any other
+ * incompatible conversion. Any value maps to
  * <code>String</code> through its string form.
  */
 public class MonfLabsMappingProvider implements MappingProvider {
@@ -129,11 +130,8 @@ public class MonfLabsMappingProvider implements MappingProvider {
      * Returns null if the target is not a supported numeric type.
      */
     private static Object convertNumber(Number n, Class<?> t) {
-    	if(t==Double.class) {
-    		return n.doubleValue();
-    	}
-    	if(t==Float.class) {
-    		return n.floatValue();
+    	if(t==Double.class || t==Float.class) {
+    		return toFloatingExact(n, t==Float.class);
     	}
     	if(t==BigDecimal.class) {
     		return toBigDecimal(n);
@@ -158,6 +156,31 @@ public class MonfLabsMappingProvider implements MappingProvider {
     		}
     	}
     	return null;
+    }
+    /**
+     * A double or a float with the same (decimal) value: 0.1 converts, as its shortest
+     * representation is 0.1, but 9007199254740993 (2^53+1) or 1e300 as a float do not.
+     */
+    private static Object toFloatingExact(Number n, boolean toFloat) {
+    	if(n instanceof Double || n instanceof Float) {
+    		double d = n.doubleValue();
+    		if(Double.isNaN(d) || Double.isInfinite(d)) {
+    			return toFloat ? (Object)(float)d : (Object)d;
+    		}
+    	}
+    	BigDecimal exact = toBigDecimal(n);
+    	if(toFloat) {
+    		float f = n.floatValue();
+    		if(Float.isInfinite(f) || new BigDecimal(Float.toString(f)).compareTo(exact)!=0) {
+    			throw new MappingException("Cannot convert "+n+" to a float without losing precision");
+    		}
+    		return f;
+    	}
+    	double d = n.doubleValue();
+    	if(Double.isInfinite(d) || BigDecimal.valueOf(d).compareTo(exact)!=0) {
+    		throw new MappingException("Cannot convert "+n+" to a double without losing precision");
+    	}
+    	return d;
     }
     private static BigDecimal toBigDecimal(Number n) {
     	if(n instanceof BigDecimal bd) return bd;

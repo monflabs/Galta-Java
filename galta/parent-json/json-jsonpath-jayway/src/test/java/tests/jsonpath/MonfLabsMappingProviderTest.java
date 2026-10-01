@@ -27,6 +27,7 @@ import org.monflabs.json.JsonArray;
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.jsonpath.JaywayJsonPath;
 import org.monflabs.json.jsonpath.JsonValues;
+import org.monflabs.json.jsonpath.JsonPathFactory;
 import org.monflabs.json.jsonpath.MonfLabsJsonPathConfiguration;
 
 import com.jayway.jsonpath.Configuration;
@@ -136,5 +137,47 @@ public class MonfLabsMappingProviderTest extends ProjectTestCase {
 		} finally {
 			MonfLabsJsonPathConfiguration.initialize();
 		}
+	}
+
+	// Lossy Long/BigDecimal -> Double/Float conversions used to be accepted
+	public void testFloatingConversionsAreExact() {
+		JsonObject o = JsonObject.parse("{\"l\":9007199254740993,\"bd\":0.1,\"f\":0.1,\"big\":1e300}");
+		o.put("l", 9007199254740993L);
+		o.put("bd", new BigDecimal("0.1"));
+		o.put("prec", new BigDecimal("0.12345678901234567890123"));
+		com.jayway.jsonpath.DocumentContext ctx = JsonPath.parse(o, CONF);
+		try {
+			ctx.read("$.l", Double.class);
+			fail("2^53+1 converted to a double");
+		} catch(MappingException expected) {
+		}
+		try {
+			ctx.read("$.prec", Double.class);
+			fail("23 digits converted to a double");
+		} catch(MappingException expected) {
+		}
+		try {
+			ctx.read("$.big", Float.class);
+			fail("1e300 converted to a float");
+		} catch(MappingException expected) {
+		}
+		assertEquals(Double.valueOf(0.1), ctx.read("$.bd", Double.class));
+		assertEquals(Float.valueOf(0.1f), ctx.read("$.f", Float.class));
+		assertEquals(Double.valueOf(9007199254740992.0), JsonPath.parse(JsonObject.of("l", 9007199254740992L), CONF).read("$.l", Double.class));
+	}
+
+	// An indefinite path used to always give a LIST, even for no or one match
+	public void testIndefiniteResultShapes() {
+		JsonObject doc = JsonObject.parse(JSON);
+		JsonValues none = new JaywayJsonPath(JsonPath.compile("$.arr[?(@ > 10)]")).read(doc);
+		assertTrue(none.isEmpty());
+		assertEquals(JsonValues.TYPE.EMPTY, none.getType());
+		JsonValues one = new JaywayJsonPath(JsonPath.compile("$.arr[?(@ > 2)]")).read(doc);
+		assertEquals(JsonValues.TYPE.VALUE, one.getType());
+		assertEquals(3, one.intValue());
+		JsonValues many = new JaywayJsonPath(JsonPath.compile("$.arr[*]")).read(doc);
+		assertEquals(JsonValues.TYPE.LIST, many.getType());
+		// The same shapes as the built-in engine
+		assertEquals(JsonPathFactory.get().getJsonPath("$.arr[?(@ > 2)]").read(doc).getType(), one.getType());
 	}
 }
