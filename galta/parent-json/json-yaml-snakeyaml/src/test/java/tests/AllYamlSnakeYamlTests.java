@@ -27,6 +27,7 @@ public class AllYamlSnakeYamlTests extends TestSuite {
 		
 		suite.addTestSuite(SnakeYamlKeysTest.class);
 		suite.addTestSuite(SnakeYamlValuesTest.class);
+		suite.addTestSuite(tests.yaml.SnakeYamlSafetyTest.class);
 
 		suite.addTestSuite(YamlExamples.class);
 

@@ -15,6 +15,7 @@ Everything goes through the static methods of `org.monflabs.json.yaml.SnakeYaml`
 |---|---|
 | `parse(String)`, `parse(Reader)`, `parse(InputStream)` | Parses one YAML document and returns its root value. |
 | `parse(JsonFactory, ...)` | Same, creating the objects and arrays with a given factory. |
+| `parse(JsonFactory, ..., SnakeYaml.Options)` | Same, with other limits (see [Limits](#limits)). |
 | `stringify(Object)` | Writes a value as block-style YAML. |
 | `stringify(Object, DumpSettings)` | Writes with SnakeYAML Engine settings. |
 
@@ -36,7 +37,7 @@ o.getObject("server").getArray("ports").getInt(1);        // -> 443
 o.get("owner");                                           // -> null, the key is present
 ```
 
-The root can be any value: `parse("- a\n- b")` returns a `JsonArray`, `parse("hello")` the string `"hello"`, and an empty input `null`. A stream holding several documents (`---`) is rejected with an exception.
+The root can be any value: `parse("- a\n- b")` returns a `JsonArray`, `parse("hello")` the string `"hello"`, and an empty input `null`. A stream holding several documents (`---`) is rejected. Every error, a YAML syntax error included, is a `JsonException` (with the SnakeYAML exception as its cause).
 
 ## Stringifying
 
@@ -63,7 +64,7 @@ SnakeYaml.stringify(o);
 SnakeYaml.parse(SnakeYaml.stringify(o));                  // equals o
 ```
 
-Strings that would read back as another type are quoted, and multi-line strings use a literal block. For a compact output, pass `DumpSettings`:
+Strings that would read back as another type are quoted, and multi-line strings use a literal block. This includes the strings that only a YAML 1.1 parser (SnakeYAML 1.x, PyYAML...) would take for another type: `yes`, `no`, `on`, `off`, `~`, `0x1F`, `017`, `1_000`, `12:30:00`, dates... are written `'yes'`, `'0x1F'`.... A `BigDecimal` is written with all its digits and reads back exactly. `NaN` and infinite numbers, which JSON can't hold (and that `parse()` rejects), throw a `JsonException`. For a compact output, pass `DumpSettings`:
 
 ```java
 DumpSettings flow = DumpSettings.builder()
@@ -77,7 +78,7 @@ SnakeYaml.stringify(JsonObject.of("a", 1, "b", JsonArray.of("x", "y")), flow);
 
 ### Keys
 
-YAML keys can be any scalar, while a `JsonObject` has string keys. Non-string keys are converted with `String.valueOf`, the way JSON and JavaScript treat property names:
+YAML keys can be any scalar, while a `JsonObject` has string keys. Non-string keys are converted with `String.valueOf`, the way JSON and JavaScript treat property names. Two keys that end up the same (`1` and `"1"`) are rejected with a `JsonException` rather than overwriting each other, as is a collection used as a key (`? [a, b]`):
 
 Sample: `doc_examples/yaml/YamlExamples.java` (`testNonStringKeys`)
 
@@ -106,6 +107,7 @@ Sample: `doc_examples/yaml/YamlExamples.java` (`testScalars`)
 | `12345678901` | `Long` |
 | `123456789012345678901234567890` | `BigInteger` |
 | `1.5`, `1e3` | `Double` |
+| `3.14159265358979323846` (more digits than a double holds) | `BigDecimal`, exact |
 | `.inf`, `-.inf`, `.nan` | Rejected with a `JsonException`: JSON has no infinity or NaN. |
 | `true`, `false` | `Boolean` |
 | `null` | `null` |
@@ -121,7 +123,7 @@ Sample: `doc_examples/yaml/YamlExamples.java` (`testScalars`)
 | Merge keys (`<<: *a`) | Not supported (YAML 1.2): `<<` is kept as a regular key. |
 | Multiple documents (`---`) | Rejected: `expected a single document in the stream`. |
 | Explicit tag `!!set` | A JSON array of the set members, in order. |
-| Explicit tag `!!binary`, other non JSON values | Rejected with a `JsonException`. |
+| Explicit tag `!!binary`, `!!omap`, `!!pairs`, a custom tag (`!custom`), other non JSON values | Rejected with a `JsonException`. |
 
 Sample: `doc_examples/yaml/YamlExamples.java` (`testDocumentFeatures`)
 
@@ -143,4 +145,23 @@ o.get("text");                          // -> "line 1\nline 2\n"
 o.get("folded");                        // -> "a b\n"
 o.get("base") == o.get("copy");         // -> true
 o.get("merged");                        // -> {"<<":{"x":1},"y":2}
+```
+
+## Limits
+
+`SnakeYaml.Options` sets the limits of a parse; the defaults apply to the methods without options.
+
+| Option | Default | Exceeded |
+|---|---|---|
+| `setCodePointLimit(int)` | 3 MB (3&nbsp;145&nbsp;728 code points, the SnakeYAML Engine limit) | A larger input is rejected with a `JsonException`: raise it to read bigger documents. |
+| `setMaxAliasesForCollections(int)` | 50 | More aliases to collections are rejected. |
+| `setMaxExpandedSize(long)` | 10&nbsp;000&nbsp;000 | The number of values once the aliases are expanded. A few nested aliases are enough to make a tiny document expand to billions of values ("billion laughs") when it is later copied or stringified (to JSON, whose output has no aliases), so such a document is rejected when parsed. |
+
+Sample: `tests/yaml/SnakeYamlSafetyTest.java` (`testAliasAmplificationIsRejected`, `testCodePointLimit`)
+
+```java
+SnakeYaml.Options options = new SnakeYaml.Options()
+        .setCodePointLimit(20 * 1024 * 1024)
+        .setMaxExpandedSize(100_000_000L);
+Object value = SnakeYaml.parse(JsonFactory.get(), bigYaml, options);
 ```
