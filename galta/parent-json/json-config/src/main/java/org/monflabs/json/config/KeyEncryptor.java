@@ -47,8 +47,9 @@ import org.monflabs.util.config.ConfigException;
  * the same value twice gives different results, and a tampered value fails to decrypt.
  * <p>
  * The legacy format written by earlier versions (<code>[[&lt;base64&gt;]]</code>, AES-CBC with a
- * zero IV and a truncated SHA-1 key) is still decrypted, and re-encrypted with the current format
- * the next time the value is encrypted.
+ * zero IV and a truncated SHA-1 key) is still decrypted, and {@link #needsReencryption(String)}
+ * reports it, so a (writable) configuration re-encrypts it with the current format when it is
+ * loaded.
  * <p>
  * A plain value is recognised as encrypted only when it has one of these exact shapes: a
  * <code>[[v2:...]]</code> value with a well-formed payload, or a legacy <code>[[...]]</code>
@@ -133,6 +134,14 @@ public class KeyEncryptor implements ValueEncryptor {
 			return b!=null && b.length>=V2_MIN_LENGTH;
 		}
 		return isLegacyPayload(content);
+	}
+	
+	/**
+	 * A value in the legacy format (AES-CBC with a zero IV) has to be encrypted again.
+	 */
+	@Override
+	public boolean needsReencryption(String s) {
+		return isEncrypted(s) && !s.startsWith(ENC_START+ENC_V2);
 	}
 	
 	private static boolean isLegacyPayload(String content) {

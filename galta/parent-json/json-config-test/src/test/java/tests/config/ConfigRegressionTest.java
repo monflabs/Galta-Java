@@ -163,4 +163,103 @@ public class ConfigRegressionTest extends ProjectTestCase {
 		assertEquals("{ \"password\": \"plain\" }", new String(store.get(null)));
 		assertFalse(c.save());
 	}
+
+	private static final String LEGACY = "[[+hMf4ve48Pr2N6q4ZQ6dVn/6bfkOzPSgiQGLyyIC/XI=]]";
+
+	public void testLegacyValueReencryptedOnLoad() throws Exception {
+		KeyEncryptor enc = new KeyEncryptor("akey", (k) -> k[k.length-1].equals("password"));
+		assertTrue(enc.needsReencryption(LEGACY));
+		InMemoryConfig c = InMemoryConfig.newBuilder()
+								.content("{ \"password\": \""+LEGACY+"\" }")
+								.encryptor(enc)
+								.build();
+		assertEquals("A value to encrypt", c.getString("password"));
+		String stored = (String)parse(c.getResourceAsString(null)).get("password");
+		assertTrue(stored, stored.startsWith("[[v2:"));
+		assertFalse(enc.needsReencryption(stored));
+		assertEquals("A value to encrypt", enc.decryptValue(stored));
+	}
+
+	public void testArrayValuesAreEncrypted() throws Exception {
+		KeyEncryptor enc = new KeyEncryptor("akey", (k) -> k[0].equals("secrets"));
+		InMemoryConfig c = InMemoryConfig.newBuilder()
+								.content("{ \"secrets\": [ \"a\", [ \"b\" ], { \"x\": \"c\" }, 3 ], \"plain\": [ \"d\" ] }")
+								.encryptor(enc)
+								.build();
+		JsonObject stored = parse(c.getResourceAsString(null));
+		org.monflabs.json.JsonArray a = (org.monflabs.json.JsonArray)stored.get("secrets");
+		assertEquals("a", enc.decryptValue((String)a.get(0)));
+		assertEquals("b", enc.decryptValue((String)((org.monflabs.json.JsonArray)a.get(1)).get(0)));
+		assertEquals("c", enc.decryptValue((String)((JsonObject)a.get(2)).get("x")));
+		assertEquals(3, ((Number)a.get(3)).intValue());
+		assertEquals("d", ((org.monflabs.json.JsonArray)stored.get("plain")).get(0));
+		// Decrypted in memory
+		org.monflabs.json.JsonArray m = (org.monflabs.json.JsonArray)c.getContent().get("secrets");
+		assertEquals("a", m.get(0));
+		assertEquals("c", ((JsonObject)m.get(2)).get("x"));
+	}
+
+	public void testFailedReloadKeepsContent() throws Exception {
+		java.util.Map<String,byte[]> store = new java.util.HashMap<>();
+		store.put(null, "{ \"a\": 1 }".getBytes());
+		boolean[] fail = new boolean[1];
+		org.monflabs.json.config.CustomJsonConfig c = org.monflabs.json.config.CustomJsonConfig.newBuilder()
+				.resourceReader( (p) -> {
+					if(fail[0]) {
+						throw new IllegalStateException("unavailable");
+					}
+					return new java.io.ByteArrayInputStream(store.get(p));
+				})
+				.build();
+		JsonObject before = c.getContent();
+		fail[0] = true;
+		try {
+			c.load();
+			fail("Exception expected");
+		} catch(IllegalStateException ex) {
+			// expected
+		}
+		assertSame(before, c.getContent());
+		assertEquals(1, c.getInt("a"));
+	}
+
+	public void testFileConfigRejectsRefOutsideFolder() throws Exception {
+		java.nio.file.Path root = support.getProjectDirectory("target/tests/config-containment").toPath();
+		org.monflabs.util.FileUtil.prepareDirectory(root.toFile(), true);
+		java.nio.file.Path folder = java.nio.file.Files.createDirectories(root.resolve("conf"));
+		java.nio.file.Path outside = root.resolve("outside.json");
+		java.nio.file.Files.writeString(outside, "{ \"password\": \"x\" }");
+		java.nio.file.Files.writeString(folder.resolve("main.json"), "{ \"o\": { \"$ref\": \"../outside.json\" } }");
+		try {
+			org.monflabs.json.config.JsonFileConfig.newBuilder()
+				.folder(folder)
+				.fileName("main.json")
+				.encryptor(new KeyEncryptor("akey", (k) -> true))
+				.build();
+			fail("Exception expected");
+		} catch(RuntimeException ex) {
+			// expected: the reference is outside of the configuration folder
+		}
+		// ...and the outside file was not rewritten (encrypted)
+		assertEquals("{ \"password\": \"x\" }", java.nio.file.Files.readString(outside));
+	}
+
+	public void testFileConfigSaveIsAtomic() throws Exception {
+		java.nio.file.Path folder = support.getProjectDirectory("target/tests/config-atomic").toPath();
+		org.monflabs.util.FileUtil.prepareDirectory(folder.toFile(), true);
+		java.nio.file.Files.writeString(folder.resolve("main.json"), "{ \"a\": 1, \"sub\": { \"$ref\": \"sub/s.json\" } }");
+		java.nio.file.Files.createDirectories(folder.resolve("sub"));
+		java.nio.file.Files.writeString(folder.resolve("sub/s.json"), "{ \"b\": 2 }");
+		org.monflabs.json.config.JsonFileConfig c = org.monflabs.json.config.JsonFileConfig.newBuilder()
+				.folder(folder)
+				.fileName("main.json")
+				.build();
+		assertEquals(2, c.getInt("sub/b"));
+		assertTrue(c.updateValues( (u) -> { u.put("a", 3); u.put("sub/b", 4); } ));
+		assertEquals(3, parse(java.nio.file.Files.readString(folder.resolve("main.json"))).get("a") instanceof Number n ? n.intValue() : -1);
+		assertEquals(4, ((Number)parse(java.nio.file.Files.readString(folder.resolve("sub/s.json"))).get("b")).intValue());
+		try(java.util.stream.Stream<java.nio.file.Path> files = java.nio.file.Files.walk(folder)) {
+			assertTrue(files.noneMatch(p -> p.toString().endsWith(".tmp")));
+		}
+	}
 }

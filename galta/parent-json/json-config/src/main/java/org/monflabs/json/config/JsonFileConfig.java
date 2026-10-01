@@ -19,8 +19,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.function.Consumer;
 
 import org.monflabs.util.Console;
@@ -120,9 +122,23 @@ public class JsonFileConfig extends AbstractJsonConfig {
 		Path resource = getFile(path,true);
 		try  {
 			Files.createDirectories(resource.getParent());
-			try(OutputStream os=Files.newOutputStream(resource)) {
-				save.accept(os);
+			// Written to a temporary file then moved, so a failure while writing cannot
+			// leave a truncated configuration file
+			Path tmp = Files.createTempFile(resource.getParent(), resource.getFileName().toString()+".", ".tmp");
+			try {
+				try(OutputStream os=Files.newOutputStream(tmp)) {
+					save.accept(os);
+				}
+				try {
+					Files.move(tmp, resource, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+				} catch(AtomicMoveNotSupportedException ex) {
+					Files.move(tmp, resource, StandardCopyOption.REPLACE_EXISTING);
+				}
+			} finally {
+				Files.deleteIfExists(tmp);
 			}
+		} catch(ConfigException e) {
+			throw e;
 		} catch(Exception e) {
 			throw new ConfigException(e,"Error while writing file '{0}'", resource);
 		}
@@ -133,12 +149,12 @@ public class JsonFileConfig extends AbstractJsonConfig {
 			if(File.separatorChar!=PathUtil.POSIX_SEP) {
 				fn = fn.replace(PathUtil.POSIX_SEP, File.separatorChar);
 			}
-			Path file = folder.resolve(fn);
+			Path file = contained(folder, fn);
 			if(Files.exists(file)) {
 				return file;
 			}
 			if(devFolder!=null) {
-				Path devFile = devFolder.resolve(fn);
+				Path devFile = contained(devFolder, fn);
 				if(Files.exists(devFile)) {
 					return devFile;
 				}
@@ -148,5 +164,19 @@ public class JsonFileConfig extends AbstractJsonConfig {
 			}
 		}
 		return null;
+	}
+	/**
+	 * Resolves a resource name (a $ref of the configuration) in a folder. The resource
+	 * must stay inside the folder: an absolute path or a path climbing out of it with
+	 * ".." is rejected, as the referenced resources are also written back when the
+	 * configuration is saved.
+	 */
+	private static Path contained(Path dir, String fn) {
+		Path base = dir.toAbsolutePath().normalize();
+		Path file = base.resolve(fn).normalize();
+		if(!file.startsWith(base) || file.equals(base)) {
+			throw new ConfigException(null, "Resource '{0}' is outside of the configuration folder", fn);
+		}
+		return file;
 	}
 }

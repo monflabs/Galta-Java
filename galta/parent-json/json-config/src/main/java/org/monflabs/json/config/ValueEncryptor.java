@@ -26,4 +26,13 @@ public interface ValueEncryptor {
 	public String encryptValue(String value);
 	public String decryptValue(String value);
 
+	/**
+	 * Whether an encrypted value uses an outdated format and should be encrypted again
+	 * with the current one. The configuration re-encrypts such values when it is loaded
+	 * (unless it is read-only) and saves them.
+	 */
+	public default boolean needsReencryption(String s) {
+		return false;
+	}
+
 }

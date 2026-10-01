@@ -172,7 +172,7 @@ config.updateValues(u -> u.put("db/host", "db.internal"));
 // db.json  -> {"host":"db.internal","port":5432}
 ```
 
-A `$ref` inside a referenced resource is followed too, and a local `#/...` reference there is relative to that resource. A reference may carry a JSON Pointer fragment (`common.json#/db`, see [Pointers](/GaltaJSON/Pointers)); such a value is read, but it is not written back when saving.
+With a `JsonFileConfig`, a referenced file must be inside the configuration folder: an absolute path or a `..` climbing out of it is rejected (`ConfigException`), as the referenced files are also written back when saving. The files are replaced atomically (written to a temporary file, then moved). A `$ref` inside a referenced resource is followed too, and a local `#/...` reference there is relative to that resource. A reference may carry a JSON Pointer fragment (`common.json#/db`, see [Pointers](/GaltaJSON/Pointers)); such a value is read, but it is not written back when saving.
 
 Sample: `doc_examples/config/ConfigExamples.java` (`testReferenceLimits`)
 
@@ -203,7 +203,8 @@ How it behaves:
 - When a *writable* configuration loads a resource with values that match the predicate but are still in clear, it saves the resource encrypted right away, whatever the auto-save setting. A read-only configuration decrypts but never writes. So a secret can be typed in clear in the file and gets encrypted by the next start of the application.
 - Referenced (`$ref`) resources are decrypted and encrypted the same way. The predicate receives the full key path in the configuration: a `password` in `db.json`, referenced from `db`, is `["db", "password"]`.
 - The encryption is randomized: encrypting the same value twice gives two different texts, and a modified or foreign value fails to decrypt (`ConfigException`). It protects secrets at rest, it is not a replacement for a secret vault.
-- Values written by earlier versions (`[[` + Base64 + `]]`, AES-CBC with a fixed IV) are still decrypted, and are written in the current format the next time the resource is saved.
+- Values written by earlier versions (`[[` + Base64 + `]]`, AES-CBC with a fixed IV) are still decrypted, and a *writable* configuration re-encrypts them in the current format when it loads them (`ValueEncryptor.needsReencryption()`).
+- The strings inside an array are encrypted too: they are checked with the key path of the array (`["tokens"]` for every item of `"tokens": [...]`, at any depth).
 
 `KeyEncryptor` can also be used on its own, through `encryptValue()` / `decryptValue()`, or implement the `ValueEncryptor` interface to plug in another algorithm.
 

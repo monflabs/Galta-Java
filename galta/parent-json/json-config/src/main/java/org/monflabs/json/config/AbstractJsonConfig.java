@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
@@ -190,7 +191,8 @@ public abstract class AbstractJsonConfig implements JsonConfig {
 	}
 
 	
-	private JsonObject content;
+	// Replaced as a whole (never mutated once published), so it can be read without the lock
+	private volatile JsonObject content;
 	private boolean autoSave;
 	private ValueEncryptor encryptor;
 	
@@ -275,8 +277,16 @@ public abstract class AbstractJsonConfig implements JsonConfig {
 	}
 	
 
-	public final void load() {
-		content = null;
+	/**
+	 * (Re)load the configuration.
+	 * <p>
+	 * The new content is built and decrypted before it replaces the current one, so a
+	 * reader never sees a partially loaded or still encrypted content. If the load fails,
+	 * the current content is kept (an empty one on the first load) and the exception is
+	 * thrown.
+	 */
+	public final synchronized void load() {
+		JsonObject loaded = null;
 		try {
 			JsonObject main = loadJson(null);
 			if(main==null) {
@@ -284,20 +294,24 @@ public abstract class AbstractJsonConfig implements JsonConfig {
 			}
 
 			JsonReference.Resolver r = new ConfigResolver(this, main);
-			content = (JsonObject)JsonReference.resolve(JsonFactory.get(), main, r, true);
+			JsonObject c = (JsonObject)JsonReference.resolve(JsonFactory.get(), main, r, true);
 			if(encryptor!=null) {
 				if(!isReadOnly()) {
-					// Autosave if some values need encryption
-					JsonObject enc = encrypt(content);
+					// Autosave if some values need encryption, or have to be encrypted again
+					// with the current format
+					JsonObject enc = encrypt(c);
 					if(enc!=null) {
 						saveResources(enc);
 					}
 				}
-				decrypt(content);
+				decrypt(c);
 			}
+			loaded = c;
 		} finally {
-			// in case of an error...
-			if(content==null) {
+			if(loaded!=null) {
+				content = loaded;
+			} else if(content==null) {
+				// in case of an error...
 				content = JsonObject.create();
 			}
 		}
@@ -307,7 +321,7 @@ public abstract class AbstractJsonConfig implements JsonConfig {
 	 * @return true if the configuration was saved, false if it is read-only
 	 * @throws ConfigException if the configuration cannot be saved
 	 */
-	public final boolean save() {
+	public final synchronized boolean save() {
 		if(!isReadOnly()) {
 			try {
 				JsonObject enc = encrypt(content);
@@ -473,80 +487,83 @@ public abstract class AbstractJsonConfig implements JsonConfig {
 	//
 	// Serialization encryption/decryption
 	//
+	/**
+	 * Returns an encrypted copy of the content, or null if no value had to be encrypted
+	 * (or encrypted again, see {@link ValueEncryptor#needsReencryption(String)}).
+	 */
 	public JsonObject encrypt(JsonObject content) {
 		if(encryptor!=null) {
 			JsonObject clone = (JsonObject)cloneWithReferences(content);
-			if(encrypt(clone, null)) {
+			if(transform(clone, new String[0], true)) {
 				return clone;
 			}
 		}
 		return null;
 	}
-	private boolean encrypt(JsonObject o, String[] path) {
-		boolean res = false;
-		String[] a;
-		if(path!=null) {
-			a = new String[path.length+1];
-			System.arraycopy(path, 0, a, 0, path.length);
-		} else {
-			a = new String[1];
-		}
-		for(Map.Entry<String,Object> e: o.entrySet()) {
-			a[a.length-1] = e.getKey(); 
-			if(e.getValue() instanceof JsonObject jo) {
-				if(encrypt(jo,a)) {
-					res = true;
-				}
-			} else {
-				if(encryptor.shouldEncrypt(a)) {
-					Object v = e.getValue(); 
-					if(v instanceof String s) {
-						if(!encryptor.isEncrypted(s)) {
-							String enc = encryptor.encrypt(a,s);
-							e.setValue(enc);
-							res = true;
-						}
-					}
-				}
-			}
-		}
-		return res;
-	}
-	
+	/**
+	 * Decrypts, in place, the encrypted values of a content.
+	 * @return true if a value was decrypted
+	 */
 	public boolean decrypt(JsonObject o) {
 		if(encryptor!=null) {
-			return decrypt(o, null);
+			return transform(o, new String[0], false);
 		}
 		return false;
 	}
-	private boolean decrypt(JsonObject o, String[] path) {
+
+	/**
+	 * Encrypts or decrypts, in place, the values selected by the encryptor. The value of a
+	 * property is checked with the key path of the property; the items of an array (at any
+	 * depth) with the key path of the array.
+	 */
+	private boolean transform(Object container, String[] path, boolean encrypt) {
 		boolean res = false;
-		String[] a;
-		if(path!=null) {
-			a = new String[path.length+1];
-			System.arraycopy(path, 0, a, 0, path.length);
-		} else {
-			a = new String[1];
-		}
-		for(Map.Entry<String,Object> e: o.entrySet()) {
-			a[a.length-1] = e.getKey(); 
-			if(e.getValue() instanceof JsonObject jo) {
-				if(decrypt(jo,a)) {
-					res = true;
+		if(container instanceof JsonObject o) {
+			String[] a = Arrays.copyOf(path, path.length+1);
+			for(Map.Entry<String,Object> e: o.entrySet()) {
+				a[path.length] = e.getKey();
+				Object v = e.getValue();
+				if(v instanceof JsonContainer) {
+					// The path array is reused: the nested call copies it
+					res |= transform(v, a, encrypt);
+				} else {
+					Object t = transformValue(a, v, encrypt);
+					if(t!=v) {
+						e.setValue(t);
+						res = true;
+					}
 				}
-			} else {
-				if(encryptor.shouldEncrypt(a)) {
-					Object v = e.getValue(); 
-					if(v instanceof String s) {
-						if(encryptor.isEncrypted(s)) {
-							String enc = encryptor.decrypt(a,s);
-							e.setValue(enc);
-							res = true;
-						}
+			}
+		} else if(container instanceof JsonArray arr) {
+			String[] a = path.clone();
+			for(int i=0; i<arr.size(); i++) {
+				Object v = arr.get(i);
+				if(v instanceof JsonContainer) {
+					res |= transform(v, a, encrypt);
+				} else {
+					Object t = transformValue(a, v, encrypt);
+					if(t!=v) {
+						arr.set(i, t);
+						res = true;
 					}
 				}
 			}
 		}
 		return res;
+	}
+	private Object transformValue(String[] path, Object v, boolean encrypt) {
+		if(v instanceof String s && encryptor.shouldEncrypt(path)) {
+			if(encrypt) {
+				if(!encryptor.isEncrypted(s)) {
+					return encryptor.encrypt(path,s);
+				}
+				if(encryptor.needsReencryption(s)) {
+					return encryptor.encrypt(path,encryptor.decrypt(path,s));
+				}
+			} else if(encryptor.isEncrypted(s)) {
+				return encryptor.decrypt(path,s);
+			}
+		}
+		return v;
 	}
 }
