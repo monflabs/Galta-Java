@@ -53,6 +53,40 @@ suite that is fetched at a pinned commit by a Maven profile rather than being
 a git submodule. After a clean clone there is nothing to do - the first build
 that touches either module fetches its suite automatically.
 
+### Test suites, coverage and test options
+
+Each module's surefire configuration runs only its `All*Tests` suites (the
+`includes` of its pom), never the test classes one by one: a new test class
+must be registered in one of them. In the library modules (utilities, json,
+filesystem, javacompiler, test, demo data), `SuiteGuard` (see
+[Test Support](/Utilities/Testing#suite-completeness)) fails the build when a
+test class of the module is missing from its suites, or when the suites run
+no test; a class deliberately left out (a benchmark) is annotated with
+`@SuiteGuard.NotInSuite("reason")`.
+
+JaCoCo instruments every test run. A module with its own tests gets its report
+in `target/site/jacoco` (`mvn verify`). The test-only modules
+(`utilities-tests`, `json-tests`, `json-config-test`) have no classes of their
+own: they write an aggregate report of the libraries they test in
+`target/site/jacoco-aggregate` (`index.html`, `jacoco.xml`, `jacoco.csv`),
+which needs those libraries in the reactor:
+
+```sh
+mvn verify -pl parent-json/json-tests,parent-utilities/utilities-tests --also-make
+```
+
+The tests run with these properties, set on the command line or in a pom:
+
+| Property | Effect |
+|---|---|
+| `monflabs.tests.trackLeaks` | `true` installs the resource-leak detector for every `__BaseTestCase` (on in the JSON and utilities modules) |
+| `monflabs.tests.saveTemplates` | `missing` or `all` writes the golden-file templates from the results (refused when `CI` is set) |
+| `monflabs.tests.jvmArgs` | Extra JVM options for the test forks, e.g. `-Dmonflabs.tests.jvmArgs="-Duser.language=tr -Duser.country=TR"` to check that nothing depends on the default locale (the Turkish dotless `i` breaks `toUpperCase()` without `Locale.ROOT`) |
+
+The test forks run with `-XX:+EnableDynamicAgentLoading`, which the leak
+detector needs to attach its agent without a warning; a module that sets its
+own `argLine` must keep `@{argLine}` (the JaCoCo agent) and that flag.
+
 ## Release builds
 
 These profiles add what a published artifact needs:
