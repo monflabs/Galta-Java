@@ -36,7 +36,7 @@ All paths are relative to `galta/parent-js/js/src/main/java/org/monflabs/galtajs
 
 | Package | Role |
 |---|---|
-| `parser/` | Hand-maintained parser support classes (`TokenMgrError`, `ScriptError`, `ErrorList`, `ParserContextImpl`). The grammar itself is `src/main/javacc/.../parser/JSParser.jj`; the generated parser lands in `target/generated-sources/javacc/`. |
+| `parser/` | Hand-maintained parser support classes (`TokenMgrError`, `ParserContextImpl`, `JSParserContext`). The grammar itself is `src/main/javacc/.../parser/JSParser.jj`; the generated parser lands in `target/generated-sources/javacc/`. |
 | `node/` | The AST: `ASTNode`, `ASTProgram`, `ASTVarContainer` and the node families (`control/`, `clazz/`, `binaryop/`, `unaryop/`, `assignop/`, `ternaryop/`, `call/`, `literal/`, `variable/`, `debug/`). |
 | `optimizer/` | AST-level passes: `ScriptOptimizer`, `ConstantFoldingAndUnreachableCodeOptimizer`, `ScopeResolutionOptimizer`. |
 | `rt/` | Runtime contracts and helpers: `JSRuntimeContext`, `JSGlobalContext`, `JSResult`, `RuntimeUtil`, `JSRuntimeException`, `JSScriptExecutor`. |

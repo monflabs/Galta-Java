@@ -37,18 +37,6 @@ public class ASTPreInc extends ASTAbstractIncDec {
 	@Override
 	public Signal evaluate(JSInterpretedRuntimeContext context, JSResult result) {
 		try {
-//			// Optimization in case of an identifier
-//			ASTNode node;
-//			if((node=getNode()) instanceof ASTIdentifier id) {
-//				VarAccessor e = context.resolveIdentifierEntry(id.getId());
-//				if(e!=null) {
-//					Object value = e.getValue();
-//					Object newValue = RuntimeUtil.incNumber(context,value);
-//					e.setValue(newValue);
-//					result.setValue(newValue);
-//					return Signal.NONE;
-//				}
-//			}
 			
 			getNode().evaluateAssign(context, null, 
 					(v) -> RuntimeUtil.incNumber(context.getEnvironment(),v), 

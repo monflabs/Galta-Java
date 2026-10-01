@@ -41,9 +41,6 @@ import org.monflabs.util.StringFormat;
  */
 public class ASTArrayMember extends ASTNode implements ChainingNode, MemberNode {
 	
-	// TODO, to simplify the code
-	private static final boolean USE_TRANSPILER_RUNTIME = false;
-
 	// Pre-resolved LHS reference for correct assignment evaluation order (ECMAScript 13.15.2).
 	// superThis is only meaningful when the base is a SuperProperty (see resolveReference()):
 	// it's GetThisBinding()'s result, captured BEFORE the property-key expression is evaluated
@@ -608,40 +605,23 @@ public class ASTArrayMember extends ASTNode implements ChainingNode, MemberNode 
 				return Signal.NONE;
 			}
 
-			if(USE_TRANSPILER_RUNTIME) {
-//				Function<Object,Object>[] indexValues = indexValues(context);
-//				RuntimeUtilTranspiler.memberSeq(env, result, deepscan, indexValues);
-				throw new IllegalStateException();
-			} else {
-				JSResult leftValue = result.ejectAndSequence();
-				forEachEntries(context, leftValue, (base,index,getter,setter,remover) -> {
-					// Don't access the string with an index if in a sequence
-					if((base instanceof CharSequence) && (index instanceof Number) ) {
-						return;
-					}
-					Object v = getter.get();
-					if(v!=RuntimeUtil.NOT_AVAILABLE) {
-						result.addToSequence(context.getEnvironment(),v);
-					}
-				},false);
-			}
+			JSResult leftValue = result.ejectAndSequence();
+			forEachEntries(context, leftValue, (base,index,getter,setter,remover) -> {
+				// Don't access the string with an index if in a sequence
+				if((base instanceof CharSequence) && (index instanceof Number) ) {
+					return;
+				}
+				Object v = getter.get();
+				if(v!=RuntimeUtil.NOT_AVAILABLE) {
+					result.addToSequence(context.getEnvironment(),v);
+				}
+			},false);
 
 			return Signal.NONE;
 		} catch(Throwable ex) {
 			throw fillInStackTrace(ex);
 		}
 	}
-	
-//	private Function<Object,Object>[] indexValues(JSInterpretedRuntimeContext context) {
-//		JSResult temp = new JSResult();
-//		@SuppressWarnings("unchecked")
-//		Function<Object,Object>[] indexValues = new Function[indexes.size()];
-//		for(int i=0; i<indexValues.length; i++) {
-//			final int ii = i;
-//			indexValues[i] = (base) -> context.executeWithFilterContext(base, indexes.get(ii), temp);
-//		}
-//		return indexValues;
-//	}
 	
 	@Override
 	public Signal evaluateTypeof(JSInterpretedRuntimeContext context, JSResult result) {
@@ -663,20 +643,14 @@ public class ASTArrayMember extends ASTNode implements ChainingNode, MemberNode 
 				return Signal.NONE;
 			}
 
-			if(USE_TRANSPILER_RUNTIME) {
-//				Function<Object,Object>[] indexValues = indexValues(context);
-//				RuntimeUtilTranspiler.memberTypeofSeq(env, result, deepscan, indexValues);
-				throw new IllegalStateException();
-			} else {
-				JSResult leftValue = result.ejectAndSequence();
-				forEachEntries(context, leftValue, (base,index,getter,setter,remover) -> {
-					if((base instanceof CharSequence) && (index instanceof Number) ) {
-						return;
-					}
-					Object v = getter.get();
-					result.addToSequence(context.getEnvironment(),RuntimeUtil.typeof(env,v));
-				},false);
-			}
+			JSResult leftValue = result.ejectAndSequence();
+			forEachEntries(context, leftValue, (base,index,getter,setter,remover) -> {
+				if((base instanceof CharSequence) && (index instanceof Number) ) {
+					return;
+				}
+				Object v = getter.get();
+				result.addToSequence(context.getEnvironment(),RuntimeUtil.typeof(env,v));
+			},false);
 
 			return Signal.NONE;
 		} catch(Throwable ex) {
@@ -749,10 +723,6 @@ public class ASTArrayMember extends ASTNode implements ChainingNode, MemberNode 
 				return;
 			}
 
-//			Function<Object,Object>[] indexValues = indexValues(context);
-//			MemberAssigner acc = RuntimeUtil::assign;
-//			RuntimeUtilTranspiler.assignMemberSeq(env, result, rightValue, acc, deepscan, indexValues);
-
 			JSResult leftValue = result.ejectAndSequence();
 			forEachEntries(context, leftValue, (base,index,getter,setter,remover) -> {
 				if(base==null || base==RuntimeUtil.UNDEFINED) {
@@ -817,25 +787,15 @@ public class ASTArrayMember extends ASTNode implements ChainingNode, MemberNode 
 				return RuntimeUtil.deleteProperty(env, base, idx);
 			}
 			
-			if(USE_TRANSPILER_RUNTIME) {
-//				Function<Object,Object>[] indexValues = indexValues(context);
-//				return RuntimeUtilTranspiler.memberDeleteSeq(env, result, deepscan, indexValues);
-				throw new IllegalStateException();
-			} else {
-				JSResult leftValue = result.ejectAndSequence();
-				result.setValue(true);
-					forEachEntries(context, leftValue, (base,index,getter,setter,remover) -> {
-	//				if((base instanceof CharSequence) && (index instanceof Number) ) {
-	//					result.setValue(true);
-	//					return;
-	//				}
-						boolean v = remover.getAsBoolean();
-						if(!v) {
-							result.setValue(false);
-						}
-					},true);
-					return (Boolean)result.getValue();
-			}
+			JSResult leftValue = result.ejectAndSequence();
+			result.setValue(true);
+				forEachEntries(context, leftValue, (base,index,getter,setter,remover) -> {
+					boolean v = remover.getAsBoolean();
+					if(!v) {
+						result.setValue(false);
+					}
+				},true);
+				return (Boolean)result.getValue();
 		} catch(Throwable ex) {
 			throw fillInStackTrace(ex);
 		}
@@ -996,10 +956,6 @@ public class ASTArrayMember extends ASTNode implements ChainingNode, MemberNode 
 	public String transpileChainingNode(JSTranspilerGeneratorContext jsContext, String chain) {
     	// TODO: Could optimize this for simpler expressions
     	int valueId = jsContext.generateUniqueId();
-// 		return StringFormat.format("memberGet({0},({1}{2}) -> {3})", 
-// 				chain, 
-//				JSTranspiler.CURRENT_VALUE, valueId,
-//				JSTranspiler.asValue(jsContext, valueId, getUniqueIndex()));
     	String value = JSTranspiler.asValue(jsContext, valueId, getUniqueIndex());
     	if(value.equals("null")) {
     		value = "(Object)null";

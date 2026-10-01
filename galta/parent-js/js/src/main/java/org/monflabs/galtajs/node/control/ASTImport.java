@@ -24,6 +24,7 @@ import org.monflabs.galtajs.node.ASTVarContainer.VariableDef;
 import org.monflabs.galtajs.node.literal.ASTLiteral;
 import org.monflabs.galtajs.parser.Token;
 import org.monflabs.galtajs.rt.JSResult;
+import org.monflabs.galtajs.rt.JSRuntimeContext;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.interpreter.InterpretedUnitRuntimeContext;
 import org.monflabs.galtajs.rt.interpreter.InterpretedUnitRuntimeContext.Signal;
@@ -31,6 +32,7 @@ import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext;
 import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext.VAR_TYPE;
 import org.monflabs.galtajs.rt.interpreter.VariableMap;
 import org.monflabs.galtajs.rt.transpiler.VarAccessor;
+import org.monflabs.galtajs.rt.util.WeakIdentityMap;
 import org.monflabs.galtajs.modules.JSInterpretedUnit;
 import org.monflabs.galtajs.transpiler.JSTranspiler;
 import org.monflabs.galtajs.transpiler.TranspilerJavaBuilder;
@@ -73,45 +75,55 @@ public class ASTImport extends ASTImpExp {
 		this.sourcePhase = sourcePhase;
 	}
 
-	// Set by hoistBindings() when the default import was already bound
-	// early (live) there - tells evaluate() to skip its own (snapshot,
-	// non-hoisted) default-import handling rather than re-processing (and
-	// clobbering) an already-live binding.
-	private boolean defaultHoisted;
+	// What hoistBindings() did for one module instance, read back by
+	// evaluate() for the same instance. Kept per module instance (keyed by
+	// its main context), never on this AST node, which every evaluation of
+	// the module (another realm, a reload, ...) shares.
+	private static final class HoistState {
+		// The default import was already bound early (live) - evaluate()
+		// skips its own (snapshot, non-hoisted) default-import handling
+		// rather than re-processing (and clobbering) an already-live binding.
+		boolean defaultHoisted;
+		// The namespace binding was assigned early - evaluate() skips its own
+		// (now-redundant) assignment. Unlike a default/named import, a
+		// namespace import's target (never null - see
+		// getModuleNamespaceObject()) is ALWAYS immediately resolvable
+		// regardless of the source module's own execution progress, so this
+		// is unconditionally set whenever a namespace binding exists at all.
+		boolean namespaceHoisted;
+		// Named items hoistBindings() couldn't resolve yet (its
+		// getExportAccessor() call threw - e.g. a name reached only through a
+		// bare `export * from '...'` in the SAME module, which has no
+		// pre-existing binding cell to alias toward: star-re-exported names
+		// are only populated by that statement's own, non-hoisted evaluation
+		// - see AbstractModule.getExportAccessor()'s own re-export doc
+		// comment). evaluate() retries these, at this import's own normal
+		// source position, via the original (pre-live-binding) value-copy
+		// path - exactly like it already does for a default import
+		// targeting a non-hoistable default export.
+		List<Item> unresolvedItems;
+	}
+	private final WeakIdentityMap<JSRuntimeContext,HoistState> hoistStates = new WeakIdentityMap<>();
 
-	// Set by hoistBindings() once it's assigned the namespace binding early
-	// - tells evaluate() to skip its own (now-redundant) assignment.
-	// Unlike a default/named import, a namespace import's target
-	// (module.ensureNamedExports(), never null - see that method's own doc
-	// comment) is ALWAYS immediately resolvable regardless of the source
-	// module's own execution progress, so this is unconditionally set
-	// whenever a namespace binding exists at all (no "unresolved, retry
-	// later" case the way named items or a non-hoistable default export
-	// need).
-	private boolean namespaceHoisted;
-
-	// Named items hoistBindings() couldn't resolve yet (its
-	// getExportAccessor() call threw - e.g. a name reached only through a
-	// bare `export * from '...'` in the SAME module, which has no
-	// pre-existing binding cell to alias toward: unlike a named
-	// declaration, star-re-exported names are only populated by that
-	// statement's own, non-hoisted evaluation actually running - see
-	// AbstractModule.getExportAccessor()'s own re-export doc comment).
-	// evaluate() retries these, at this import's own normal source
-	// position, via the original (pre-live-binding) value-copy path -
-	// exactly like it already does for a default import targeting a
-	// non-hoistable default export. Left null (not an empty list) when
-	// hoistBindings() hasn't run at all (e.g. no items to begin with),
-	// distinguishing "nothing to retry" from "everything already
-	// resolved".
-	private List<Item> unresolvedItems;
+	private HoistState getHoistState(JSRuntimeContext mainContext) {
+		synchronized(hoistStates) {
+			return hoistStates.get(mainContext);
+		}
+	}
+	private HoistState createHoistState(JSRuntimeContext mainContext) {
+		synchronized(hoistStates) {
+			HoistState state = new HoistState();
+			hoistStates.put(mainContext, state);
+			return state;
+		}
+	}
 
 	// Set once ASTProgram.transpileJavaStatement()'s own early-emission hoist
 	// pass (see its own doc comment, and docs/GaltaJS/
 	// TranspiledModuleLiveBindingsDesignBrief.md's P4) has already emitted
 	// this import's codegen ahead of its own normal source position -
 	// transpileJavaStatement()'s later, normal-position call becomes a
-	// no-op, mirroring how defaultHoisted/namespaceHoisted guard the
+	// no-op, mirroring how HoistState's defaultHoisted/namespaceHoisted guard the
 	// interpreted-mode evaluate() against redoing hoisted work.
 	private boolean transpiledEarly;
 
@@ -202,12 +214,16 @@ public class ASTImport extends ASTImpExp {
 			// (it resolves a Promise another module is awaiting) - silently
 			// no-op'ing it left that promise permanently unresolved).
 			JSModule module = resolveModule(context);
+			InterpretedUnitRuntimeContext mainContext = (InterpretedUnitRuntimeContext) context.getMainContext();
+			HoistState hoisted = getHoistState(mainContext);
+			boolean defaultHoisted = hoisted!=null && hoisted.defaultHoisted;
+			boolean namespaceHoisted = hoisted!=null && hoisted.namespaceHoisted;
+			List<Item> unresolvedItems = hoisted!=null ? hoisted.unresolvedItems : null;
 			if ((StringUtil.isEmpty(getDefaultImport()) || defaultHoisted) && (StringUtil.isEmpty(getNamespace()) || namespaceHoisted)
 					&& (unresolvedItems == null || unresolvedItems.isEmpty())) {
 				return Signal.NONE;
 			}
 
-			InterpretedUnitRuntimeContext mainContext = (InterpretedUnitRuntimeContext) context.getMainContext();
 			// Imported bindings are CONST, so ASTProgram's hoist pass already
 			// pre-populated a TDZ placeholder for each of them - initialize it
 			// in place (same as ASTVariableDeclConst.createVariable) rather
@@ -329,8 +345,8 @@ public class ASTImport extends ASTImpExp {
 				// never by loading the module (resolveModule() would
 				// evaluate it; spec: a source phase import does not link or
 				// evaluate its target).
+				// (evaluate() does nothing more for a source-phase import)
 				mainContext.getVariableMap(true).set(getDefaultImport(), RuntimeUtil.importModuleSource(context, getFrom()));
-				defaultHoisted = true;
 				return;
 			}
 			if (deferred) {
@@ -353,11 +369,12 @@ public class ASTImport extends ASTImpExp {
 				// importDeferredNamespaceSync() does the gather-then-link
 				// sequence (shared with transpileJavaStatement()'s
 				// generated-code equivalent below).
+				// (evaluate() does nothing more for a deferred import)
 				mainContext.getVariableMap(true).set(getNamespace(), RuntimeUtil.importDeferredNamespaceSync(context, getFrom(), getAttributes()));
-				namespaceHoisted = true;
 				return;
 			}
 			JSModule module = resolveModule(context);
+			HoistState state = createHoistState(mainContext);
 			int sz = items.size();
 			for (int i = 0; i < sz; i++) {
 				Item it = items.get(i);
@@ -372,10 +389,10 @@ public class ASTImport extends ASTImpExp {
 					// way), just at this import's own source line instead
 					// of during hoisting - a reasonable, arguably more
 					// intuitive, place for that error to surface anyway.
-					if (unresolvedItems == null) {
-						unresolvedItems = new java.util.ArrayList<>();
+					if (state.unresolvedItems == null) {
+						state.unresolvedItems = new java.util.ArrayList<>();
 					}
-					unresolvedItems.add(it);
+					state.unresolvedItems.add(it);
 					continue;
 				}
 				VariableMap localMap = mainContext.getVariableMap(true);
@@ -388,7 +405,7 @@ public class ASTImport extends ASTImpExp {
 					VariableMap localMap = mainContext.getVariableMap(true);
 					localMap.delete(getDefaultImport());
 					localMap.cache(VarAccessor.importBinding(getDefaultImport(), sourceAccessor));
-					defaultHoisted = true;
+					state.defaultHoisted = true;
 				}
 			}
 			if (hasNamespace) {
@@ -403,7 +420,7 @@ public class ASTImport extends ASTImpExp {
 				// identity across calls, so there's nothing for a live
 				// indirection to add here.
 				mainContext.getVariableMap(true).set(getNamespace(), module.getModuleNamespaceObject());
-				namespaceHoisted = true;
+				state.namespaceHoisted = true;
 			}
 		} catch (Throwable ex) {
 			throw fillInStackTrace(ex);

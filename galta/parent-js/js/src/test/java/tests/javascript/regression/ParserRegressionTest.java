@@ -40,6 +40,25 @@ public class ParserRegressionTest extends JavaScriptNoStrictTestCase {
 			""");
 	}
 
+	// A comment does not change how a following "/" is read
+	public void testCommentBeforeSlash() throws Exception {
+		executeCode("""
+			var x = 4;
+			var y = x /* c */ / 2;
+			assertEquals(2, y);
+			var z = x // c
+			  / 2;
+			assertEquals(2, z);
+			var w = (x) /**/ / 2;
+			assertEquals(2, w);
+			var n = 0;
+			if (x) /* c */ /a/.test("a") && n++;
+			{} // c
+			/a/.test("a") && n++;
+			assertEquals(2, n);
+			""");
+	}
+
 	// A class static block followed by another element on the same line
 	public void testStaticBlockOnOneLine() throws Exception {
 		executeCode("""

@@ -40,9 +40,6 @@ import org.monflabs.util.StringFormat;
  */
 public class ASTMember extends ASTNode implements ChainingNode, MemberNode {
 	
-	// TODO, to simplify the code
-	private static final boolean USE_TRANSPILER_RUNTIME = false;
-	
 	public static boolean isMemberIntegerIndex(JSEnvironment env, String s) {
 		if(s==null || s.length()<2 || !s.startsWith(".")) {
 			return false;
@@ -72,7 +69,7 @@ public class ASTMember extends ASTNode implements ChainingNode, MemberNode {
 	private boolean nullop;
 
 	// Phase 3: monomorphic property cache ("PropIC"). Records a single
-	// (owner, own-entry) pair witnessed during the last resolve. Fast path is
+	// (owner, own-entry) pair witnessed while the cache was cold. Fast path is
 	// only entered when the current base is IDENTITY-equal to the cached owner
 	// AND the cached entry is still live (not soft-removed). The EntryImpl
 	// reference is stable across value writes, descriptor swaps, and rehashes:
@@ -348,9 +345,14 @@ public class ASTMember extends ASTNode implements ChainingNode, MemberNode {
 				return snap.entry.resolveValue(jo);
 			}
 			// Slow path + publish on first miss for the own-property case.
+			// Only a cold (or dead) cache is replaced: a polymorphic site,
+			// seeing a different owner on every access, would otherwise
+			// allocate a new PropIC each time without ever hitting it.
 			CustomLinkedMap.EntryImpl<String> ownEntry = jo.getEntry(memberName);
 			if(ownEntry!=null) {
-				ic = new PropIC(jo, ownEntry);
+				if(snap==null || snap.entry.isRemoved()) {
+					ic = new PropIC(jo, ownEntry);
+				}
 				return ownEntry.resolveValue(jo);
 			}
 			// Own-miss (prototype lookup or Java-fallback): don't cache; walk chain.
@@ -454,16 +456,11 @@ public class ASTMember extends ASTNode implements ChainingNode, MemberNode {
 
 			}
 			
-			if(USE_TRANSPILER_RUNTIME) {
-//				RuntimeUtilTranspiler.memberTypeofSeq(env, result, deepscan, memberName);
-				throw new IllegalStateException();
-			} else {
-				JSResult leftValue = result.ejectAndSequence();
-				forEachEntries(context, leftValue, (base,index,getter,setter,remover) -> {
-					Object v = getter.get();
-					result.addToSequence(env,RuntimeUtil.typeof(context.getEnvironment(),v));
-				},false);
-			}
+			JSResult leftValue = result.ejectAndSequence();
+			forEachEntries(context, leftValue, (base,index,getter,setter,remover) -> {
+				Object v = getter.get();
+				result.addToSequence(env,RuntimeUtil.typeof(context.getEnvironment(),v));
+			},false);
 
 			return Signal.NONE;
 		} catch(Throwable ex) {

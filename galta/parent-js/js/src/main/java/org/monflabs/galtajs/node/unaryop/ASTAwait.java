@@ -80,7 +80,7 @@ public class ASTAwait extends ASTUnaryOp {
 			p.setAsyncExecution(true);
 		} else if(n instanceof ASTFunctionDecl f) {
 			if(!f.isAsync()) {
-				throw RuntimeUtil.syntaxError("await must be used in a generator function");
+				throw RuntimeUtil.syntaxError("await must be used in an async function");
 			}
 			insideAsyncGeneratorBody = f.isGenerator();
 		}

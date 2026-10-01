@@ -219,9 +219,8 @@
 			</plugin>
 
 			<!-- TokenMgrError.java is the ONE javacc-generated support file
-			     GaltaJS hand-customizes (adds errorLine/errorColumn fields
-			     ScriptError.java depends on - see that file's own doc
-			     comment) - kept as a normal, hand-maintained source file in
+			     GaltaJS hand-customizes (adds public errorLine/errorColumn
+			     fields) - kept as a normal, hand-maintained source file in
 			     src/main/java/.../parser/ instead of being regenerated.
 			     javacc-maven-plugin has no per-file exclusion, so it always
 			     emits ITS OWN vanilla TokenMgrError.java alongside

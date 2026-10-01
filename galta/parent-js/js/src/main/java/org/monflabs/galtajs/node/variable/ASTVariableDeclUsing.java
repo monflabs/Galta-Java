@@ -82,7 +82,7 @@ public class ASTVariableDeclUsing extends ASTVariableDecl {
 				p.setAsyncExecution(true);
 			} else if(n instanceof ASTFunctionDecl f) {
 				if(!f.isAsync()) {
-					throw RuntimeUtil.syntaxError("await using must be used in a generator function");
+					throw RuntimeUtil.syntaxError("await using must be used in an async function");
 				}
 			}
 		}

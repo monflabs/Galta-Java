@@ -150,10 +150,6 @@ public class JSParser {
         return false;
     }
 
-    // This avoid an exception to be created when it reaches the EOF
-	// The JavaCharStream.FillBuff() should be modified accordingly
-	static final java.io.IOException EOF_EXCEPTION = new java.io.IOException();  
-	 
  	// JSEnvironment used for the compilation
   	public JSEnvironment env;
   	public NodeFactory nodeFactory;
@@ -248,13 +244,20 @@ public class JSParser {
   		}
   	}
 
+  	// The token after t, lexed if needed: scanning loops walk the token list
+  	// with it instead of calling getToken(i), which walks from the current
+  	// token again on every call.
+  	private Token nextToken(Token t) {
+  		return t.next!=null ? t.next : (t.next = token_source.getNextToken());
+  	}
+
   	// Whether the statement after the current label(s) is an iteration statement
   	private boolean labelsIteration() {
-  		int i = 1;
-  		while(getToken(i).kind!=EOF && getToken(i+1).kind==COLON) {
-  			i += 2;
+  		Token t = getToken(1);
+  		while(t.kind!=EOF && nextToken(t).kind==COLON) {
+  			t = nextToken(nextToken(t));
   		}
-  		int k = getToken(i).kind;
+  		int k = t.kind;
   		return k==FOR || k==WHILE || k==DO;
   	}
 
@@ -272,12 +275,6 @@ public class JSParser {
   		}
   		return id;
   	}
-
-  	// Global import statements used by the compilation
-  	public ArrayList<String> imports = new ArrayList<String>();
-
-  	// Placeholder for error recovery
-  	public ErrorList errorList;
 
   	public JSParser(JSEnvironment env, String text, boolean debug) {
   		this(env, text, debug, false);
@@ -509,8 +506,8 @@ public class JSParser {
  	// comment documents for a different reason.
  	  if(getToken(1).kind!=FOR || getToken(2).kind!=LPAREN) return false;
  	  int depth = 0;
- 	  for(int i=3; ; i++) {
- 	    int k = getToken(i).kind;
+ 	  for(Token t=getToken(3); ; t=nextToken(t)) {
+ 	    int k = t.kind;
  	    if(k==EOF) return false;
  	    if(depth==0 && k==SEMICOLON) return true;
  	    if(k==LPAREN || k==LBRACKET || k==LBRACE || k==TEMPLATE_EXPR_START) {
@@ -733,7 +730,8 @@ public class JSParser {
  	  parenDepth = 1;
  	  // Scan until we find matching closing paren
  	  while (parenDepth > 0 && i < 1000) {
- 	    t = getToken(i++);
+ 	    t = nextToken(t);
+ 	    i++;
  	    if (t.kind == LPAREN) {
  	      parenDepth++;
  	    } else if (t.kind == RPAREN) {
@@ -752,7 +750,7 @@ public class JSParser {
  	  // the flag off, a ":" here is never tolerated, byte-for-byte today's
  	  // behavior (a genuine ": Type" would simply fail this lookahead, same
  	  // as before this method existed).
- 	  t = getToken(i);
+ 	  t = nextToken(t);
  	  if (env.supportTypeHints() && t.kind == COLON) {
  	    i = scanTypeEnd(i + 1);
  	    t = getToken(i);
@@ -844,8 +842,8 @@ public class JSParser {
  	  boolean expectMore = true;
  	  int lastCloser = 0;
  	  int i = start;
+ 	  Token t = getToken(start);
  	  while (true) {
- 	    Token t = getToken(i);
  	    int k = t.kind;
  	    if (k == EOF) {
  	      return i;
@@ -892,6 +890,7 @@ public class JSParser {
  	      depth = 0;
  	    }
  	    i++;
+ 	    t = nextToken(t);
  	  }
  	}
 
@@ -904,8 +903,8 @@ public class JSParser {
  	private int scanTypeParametersEnd(int start) {
  	  int depth = 0;
  	  int i = start;
- 	  while (true) {
- 	    int k = getToken(i).kind;
+ 	  for (Token t = getToken(start); ; t = nextToken(t)) {
+ 	    int k = t.kind;
  	    if (k == EOF) {
  	      return i;
  	    }
@@ -976,9 +975,11 @@ public class JSParser {
  	  }
  	  if (nameKind == LBRACKET) {
  	    int depth = 1;
+ 	    Token t = getToken(i);
  	    i++;
  	    while (depth > 0) {
- 	      int k = getToken(i).kind;
+ 	      t = nextToken(t);
+ 	      int k = t.kind;
  	      if (k == EOF) {
  	        return false;
  	      }
@@ -1128,6 +1129,9 @@ TOKEN_MGR_DECLS : {
     // Nested template and blocks
     private Template template;
 
+    // The lexical state (DEFAULT or NO_REGEX) a comment started in
+    private int stateBeforeComment = DEFAULT;
+
  	private static class Template {
  	  Template prev;
  	  int nestedBlocks;
@@ -1228,31 +1232,26 @@ SPECIAL_TOKEN: {
   in the script. This leads to an error as it at least need one character so we push
   it with input_stream.backup(1)
 */
+/*
+  A comment is transparent for the regex/division decision: the lexer goes
+  back to the state it was in before the comment (a "/" following an
+  identifier and a comment is still a division).
+*/
 <DEFAULT, NO_REGEX>
 MORE: {
-   "//" { input_stream.backup(1); } : IN_SINGLE_LINE_COMMENT
- | "/*" : IN_MULTI_LINE_COMMENT
+   "//" { input_stream.backup(1); stateBeforeComment = curLexState; } : IN_SINGLE_LINE_COMMENT
+ | "/*" { stateBeforeComment = curLexState; } : IN_MULTI_LINE_COMMENT
    /* Annex B.1.3 SingleLineHTMLOpenComment: "<!--" always starts a comment
       to end-of-line, unconditionally (no preceding LineTerminator needed) -
       test262 annexB/built-ins/Function/createdynfn-html-open-comment-*. */
- | "<!--" : IN_SINGLE_LINE_COMMENT
+ | "<!--" { stateBeforeComment = curLexState; } : IN_SINGLE_LINE_COMMENT
 }
 
 <IN_SINGLE_LINE_COMMENT>
 SPECIAL_TOKEN: {
-   <SINGLE_LINE_COMMENT: (~["\n","\r","\u2028","\u2029"])* ("\n"|"\r"|"\r\n")? > : DEFAULT
+   <SINGLE_LINE_COMMENT: (~["\n","\r","\u2028","\u2029"])* ("\n"|"\r"|"\r\n")? > { SwitchTo(stateBeforeComment); }
 }
 
-/*
-<DEFAULT, NO_REGEX>
-MORE: {
-   "/*" : IN_MULTI_LINE_COMMENT
-}
-
-SPECIAL_TOKEN: {
-   <SINGLE_LINE_COMMENT: (~["\n","\r"])* ("\n"|"\r")? > : DEFAULT
-}
-*/
 
 <IN_MULTI_LINE_COMMENT>
 SPECIAL_TOKEN: {
@@ -1273,7 +1272,8 @@ SPECIAL_TOKEN: {
        input_stream.backup(matchedToken.image.length() - commentEnd);
        matchedToken.image = matchedToken.image.substring(0, commentEnd);
      }
-   } : DEFAULT
+     SwitchTo(stateBeforeComment);
+   }
 }
 
 <IN_SINGLE_LINE_COMMENT,IN_MULTI_LINE_COMMENT>
@@ -1371,10 +1371,6 @@ TOKEN: {
 <DEFAULT, NO_REGEX>
 TOKEN :
 {
-/*  
-	< LBRACE: "{" > : DEFAULT
-|	< RBRACE: "}" > : NO_REGEX 
-*/
 	< LBRACE: "{" > {
 	  	if(template!=null) {
 	  	    template.nestedBlocks++;
@@ -1518,10 +1514,6 @@ TOKEN :
 |	< NULLCOALESCING: "??" > : DEFAULT
 | 	< PIPELINE: "|>" > : DEFAULT
 
-	/* ECMA 2023 */
-/* Done outside of the grammar
-|   < SHEBANG: "#!" (~["\n","\r"])* ("\n"|"\r"|"\r\n")? > : DEFAULT
-*/ 
 	/* GaltaJS Extension */
 | 	< ELVIS: "?:" > : DEFAULT
 }
@@ -2951,10 +2943,6 @@ void FormalParameter(ASTArrayLiteral node): {
   		}
 }
 
-/*
-    leftNode=ConditionalExpression() ( LOOKAHEAD(1)
-      (  (t="=" rightNode=AssignmentExpression()
-*/
 
 /* Section 11.1.5: Object Initializer */
 
@@ -3106,16 +3094,6 @@ ASTNode LeftHandSideExpression(): {
     		return node; 
       	}
 }
-/*
-ASTNode NewExpression(): {
-    ASTNode mode;
-}
-{
-	node=MemberExpression() { 
-			return head;
-		}
-}
-*/
 ASTNode MemberExpression(): {
     ASTNode head;
 }
@@ -4144,7 +4122,6 @@ ASTNode Statement(): {
 	boolean sub = pendingSubStatement;
 }
 {
-try {
      { pendingSubStatement = false; subStatement = sub; }
      (
          LOOKAHEAD("{") node=Block()
@@ -4207,14 +4184,6 @@ try {
      		}
        		return node;
      	}
- } catch( ParseException ex ) {
-     if(errorList!=null) {
-     	errorList.addError(new ScriptError(ScriptError.ERROR,-1,ex.getMessage(),ex.currentToken.next.beginLine,ex.currentToken.next.beginColumn));
-     	recoverFromError(true);
-     	return null;
-     }
-     throw ex;
- }
 }
 
 
@@ -5032,17 +5001,6 @@ ASTNode FunctionArrowDeclaration():
 
 }
 
-ASTNode ConciseBody():
-{
-  ASTNode node;
-}
-{
-  	node=AssignmentExpression() // no "," allowed!
-    	{
-        	return node;
-    	}
-}
-
 List<ASTNode> FunctionBody(): {
 	List<ASTNode> nodes;
 }
@@ -5267,52 +5225,6 @@ ASTNode ClassElement(): {
     )
 }
 
-/*
-void PropertyEntry(ASTObjectLiteral node): {
-	String name;
-	ASTNode f;
-	ASTNode n=null;
- 	ASTArrayLiteral parameters=null;
-  	Token t=null;
-  	Token tgen=null;
-  	List<ASTNode> body=null;
-}	
-{
-     LOOKAHEAD(2) name=PropertyName() ":" n=AssignmentExpression() 
-		{
-      		node.addExpression(name, n);
-		}
-   | LOOKAHEAD(3) (tgen="*")? name=PropertyName() t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"
-		{
-		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); decl.endToken(token);
-		  	if(tgen!=null) {
-		  	  decl.setGenerator(true);
-		 	}
-      		node.addFunction(decl);
-		}
-   | LOOKAHEAD(3) <GET> name=PropertyName() t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"
-		{
-		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); decl.endToken(token);
-      		node.addGetter(decl);
-		}
-   | LOOKAHEAD(3) <SET> name=PropertyName() t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"
-		{
-		  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,name,parameters,body); decl.endToken(token);
-      		node.addSetter(decl);
-		} 
-   | LOOKAHEAD(1) "[" f=AssignmentExpression() "]" ((":" n=AssignmentExpression()) | (t="(" {parameters = nodeFactory.createArrayLiteral(t);} ElementList(parameters) ")" "{" body = FunctionBody() "}"))
-   		{
-   		    if(n!=null) { 
-      			node.addExpression(f, n);
-      		} else {
-			  	ASTFunctionDecl decl = nodeFactory.createFunctionDecl(t,null,parameters,body); decl.endToken(token);
-			  	if(tgen!=null) {
-			  	  decl.setGenerator(true);
-			 	}
-	      		node.addFunction(decl,f);
-	      	} 
-   		}
-*/
 
 
 /* Section 14: Program */
@@ -5321,7 +5233,6 @@ ASTProgram MainProgram(String text): {
 	List <ASTNode > nodes;
 }
 {
-    /*[<SHEBANG>]*/
     {
         // Gated on JSConfiguration.supportTopLevelObjectLiteral() (off by
         // default, on with enableGaltaJSExtensions()): a standard environment
@@ -5857,17 +5768,7 @@ Token Property_Name(): {
 
 //
 // Utility to insert a semi colon when needed
-// This is changed to support multiple errors recovery
 //
-JAVACODE
-void recoverFromError(boolean recoverError) {
-  	for(;;) {
-  	    if(checkSemiColon()) {
-  	        return;
-  	    }
-	   	getNextToken();
-	}
-}
 JAVACODE
 void insertSemiColon() {
 	if(!checkSemiColon()) {

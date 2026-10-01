@@ -335,43 +335,6 @@ public class ASTIdentifier extends ASTNode implements IVarDeclarator {
 		}
 	}
 	
-//	@Override
-//	public void evaluateAssign(JSInterpretedRuntimeContext context, Object rightValue, Function<Object, Object> assigner, JSResult result, Function<Object, Object> returnOriginalValue) {
-//		VarAccessor e = context.getVariableEntry(id);
-//		if(e==null) {
-//			JSEnvironment env = context.getEnvironment();
-//			// Is the eval context here still needed?
-//			// Also see the inc/dec node implementation
-//			if(context.getGlobalContext().isEvalExecution()) {
-//				e = context.getParent().getVariableEntry(id);
-//				if(e==null && !env.mustDeclareAllVariables()) {
-//					VariableMap globalVars = context.getGlobalContext().getVariableMap(true);
-//					e = globalVars.createVariable(id, RuntimeUtil.UNDEFINED, VAR_TYPE.AUTO);
-//				}
-//			}
-//			if(e==null) {
-//				if(env.mustDeclareAllVariables()) {
-//					throw RuntimeUtil.syntaxError("Unknown variable {0}", id);
-//				}
-//				VariableMap globalVars = context.getGlobalContext().getVariableMap(true);
-//				e = globalVars.createVariable(id, RuntimeUtil.UNDEFINED, VAR_TYPE.AUTO);
-//			}
-//		} else {
-//			if(e.getType()==VAR_TYPE.CONST) {
-//				throw RuntimeUtil.syntaxError("Cannot assign a value to a constant {0}", id);
-//			}
-//		}
-//		if(assigner!=null) {
-//			Object oldValue = e.getValue();
-//			Object calcValue = assigner.apply(oldValue);
-//			context.setVariable(id,calcValue);
-//			result.setValue(returnOriginalValue!=null ? returnOriginalValue.apply(oldValue) : calcValue);
-//		} else {
-//			context.setVariable(id,rightValue);
-//			result.setValue(rightValue);
-//		}
-//	}
-
 	@Override
 	public void evaluateAssign(JSInterpretedRuntimeContext context, Object rightValue, Function<Object, Object> assigner, JSResult result, Function<Object, Object> returnOriginalValue) {
 		evaluateAssign(context, rightValue, assigner, result, returnOriginalValue, null);

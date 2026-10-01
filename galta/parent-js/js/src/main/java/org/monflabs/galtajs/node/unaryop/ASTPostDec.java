@@ -38,19 +38,6 @@ public class ASTPostDec extends ASTAbstractIncDec {
 	@Override
 	public Signal evaluate(JSInterpretedRuntimeContext context, JSResult result) {
 		try {
-			// FAILS with eval() right now
-			// Optimization in case of an identifier
-//			ASTNode node;
-//			if((node=getNode()) instanceof ASTIdentifier id) {
-//				VarAccessor e = context.resolveIdentifierEntry(id.getId());
-//				if(e!=null) {
-//					Object value = RuntimeUtil.toNumber(context,e.getValue());
-//					Object newValue = RuntimeUtil.decNumber(context,value);
-//					e.setValue(newValue);
-//					result.setValue(value); // could have been converted to a number above...
-//					return Signal.NONE;
-//				}
-//			}
 			
 			getNode().evaluateAssign(context, null, 
 					(v) -> RuntimeUtil.decNumber(context.getEnvironment(),v), 

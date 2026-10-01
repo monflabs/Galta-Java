@@ -9,8 +9,8 @@ Source text becomes an `ASTProgram` in three steps: the JavaCC parser builds the
 ## Parser
 
 - The grammar is `src/main/javacc/org/monflabs/galtajs/parser/JSParser.jj` (about 5,500 lines). `javacc-maven-plugin` regenerates the parser into `target/generated-sources/javacc/` on every build; edit the `.jj`, never the output.
-- `parser/TokenMgrError.java` is hand-maintained (it carries `errorLine`/`errorColumn` for `ScriptError`); an antrun step deletes JavaCC's generated copy before compilation.
-- Other hand-written support classes: `ScriptError`, `ErrorList`, `ParserFastStringReader`, `ParserContextImpl`/`JSParserContext`.
+- `parser/TokenMgrError.java` is hand-maintained (it carries public `errorLine`/`errorColumn` fields); an antrun step deletes JavaCC's generated copy before compilation.
+- Other hand-written support classes: `ParserContextImpl`/`JSParserContext`.
 - Lexer-level GaltaJS extensions (number suffixes, `..`, `[?`, `.(`, `@`, `?:`, `|>`, the `*==` family) are always tokenized; whether they are accepted is decided later, at AST init, from the environment flags (`ASTNode.sequenceEnabled`, `ASTIdentifier` for `@`). Type hints are the exception: their productions are guarded by `LOOKAHEAD({env.supportTypeHints() && ...})`.
 
 ## `JSEnvironment.compileProgram()`

@@ -25,7 +25,6 @@ import org.monflabs.galtajs.JSParseException;
 import org.monflabs.galtajs.jsonfactory.JSObject;
 import org.monflabs.galtajs.modules.ModuleUtil;
 import org.monflabs.galtajs.node.control.ASTBlock;
-import org.monflabs.galtajs.node.control.ASTFunction;
 import org.monflabs.galtajs.optimizer.JSOptimizerContext;
 import org.monflabs.galtajs.rt.DisposeResourcesUtil;
 import org.monflabs.galtajs.rt.JSResult;

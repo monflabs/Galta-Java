@@ -152,10 +152,8 @@ public class ASTLiteral extends ASTNode {
 	
 	@Override
 	public String getNodeString() {
-		if(value instanceof String s) {
-			if(s.length()>64) {
-				s = s.substring(0,64)+"...";
-			}
+		if(value instanceof String s && s.length()>64) {
+			return encodeJavaLiteral(s.substring(0,64)+"...");
 		}
 		return encodeJavaLiteral(value);
 	}
@@ -229,7 +227,7 @@ public class ASTLiteral extends ASTNode {
 		// Integer literals (decimal, hex, octal, binary) never have an exponent
 		// part, so "e"/"E" next to a separator is just a hex digit (e.g. 0xe_e),
 		// not an exponent marker - only true decimal/float literals need that check.
-		s = removeNumericSeparator(s, false);
+		s = removeNumericSeparator(s);
 		// Check for a suffix
 		char lastChar = s.charAt(s.length()-1);
 		if(lastChar=='i' || lastChar=='I') {
@@ -323,7 +321,7 @@ public class ASTLiteral extends ASTNode {
 		return (c>='0' && c<='9') || (hex && ((c>='a' && c<='f') || (c>='A' && c<='F')));
 	}
 
-	private static String removeNumericSeparator(String s, boolean checkExponent) {
+	private static String removeNumericSeparator(String s) {
 		if(s.indexOf('_')>=0) {
 			// A NumericLiteralSeparator sits between two digits of the same
 			// digit sequence: not after a 0x/0o/0b prefix, not next to "."/"e"/a
@@ -360,7 +358,7 @@ public class ASTLiteral extends ASTNode {
 	////////////////////////////////////////////////////////////////////////////////////////
 
 	public static Number parseDecimal(JSEnvironment env, String s) throws ParseException {
-		s = removeNumericSeparator(s, true);
+		s = removeNumericSeparator(s);
 		// Check for a suffix
 		char lastChar = s.charAt(s.length()-1);
 		if(lastChar=='d' || lastChar=='D') {
@@ -854,9 +852,6 @@ public class ASTLiteral extends ASTNode {
 					str = encodeJavaLiteral(s.substring(0,JSTranspilerOptions.STRING_CONSTANT_SAMPLE)) + "...";
 				} else {
 					str = encodeJavaLiteral(s);
-				}
-				if(str.startsWith("new ")) {
-					str = str.substring(4);
 				}
 				if(str.startsWith("new ")) {
 					str = str.substring(4);

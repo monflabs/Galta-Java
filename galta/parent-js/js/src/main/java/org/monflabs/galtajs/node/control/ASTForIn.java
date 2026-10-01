@@ -39,7 +39,6 @@ import org.monflabs.galtajs.transpiler.context.JSTranspilerGeneratorContext;
 import org.monflabs.galtajs.transpiler.context.TranspilerGeneratorBlockContext;
 import org.monflabs.galtajs.types.JSType;
 import org.monflabs.galtajs.util.JavaBuilder;
-import org.monflabs.util.StringFormat;
 import org.monflabs.util.StringUtil;
 import org.monflabs.util.iterators.Iterators;
 

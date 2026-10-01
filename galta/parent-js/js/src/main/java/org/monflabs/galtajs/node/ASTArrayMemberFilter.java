@@ -34,9 +34,6 @@ import org.monflabs.util.StringFormat;
  */
 public class ASTArrayMemberFilter extends ASTNode {
 
-	// TODO, to simplify the code
-	//private static final boolean USE_TRANSPILER_RUNTIME = false;
-
 	private ASTNode node;
 	private ASTNode filter;
 

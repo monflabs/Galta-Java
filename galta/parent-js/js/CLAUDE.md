@@ -57,13 +57,13 @@ JS source → ScriptPreProcessor → JSParser (JavaCC) → ASTProgram → [optim
 
 - **`JSEnvironment`** — the root object. Create one per application; it holds all configuration, registered libraries, accessor maps, and caches. Call `env.createScript(source, name)` to parse, then execute with a context.
 - **`JSScriptExecutor`** — higher-level helper for running scripts/files without manually managing contexts.
-- **`JSParser.jj`** (in `src/main/javacc/org/monflabs/galtajs/parser/`) — the JavaCC grammar (source of truth for the parser). `javacc-maven-plugin` regenerates `JSParser.java` (+ support classes) into `target/generated-sources/javacc/` automatically on the `generate-sources` phase — edit `.jj`, not the generated output; a plain `mvn install`/`mvn test` picks up grammar changes with no manual step. `TokenMgrError.java` (in `src/main/java/.../parser/`) is the one exception: it's hand-customized (adds `errorLine`/`errorColumn` fields `ScriptError.java` depends on), so it's a normal, hand-maintained source file instead — the build deletes javacc's own generated copy of it before compiling, so only the hand-maintained one exists.
+- **`JSParser.jj`** (in `src/main/javacc/org/monflabs/galtajs/parser/`) — the JavaCC grammar (source of truth for the parser). `javacc-maven-plugin` regenerates `JSParser.java` (+ support classes) into `target/generated-sources/javacc/` automatically on the `generate-sources` phase — edit `.jj`, not the generated output; a plain `mvn install`/`mvn test` picks up grammar changes with no manual step. `TokenMgrError.java` (in `src/main/java/.../parser/`) is the one exception: it's hand-customized (adds public `errorLine`/`errorColumn` fields), so it's a normal, hand-maintained source file instead — the build deletes javacc's own generated copy of it before compiling, so only the hand-maintained one exists.
 
 ### Package Structure under `org.monflabs.galtajs`
 
 | Package | Purpose |
 |---|---|
-| `parser/` | JavaCC grammar (`src/main/javacc/.../parser/JSParser.jj`) + a few hand-maintained support classes (`TokenMgrError.java`, `ScriptError.java`, etc.) in `src/main/java/.../parser/`; the rest of the parser is generated into `target/generated-sources/javacc/` at build time |
+| `parser/` | JavaCC grammar (`src/main/javacc/.../parser/JSParser.jj`) + a few hand-maintained support classes (`TokenMgrError.java`, `ParserContextImpl.java`, etc.) in `src/main/java/.../parser/`; the rest of the parser is generated into `target/generated-sources/javacc/` at build time |
 | `node/` | AST node hierarchy rooted at `ASTNode` / `ASTProgram` |
 | `rt/` | Runtime: contexts, interpreter, transpiler runtime, executors |
 | `rt/builtins/` | All ECMAScript built-ins (primitives, standard objects, errors) |
