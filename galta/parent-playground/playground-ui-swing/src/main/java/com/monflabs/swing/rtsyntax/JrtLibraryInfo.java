@@ -123,7 +123,11 @@ public class JrtLibraryInfo extends LibraryInfo {
 
 	@Override
 	public int compareTo(LibraryInfo info) {
-		return info instanceof JrtLibraryInfo ? 0 : -1;	// one runtime image
+		if(info instanceof JrtLibraryInfo) {
+			return 0;	// one runtime image
+		}
+		// A total order with the other kinds (it used to answer -1 both ways)
+		return LibraryInfo2.compare(this, info);
 	}
 
 	@Override

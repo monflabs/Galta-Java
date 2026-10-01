@@ -15,35 +15,62 @@
  */
 package org.monflabs.ui.converters;
 
+import java.util.Locale;
+
 import org.monflabs.json.JsonUtil;
 
 /**
- * Converters to/from Text.
- * A null value converts to a null string and back; the typed converters also
- * read an empty string (an emptied field) as null.
+ * Converters between typed values and text (an input field).
+ * <p>
+ * The contract of the typed converters (boolean, int, long, double):
+ * <ul>
+ * <li>a null value converts to a null text, and back;</li>
+ * <li>the text is trimmed, and a blank text (an emptied field) is read as
+ * null;</li>
+ * <li>booleans are read case-insensitively ({@code true}, {@code TRUE},
+ * {@code False}...);</li>
+ * <li>a text that is not a valid value throws an
+ * {@link IllegalArgumentException} (a {@link NumberFormatException} for
+ * the numbers): there is no silent default value.</li>
+ * </ul>
+ * The string converter keeps the text as it is.
  *
  * @author priand
  */
-public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStringConverter<T> {
+public interface TextConverter<T> extends ValueToStringConverter<T> {
 
-	private static boolean isEmpty(String str) {
-		return str==null || str.isEmpty();
+	/**
+	 * Converts a text to a value.
+	 *
+	 * @throws IllegalArgumentException when the text is not a valid value
+	 */
+	public T stringToValue(String value);
+
+	/**
+	 * The trimmed text, or null when it is null or blank.
+	 */
+	private static String trimToNull(String str) {
+		if(str==null) {
+			return null;
+		}
+		String s = str.strip();
+		return s.isEmpty() ? null : s;
 	}
-		
+
 	public static class CString implements TextConverter<String> {
-		
+
 		@Override
 		public String valueToString(String value) {
 			return value;
 		}
-		
+
 		@Override
 		public String stringToValue(String str) {
 			return str;
 		}
 	}
 	public static final CString stringConverter = new CString();
-	
+
 	public static class CBoolean implements TextConverter<Boolean> {
 
 		@Override
@@ -53,7 +80,15 @@ public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStri
 
 		@Override
 		public Boolean stringToValue(String str) {
-			return !isEmpty(str) ? JsonUtil.parseBoolean(str) : null;
+			String s = trimToNull(str);
+			if(s==null) {
+				return null;
+			}
+			switch(s.toLowerCase(Locale.ROOT)) {
+				case "true": return Boolean.TRUE;
+				case "false": return Boolean.FALSE;
+				default: throw new IllegalArgumentException("Not a boolean: "+str);
+			}
 		}
 	}
 	public static final CBoolean booleanConverter = new CBoolean();
@@ -67,9 +102,10 @@ public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStri
 
 		@Override
 		public Integer stringToValue(String str) {
-			return !isEmpty(str) ? JsonUtil.parseInt(str) : null;
+			String s = trimToNull(str);
+			return s!=null ? Integer.valueOf(s) : null;
 		}
-	}	
+	}
 	public static final CInteger intConverter = new CInteger();
 
 	public static class CLong implements TextConverter<Long> {
@@ -81,9 +117,10 @@ public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStri
 
 		@Override
 		public Long stringToValue(String str) {
-			return !isEmpty(str) ? JsonUtil.parseLong(str) : null;
+			String s = trimToNull(str);
+			return s!=null ? Long.valueOf(s) : null;
 		}
-	}	
+	}
 	public static final CLong longConverter = new CLong();
 
 	public static class CDouble implements TextConverter<Double> {
@@ -95,8 +132,9 @@ public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStri
 
 		@Override
 		public Double stringToValue(String str) {
-			return !isEmpty(str) ? JsonUtil.parseDouble(str) : null;
+			String s = trimToNull(str);
+			return s!=null ? Double.valueOf(s) : null;
 		}
-	}	
+	}
 	public static final CDouble doubleConverter = new CDouble();
 }

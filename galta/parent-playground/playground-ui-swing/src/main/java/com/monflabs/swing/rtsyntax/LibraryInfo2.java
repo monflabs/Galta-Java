@@ -29,6 +29,33 @@ import org.fife.rsta.ac.java.buildpath.ZipSourceLocation;
 public class LibraryInfo2 {
 
 	/**
+	 * The order of a library info of this package against another one: by
+	 * kind then by what identifies the library (the same files are the same
+	 * library). RSyntaxTextArea's own library infos answer -1 against any
+	 * class but theirs, so the infos of this package sort after any foreign
+	 * one: the order stays antisymmetric.
+	 */
+	static int compare(LibraryInfo info, LibraryInfo other) {
+		if(!(other instanceof Jdk9LibraryInfo) && !(other instanceof JrtLibraryInfo)) {
+			return 1;
+		}
+		return sortKey(info).compareTo(sortKey(other));
+	}
+
+	/**
+	 * The kind (class) of a library info then what identifies the library.
+	 */
+	static String sortKey(LibraryInfo info) {
+		String location;
+		if(info instanceof Jdk9LibraryInfo jdk9) {
+			location = jdk9.jmodsKey();
+		} else {
+			location = String.valueOf(info.getLocationAsString());
+		}
+		return info.getClass().getName()+"|"+location;
+	}
+
+	/**
 	 * The runtime classes of the running JVM, or null if they cannot be located.
 	 */
 	public static LibraryInfo getMainJreJarInfo() {

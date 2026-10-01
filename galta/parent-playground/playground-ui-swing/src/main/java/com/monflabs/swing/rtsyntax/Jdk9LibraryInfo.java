@@ -132,7 +132,16 @@ public class Jdk9LibraryInfo extends LibraryInfo {
 		if (info instanceof Jdk9LibraryInfo other && other.jmods==jmods) {
 			return 0;	// a clone
 		}
-		return -1;
+		// A total order (it used to answer -1 both ways): by kind, then by
+		// the jmod files - the same files are the same library
+		return LibraryInfo2.compare(this, info);
+	}
+
+	/**
+	 * The jmod files, as a string: what identifies this library.
+	 */
+	String jmodsKey() {
+		return java.util.Arrays.toString(jmods.files);
 	}
 
 

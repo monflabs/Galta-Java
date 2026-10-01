@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.monflabs.ui.converters.BooleanConverter;
-import org.monflabs.ui.converters.LongConverter;
 import org.monflabs.ui.converters.TextConverter;
 import org.monflabs.ui.lookup.ILookupChangeListener;
 import org.monflabs.ui.lookup.StringArrayLookup;
@@ -41,13 +40,67 @@ public class ConvertersTest extends ProjectTestCase {
 		assertTrue(yn.valueToBoolean("?")); // default
 	}
 
-	public void testLongStringConverter() {
-		LongConverter.CString c = new LongConverter.CString(7);
-		assertEquals(12L, c.valueToLong("12"));
-		assertEquals(12L, c.valueToLong(" 12 "));
-		assertEquals(7L, c.valueToLong("abc"));
-		assertEquals(7L, c.valueToLong(null));
-		assertEquals("42", c.longToValue(42));
+	public void testTextConverterContract() {
+		// trimmed, like the double converter always was
+		assertEquals(Integer.valueOf(12), TextConverter.intConverter.stringToValue(" 12 "));
+		assertEquals(Long.valueOf(12), TextConverter.longConverter.stringToValue("\t12\n"));
+		assertEquals(Double.valueOf(1.5), TextConverter.doubleConverter.stringToValue(" 1.5 "));
+		// blank: null
+		assertNull(TextConverter.intConverter.stringToValue("   "));
+		assertNull(TextConverter.booleanConverter.stringToValue(" "));
+		// case-insensitive booleans
+		assertEquals(Boolean.TRUE, TextConverter.booleanConverter.stringToValue("TRUE"));
+		assertEquals(Boolean.FALSE, TextConverter.booleanConverter.stringToValue(" False "));
+		// invalid: IllegalArgumentException (NumberFormatException for numbers)
+		for(TextConverter<?> c: List.of(TextConverter.booleanConverter, TextConverter.intConverter, TextConverter.longConverter, TextConverter.doubleConverter)) {
+			try {
+				c.stringToValue("abc");
+				fail(c.getClass().getSimpleName());
+			} catch(IllegalArgumentException e) {
+				// expected
+			}
+		}
+		try {
+			TextConverter.intConverter.stringToValue("99999999999");
+			fail("out of range");
+		} catch(NumberFormatException e) {
+			// expected
+		}
+		// the string converter keeps the text
+		assertEquals(" a ", TextConverter.stringConverter.stringToValue(" a "));
+	}
+
+	public void testLookupIndexContract() {
+		StringArrayLookup l = new StringArrayLookup(new String[] {"a", "b"}, new String[] {"A"});
+		assertNull("no selection", l.getValue(-1));
+		assertEquals("", l.getDisplayLabel(-1));
+		assertEquals("A", l.getDisplayLabel(0));
+		assertEquals("b", l.getDisplayLabel(1));
+		for(int bad: new int[] {-2, 2}) {
+			try {
+				l.getValue(bad);
+				fail("getValue("+bad+")");
+			} catch(IndexOutOfBoundsException e) {
+				// expected
+			}
+			try {
+				l.getDisplayLabel(bad);
+				fail("getDisplayLabel("+bad+")");
+			} catch(IndexOutOfBoundsException e) {
+				// expected
+			}
+		}
+		org.monflabs.ui.lookup.ILookup<String> empty = org.monflabs.ui.lookup.Lookups.empty();
+		assertNull(empty.getValue(-1));
+		assertEquals("", empty.getDisplayLabel(-1));
+		try {
+			empty.getValue(0);
+			fail();
+		} catch(IndexOutOfBoundsException e) {
+			// expected
+		}
+		assertEquals(-1, l.find("z"));
+		assertEquals(1, l.find("b"));
 	}
 
 	public void testTextConvertersNull() {

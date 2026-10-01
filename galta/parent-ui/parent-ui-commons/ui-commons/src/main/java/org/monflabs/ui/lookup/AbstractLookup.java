@@ -33,8 +33,15 @@ public abstract class AbstractLookup<T> implements ILookup<T> {
     	return listeners;
     }
 
+	/**
+	 * The label of the value: its string form (an empty string for -1, the
+	 * "no selection" index).
+	 */
 	@Override
 	public String getDisplayLabel(int index) {
+		if(index==-1) {
+			return "";
+		}
 		T v = getValue(index);
 		return _valueToLabel(index, v);
 	}

@@ -17,7 +17,8 @@ package org.monflabs.ui.lookup;
 
 
 /**
- * 
+ * A lookup of strings, with optional display labels (the value itself when
+ * there is no label).
  */
 public class StringArrayLookup extends AbstractLookup<String> {
     
@@ -40,10 +41,10 @@ public class StringArrayLookup extends AbstractLookup<String> {
 
     @Override
 	public String getValue(int index) {
-    	if(index<0) {
-    		return null;
+    	if(index==-1) {
+    		return null;	// no selection
     	}
-    	if(index>=size()) {
+    	if(index<0 || index>=size()) {
     		throw new IndexOutOfBoundsException(index);
     	}
         return values[index];
@@ -61,10 +62,10 @@ public class StringArrayLookup extends AbstractLookup<String> {
 
     @Override
 	public String getDisplayLabel(int index) {
-    	if(index<0) {
-    		return "";
+    	if(index==-1) {
+    		return "";	// no selection
     	}
-    	if(index>=size()) {
+    	if(index<0 || index>=size()) {
     		throw new IndexOutOfBoundsException(index);
     	}
     	if(labels!=null && index<labels.length) {

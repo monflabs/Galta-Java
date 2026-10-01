@@ -20,8 +20,6 @@ notice, reproduced in the header of each file:
 - json-smart and json-simple parser classes (Apache License 2.0)
   galta/parent-json/json/src/main/java/org/monflabs/json/parser/JsonParser.java
   galta/parent-json/json/src/main/java/org/monflabs/json/parser/ParseException.java
-- JTreeTable, Sun Microsystems (BSD-style license)
-  galta/parent-ui/parent-ui-swing/ui-swing/src/main/java/org/monflabs/ui/swing/components/treetable
 - Jdk9LibraryInfo, derived from RSyntaxTextArea by Robert Futrell (BSD 3-Clause License)
   galta/parent-playground/playground-ui-swing/src/main/java/com/monflabs/swing/rtsyntax/Jdk9LibraryInfo.java
 - js-beautify by Einar Lielmanis, Liam Newman and contributors (MIT License),

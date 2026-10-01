@@ -21,6 +21,9 @@ package org.monflabs.ui.lookup;
  */
 public class Lookups {
 
+	/**
+	 * A lookup without values.
+	 */
 	public static <T> ILookup<T> empty() {
 		return new AbstractLookup<T>() {
 			@Override
@@ -29,7 +32,17 @@ public class Lookups {
 			}
 			@Override
 			public T getValue(int index) {
-				return null;
+				if(index==-1) {
+					return null;	// no selection
+				}
+				throw new IndexOutOfBoundsException(index);
+			}
+			@Override
+			public String getDisplayLabel(int index) {
+				if(index==-1) {
+					return "";
+				}
+				throw new IndexOutOfBoundsException(index);
 			}
 		};
 	}

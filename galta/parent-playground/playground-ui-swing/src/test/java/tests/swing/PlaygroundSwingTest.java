@@ -55,6 +55,26 @@ public class PlaygroundSwingTest extends ProjectTestCase {
 		});
 	}
 
+	public void testLibraryInfoOrderIsAntisymmetric() throws Exception {
+		java.io.File home = new java.io.File(System.getProperty("java.home"));
+		org.fife.rsta.ac.java.buildpath.LibraryInfo jrt = new com.monflabs.swing.rtsyntax.JrtLibraryInfo();
+		org.fife.rsta.ac.java.buildpath.LibraryInfo main = com.monflabs.swing.rtsyntax.LibraryInfo2.getJreJarInfo(home);
+		org.fife.rsta.ac.java.buildpath.LibraryInfo jar = new org.fife.rsta.ac.java.buildpath.JarLibraryInfo(new java.io.File(org.fife.rsta.ac.java.buildpath.JarLibraryInfo.class.getProtectionDomain().getCodeSource().getLocation().toURI()));
+		java.util.List<org.fife.rsta.ac.java.buildpath.LibraryInfo> all = java.util.List.of(jrt, main, jar);
+		for(var a: all) {
+			assertEquals(0, a.compareTo(a));
+			assertEquals(a, a.clone());
+			for(var b: all) {
+				// both -1 used to break sorting and equals()
+				assertEquals(a+" / "+b, Integer.signum(a.compareTo(b)), -Integer.signum(b.compareTo(a)));
+			}
+		}
+		assertEquals(jrt, new com.monflabs.swing.rtsyntax.JrtLibraryInfo());
+		java.util.List<org.fife.rsta.ac.java.buildpath.LibraryInfo> sorted = new java.util.ArrayList<>(all);
+		java.util.Collections.sort(sorted);
+		assertEquals(3, sorted.size());
+	}
+
 	public void testJdkLibraryInfos() throws Exception {
 		java.io.File home = new java.io.File(System.getProperty("java.home"));
 		java.util.List<org.fife.rsta.ac.java.buildpath.LibraryInfo> infos = new java.util.ArrayList<>();
