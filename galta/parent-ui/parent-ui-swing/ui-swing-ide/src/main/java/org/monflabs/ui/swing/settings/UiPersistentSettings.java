@@ -19,9 +19,20 @@ import org.monflabs.json.JsonException;
 import org.monflabs.util.config.Config;
 
 
+/**
+ * The configuration store where the UI persists its state (control values,
+ * window bounds...), set by the application at startup.
+ */
 public class UiPersistentSettings {
 
-	private static Config config;
+	private static volatile Config config;
+
+	/**
+	 * Whether a store was set: without one, {@link #get()} throws.
+	 */
+	public static boolean isAvailable() {
+		return config!=null;
+	}
 	
 	public static Config get() {
 		if(config==null) {

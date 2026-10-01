@@ -229,7 +229,7 @@ public class MultiSplitLayout implements LayoutManager2 {
 	}
 
 	private Region model;
-	private int dividerSize = 5;
+	private int dividerSize = org.monflabs.ui.swing.util.SwingUtil.scale(5);
 	private final Map<String,Component> components = new LinkedHashMap<>();
 	private final List<Divider> dividers = new ArrayList<>();
 

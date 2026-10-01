@@ -15,9 +15,13 @@
  */
 package org.monflabs.ui.swing.dialogs;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Predicate;
 
 import javax.swing.JTree;
+import javax.swing.plaf.TreeUI;
 import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 
@@ -35,15 +39,64 @@ public class JTreeUtil {
 		tree.scrollPathToVisible(path);
 	}
 	
+	/**
+	 * Expands every node of the tree.
+	 * <p>
+	 * Expanding row by row made the tree's UI recompute its layout after each
+	 * row: quadratic in the number of nodes (seconds on the event dispatch
+	 * thread for a 20 000 node tree). Here the expansion state is set with the
+	 * UI detached, and the UI rebuilds its layout once when it is attached
+	 * back.
+	 * <p>
+	 * The rebuild still measures every row with the cell renderer, unless the
+	 * tree has a fixed row height and a large model ({@code setRowHeight(n)},
+	 * {@code setLargeModel(true)}): set them for a tree of thousands of nodes
+	 * (20 000 nodes then expand in a fraction of a second).
+	 */
 	public static void expandAllNodes(JTree tree) {
-		int j = tree.getRowCount();
-		int i = 0;
-		while (i < j) {
-			tree.expandRow(i);
-			i += 1;
-			j = tree.getRowCount();
+		expandAllNodes(tree, Integer.MAX_VALUE);
+	}
+
+	/**
+	 * Expands the nodes of the tree down to a depth: 1 expands the root only
+	 * (its children are shown), 2 the root and its children, and so on.
+	 */
+	public static void expandAllNodes(JTree tree, int maxDepth) {
+		TreeModel model = tree.getModel();
+		Object root = model!=null ? model.getRoot() : null;
+		if(root==null || maxDepth<1) {
+			return;
 		}
-	}	
+		// The expandable paths, parents first
+		List<TreePath> paths = new ArrayList<>();
+		ArrayDeque<TreePath> stack = new ArrayDeque<>();
+		stack.push(new TreePath(root));
+		while(!stack.isEmpty()) {
+			TreePath path = stack.pop();
+			Object node = path.getLastPathComponent();
+			if(model.isLeaf(node) || path.getPathCount()>maxDepth) {
+				continue;
+			}
+			paths.add(path);
+			int count = model.getChildCount(node);
+			for(int i=count-1; i>=0; i--) {
+				stack.push(path.pathByAddingChild(model.getChild(node, i)));
+			}
+		}
+		TreeUI ui = tree.getUI();
+		tree.setUI(null);
+		try {
+			for(TreePath p: paths) {
+				tree.expandPath(p);
+			}
+		} finally {
+			if(ui!=null) {
+				tree.setUI(ui);
+			} else {
+				tree.updateUI();
+			}
+		}
+	}
 	
 
     public static void expandNodes(JTree tree, Predicate<TreePath> predicate) {

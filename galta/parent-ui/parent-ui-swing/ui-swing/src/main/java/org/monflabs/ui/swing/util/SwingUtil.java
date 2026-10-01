@@ -22,11 +22,25 @@ import java.awt.Rectangle;
 import java.awt.Window;
 
 /**
- * Some Swing utilities
+ * Some Swing utilities: window placement, component lookup and HiDPI scaling.
  * 
  * @author priand
  */
 public class SwingUtil {
+
+	/**
+	 * Scales a size in pixels by the user scale factor of the look and feel
+	 * (FlatLaf's {@code UIScale}: the scale applied when the default font is
+	 * larger than usual, or set with {@code flatlaf.uiScale}). The size is
+	 * unchanged at 100%.
+	 */
+	public static int scale(int size) {
+		try {
+			return com.formdev.flatlaf.util.UIScale.scale(size);
+		} catch(RuntimeException | LinkageError e) {
+			return size;
+		}
+	}
 		
     public static void centerWindow(Window w) {
     	centerWindow(w, null);

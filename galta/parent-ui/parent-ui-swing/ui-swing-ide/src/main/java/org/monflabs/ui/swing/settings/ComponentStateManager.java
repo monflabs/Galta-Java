@@ -45,6 +45,12 @@ public class ComponentStateManager {
 		}
 		public abstract void register();
 		public abstract void unregister();
+		/**
+		 * Applies the default value (and the init callback) without reading
+		 * nor persisting anything: used when persistence is disabled.
+		 */
+		public void applyDefault() {
+		}
 	}
 	
 	private final class Combobox extends Persister {
@@ -83,6 +89,14 @@ public class ComponentStateManager {
 				combo.removeActionListener(listener);
 			}
 		}
+		@Override
+		public void applyDefault() {
+			int index = defaultIndex>=-1 && defaultIndex<combo.getItemCount() ? defaultIndex : -1;
+			combo.setSelectedIndex(index);
+	        if(init!=null) {
+	        	init.accept(index);
+	        }
+		}
 	}
 	
 	private final class Checkbox extends Persister {
@@ -119,14 +133,26 @@ public class ComponentStateManager {
 				checkbox.removeItemListener(listener);
 			}
 		}
+		@Override
+		public void applyDefault() {
+			checkbox.setSelected(defaultValue);
+	        if(init!=null) {
+	        	init.accept(defaultValue);
+	        }
+		}
 	}
 	
 	private boolean enabled;
 	private String basePath;
 	private Persister first;
 	
+	/**
+	 * @param basePath the settings folder of the persisted values: persistence
+	 * is disabled when it is empty, or when no {@link UiPersistentSettings}
+	 * store is set
+	 */
 	public ComponentStateManager(String basePath) {
-		this.enabled = StringUtil.isNotEmpty(basePath);
+		this.enabled = StringUtil.isNotEmpty(basePath) && UiPersistentSettings.isAvailable();
 		this.basePath = basePath;
 	}
 	
@@ -147,11 +173,18 @@ public class ComponentStateManager {
 		}
 	}
 	
+	/**
+	 * Adds a persisted control: its value is restored now and saved on each
+	 * change. When persistence is disabled, the control still gets its
+	 * default value, and the init callback is still called.
+	 */
 	public ComponentStateManager add(Persister p) {
 		if(isEnabled()) {
 			p.next = first;
 			first = p;
 			p.register();
+		} else {
+			p.applyDefault();
 		}
 		return this;
 	}

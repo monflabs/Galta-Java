@@ -16,6 +16,7 @@
 package org.monflabs.ui.swing.ide.syntax;
 
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dialog;
 import java.awt.Frame;
 import java.awt.Graphics;
@@ -62,6 +63,7 @@ import org.monflabs.util.StringFormat;
 public class SyntaxTextArea extends RSyntaxTextArea {
 	
 	private int arrowPosition = -1;
+	private Color arrowColor;
 	
 	private boolean searchAction=true;
 	private boolean replaceAction=true;
@@ -155,6 +157,58 @@ public class SyntaxTextArea extends RSyntaxTextArea {
         }
     }
 	
+    /**
+     * Search dialogs belong to the window of this text area: they are
+     * disposed when the text area leaves it (a closed editor tab), instead
+     * of being kept with the text area until the window itself goes.
+     */
+    @Override
+    public void removeNotify() {
+    	disposeDialogs();
+    	super.removeNotify();
+    }
+
+    private void disposeDialogs() {
+		if(findDialog!=null) {
+			findDialog.dispose();
+			findDialog = null;
+		}
+		if(replaceDialog!=null) {
+			replaceDialog.dispose();
+			replaceDialog = null;
+		}
+		if(goToDialog!=null) {
+			goToDialog.dispose();
+			goToDialog = null;
+		}
+    }
+
+    /**
+     * The color of the debugger's current-line arrow: the one set with
+     * {@link #setArrowColor(Color)}, else one readable on the background (a
+     * yellow arrow is invisible on a light theme).
+     */
+    public Color getArrowColor() {
+    	if(arrowColor!=null) {
+    		return arrowColor;
+    	}
+    	return isDark(getBackground()) ? Color.YELLOW : new Color(0xD0, 0x60, 0x00);
+    }
+
+    public void setArrowColor(Color arrowColor) {
+    	this.arrowColor = arrowColor;
+    	repaint();
+    }
+
+    static boolean isDark(Color c) {
+    	if(c==null) {
+    		return false;
+    	}
+    	// perceived luminance
+    	double l = 0.299*c.getRed() + 0.587*c.getGreen() + 0.114*c.getBlue();
+    	return l<128;
+    }
+
     public void setArrowPosition(int position) {
     	if(this.arrowPosition != position) {
 	        this.arrowPosition = position;
@@ -208,7 +262,7 @@ public class SyntaxTextArea extends RSyntaxTextArea {
 				if (rect != null) {
 	                int arrowX = 4 + (int)rect.getX() - 10;
 	                int arrowY = (int)(rect.getY() + rect.getHeight() / 2); // Center the arrow vertically in the line
-	                g.setColor(Color.YELLOW);
+	                g.setColor(getArrowColor());
 	                g.fillPolygon(new int[]{arrowX, arrowX + 5, arrowX}, new int[]{arrowY - 5, arrowY, arrowY + 5}, 3);
 				}
             } catch (BadLocationException e) {
@@ -240,8 +294,13 @@ public class SyntaxTextArea extends RSyntaxTextArea {
 			if (replaceDialog!=null && replaceDialog.isVisible()) {
 				replaceDialog.setVisible(false);
 			}
-			Window w = SwingUtilities.getWindowAncestor(SyntaxTextArea.this);
-			GoToDialog dialog = w instanceof Dialog d ? new GoToDialog(d) : new GoToDialog(w instanceof Frame f ? f : null);
+			// One dialog per text area, reused (it used to be created on each use
+			// and never disposed)
+			if(goToDialog==null) {
+				Window w = SwingUtilities.getWindowAncestor(SyntaxTextArea.this);
+				goToDialog = w instanceof Dialog d ? new GoToDialog(d) : new GoToDialog(w instanceof Frame f ? f : null);
+			}
+			GoToDialog dialog = goToDialog;
 			dialog.setMaxLineNumberAllowed(textArea.getLineCount());
 			dialog.setVisible(true);
 			int line = dialog.getLineNumber();
@@ -295,6 +354,7 @@ public class SyntaxTextArea extends RSyntaxTextArea {
     
 	private FindDialog findDialog;
 	private ReplaceDialog replaceDialog;
+	private GoToDialog goToDialog;
     
 	private void initFindDialog() {
 		if(findDialog==null) {
@@ -367,7 +427,9 @@ public class SyntaxTextArea extends RSyntaxTextArea {
     			}
     			case REPLACE_ALL -> {
     				result = SearchEngine.replaceAll(textArea, context);
-    				JOptionPane.showMessageDialog(null, StringFormat.format("{0} occurrences replaced.", result.getCount()));
+    				// Over the replace dialog (or the editor's window), not centered on the screen
+    				Component parent = textArea.replaceDialog!=null && textArea.replaceDialog.isVisible() ? textArea.replaceDialog : textArea;
+    				JOptionPane.showMessageDialog(parent, StringFormat.format("{0} occurrences replaced.", result.getCount()));
     			}
     		}
 

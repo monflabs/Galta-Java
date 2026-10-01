@@ -23,6 +23,7 @@ public class AllUiSwingTests extends TestSuite {
 		TestSuite suite = new TestSuite();
 		suite.addTestSuite(tests.ui.SwingComponentsTest.class);
 		suite.addTestSuite(tests.ui.MultiSplitPaneTest.class);
+		suite.addTestSuite(tests.ui.SwingUtilitiesTest.class);
 
 		return suite;
 	}

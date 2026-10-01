@@ -24,7 +24,12 @@ import org.monflabs.util.Console;
 import org.monflabs.util.config.Config;
 
 /**
- * IDE theme.
+ * IDE theme: the Swing theme plus the matching RSyntaxTextArea theme (syntax
+ * colors), light or dark.
+ * <p>
+ * Like the look and feel, the syntax theme is chosen once, at startup: the
+ * syntax colors of the editors do not follow a later change of the OS
+ * appearance (the application must be restarted).
  */
 public class IDETheme extends SwingTheme {
 	
@@ -35,7 +40,15 @@ public class IDETheme extends SwingTheme {
 	private Theme rtTheme;
 	
     public IDETheme(Config config) {
-    	super(config);
+    	this(config, null);
+    }
+
+    /**
+     * @param applicationName the application name shown by macOS (see
+     * {@link SwingTheme#SwingTheme(Config, String)})
+     */
+    public IDETheme(Config config, String applicationName) {
+    	super(config, applicationName);
     	
     	rtTheme = loadTheme(isDark()?THEME_DARK:THEME_LIGHT);
     	if(rtTheme==null && isDark()) {

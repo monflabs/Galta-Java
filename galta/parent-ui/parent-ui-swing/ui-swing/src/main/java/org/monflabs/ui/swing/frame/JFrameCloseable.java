@@ -62,11 +62,34 @@ public class JFrameCloseable extends JFrame {
         setLocationByPlatform(true);
     }
     
+    private static volatile boolean exitOnLastFrameClosed = true;
+
     /**
-     * Called when the last open frame has been closed. Exits the JVM by default.
+     * Whether closing the last open {@code JFrameCloseable} exits the JVM
+     * (true by default: these frames are the application's main windows).
+     */
+    public static boolean isExitOnLastFrameClosed() {
+    	return exitOnLastFrameClosed;
+    }
+
+    /**
+     * Sets whether closing the last open frame exits the JVM: false for code
+     * that keeps running without the frames (a host application, tests).
+     * Subclasses can also override {@link #onLastFrameClosed()}.
+     */
+    public static void setExitOnLastFrameClosed(boolean exit) {
+    	exitOnLastFrameClosed = exit;
+    }
+
+    /**
+     * Called on the event dispatch thread when the last open frame has been
+     * closed (disposed). Exits the JVM with status 0, unless
+     * {@link #setExitOnLastFrameClosed(boolean)} turned it off.
      */
     protected void onLastFrameClosed() {
-    	System.exit(0);
+    	if(exitOnLastFrameClosed) {
+    		System.exit(0);
+    	}
     }
     
     public boolean canClose() {

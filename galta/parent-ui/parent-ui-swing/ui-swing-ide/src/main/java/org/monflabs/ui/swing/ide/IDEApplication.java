@@ -34,7 +34,17 @@ public class IDEApplication extends UISwingApplication {
 	public static class Builder extends ObjectBuilder<IDEApplication> {
 		private Config config;
 		private IDETheme theme;
+		private String applicationName;
 		private Builder() {}
+		/**
+		 * The application name shown by macOS in the menu bar, when the
+		 * configuration has none ({@code ui/applicationName}). Only used when
+		 * the builder creates the theme.
+		 */
+		public Builder applicationName(String applicationName) {
+			this.applicationName = applicationName;
+			return this;
+		}
 		public Builder config(Config config) {
 			this.config = config;
 			return this;
@@ -49,7 +59,7 @@ public class IDEApplication extends UISwingApplication {
 				config = CustomJsonConfig.newBuilder().build();
 			}
 			if(theme==null) {
-				theme = new IDETheme(config);
+				theme = new IDETheme(config, applicationName);
 			}
 		}
 		@Override

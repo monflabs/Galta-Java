@@ -15,7 +15,6 @@
  */
 package org.monflabs.ui.swing.theme;
 
-import java.awt.Color;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -33,55 +32,78 @@ import com.formdev.flatlaf.themes.FlatMacDarkLaf;
 import com.formdev.flatlaf.util.SystemInfo;
 
 /**
- * Swing theme based on flatlaf
+ * Swing theme based on FlatLaf: a light or dark look and feel, following the
+ * OS appearance unless the configuration forces it.
+ * <p>
+ * Configuration keys:
+ * <ul>
+ * <li>{@code ui/dark} (boolean): force the dark or the light theme;</li>
+ * <li>{@code ui/applicationName} (string): the application name shown by
+ * macOS in the menu bar (default {@value #DEFAULT_APPLICATION_NAME}, or the
+ * name given to {@link #SwingTheme(Config, String)});</li>
+ * <li>{@code ui/hideFocusBorder} (boolean): no focus border on the
+ * components (it used to be forced in the dark theme, hiding the keyboard
+ * focus).</li>
+ * </ul>
+ * The theme is chosen once, at startup: the look and feel and the syntax
+ * colors do not follow a later change of the OS appearance.
  */
 public class SwingTheme {
-	
-	private boolean dark;
-	
-    public SwingTheme(Config config) {
-    	
-    	// Mac OS
-    	if( SystemInfo.isMacOS ) {
-			// hide menu items that are in macOS application menu
-//			exitMenuItem.setVisible( false );
-//			aboutMenuItem.setVisible( false );
 
-        	if(config!=null && config.has("ui/dark")) {
-            	this.dark = config.getBoolean("ui/dark");
-        	} else {
-            	this.dark = isMacOSDark();
-        	}
-    		
+	/**
+	 * The application name used on macOS when none is given.
+	 */
+	public static final String DEFAULT_APPLICATION_NAME = "IDE";
+
+	private boolean dark;
+
+    public SwingTheme(Config config) {
+    	this(config, null);
+    }
+
+    /**
+     * @param applicationName the application name shown by macOS, used when
+     * the configuration has none (null: {@value #DEFAULT_APPLICATION_NAME})
+     */
+    public SwingTheme(Config config, String applicationName) {
+    	if(config!=null && config.has("ui/dark")) {
+        	this.dark = config.getBoolean("ui/dark");
+    	} else if( SystemInfo.isMacOS ) {
+        	this.dark = isMacOSDark();
+    	} else if( SystemInfo.isLinux ) {
+        	this.dark = isLinuxDark();
+    	} else if( SystemInfo.isWindows ) {
+        	this.dark = isWindowsDark();
+    	}
+
+    	// Mac OS: the apple.* properties are read when AWT and the look and
+    	// feel initialize - they must be set before the FlatLaf setup
+    	if( SystemInfo.isMacOS ) {
+    		// "system" is documented but unreliable here: apple.awt.transparentTitleBar
+    		// (IDEFrame) makes the title bar strip show the app's own (FlatLaf-painted)
+    		// background, but the NATIVE title TEXT color comes from this property's
+    		// NSAppearance value, read once at native window creation. Setting the
+    		// concrete NSAppearance name tied to our own resolved `dark` keeps the
+    		// title readable whatever the OS state or a config-forced ui/dark.
+    		System.setProperty( "apple.awt.application.appearance", dark ? "NSAppearanceNameDarkAqua" : "NSAppearanceNameAqua" );
+    		System.setProperty( "apple.laf.useScreenMenuBar", "true" );
+    		String name = config!=null && config.has("ui/applicationName") ? config.getString("ui/applicationName") : null;
+    		if(name==null || name.isEmpty()) {
+    			name = applicationName!=null ? applicationName : DEFAULT_APPLICATION_NAME;
+    		}
+    		// an explicit -Dapple.awt.application.name wins
+    		if(System.getProperty("apple.awt.application.name")==null) {
+    			System.setProperty( "apple.awt.application.name", name );
+    		}
     		if(dark) {
         		FlatMacDarkLaf.setup();
         	} else {
         		FlatLightLaf.setup();
         	}
-			
-    		// "system" is documented but unreliable here: apple.awt.transparentTitleBar
-    		// (IDEFrame) makes the title bar strip show the app's own (FlatLaf-painted)
-    		// background, but the NATIVE title TEXT color comes from this property's
-    		// NSAppearance value, read once at native window creation - if that read
-    		// doesn't line up with the app's own resolved "dark" (e.g. "system" not
-    		// reliably tracking actual OS state at this point in startup, or a
-    		// config-forced ui/dark that disagrees with the OS), the text stays the
-    		// OTHER appearance's color - black text on FlatMacDarkLaf's dark fill,
-    		// unreadable. Setting the concrete NSAppearance name tied to our own
-    		// already-resolved `dark` removes the ambiguity entirely.
-    		System.setProperty( "apple.awt.application.appearance", dark ? "NSAppearanceNameDarkAqua" : "NSAppearanceNameAqua" );
-    		System.setProperty( "apple.laf.useScreenMenuBar", "true" );
-    		System.setProperty( "apple.awt.application.name", "IDE" );
     	}
-    	
+
 		// Linux
 		if( SystemInfo.isLinux ) {
-        	if(config!=null && config.has("ui/dark")) {
-            	this.dark = config.getBoolean("ui/dark");
-        	} else {
-            	this.dark = isLinuxDark();
-        	}
-        	
 			// enable custom window decorations
 			JFrame.setDefaultLookAndFeelDecorated( true );
 			JDialog.setDefaultLookAndFeelDecorated( true );
@@ -90,31 +112,25 @@ public class SwingTheme {
         	} else {
         		FlatLightLaf.setup();
         	}
-		}    	
-    	
+		}
+
 		// Windows
 		if( SystemInfo.isWindows ) {
-        	if(config!=null && config.has("ui/dark")) {
-            	this.dark = config.getBoolean("ui/dark");
-        	} else {
-            	this.dark = isWindowsDark();
-        	}
-
         	if(dark) {
         		FlatDarkLaf.setup();
         	} else {
         		FlatLightLaf.setup();
         	}
-		}    	
-    	
-    	if(dark) {
-        	UIManager.put( "Component.focusedBorderColor", new Color(0) );
+		}
+
+		// Opt-in only: hiding the focus border makes keyboard navigation blind
+    	if(config!=null && config.has("ui/hideFocusBorder") && config.getBoolean("ui/hideFocusBorder")) {
         	UIManager.put( "Component.focusWidth", 0 );
         	UIManager.put( "Component.innerFocusWidth", 0 );
         	UIManager.put( "Component.outerFocusWidth", 0 );
     	}
     }
-    
+
     public boolean isDark() {
     	return dark;
     }

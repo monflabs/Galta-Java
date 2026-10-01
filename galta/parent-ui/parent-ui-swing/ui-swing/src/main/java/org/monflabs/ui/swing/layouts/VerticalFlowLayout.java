@@ -154,14 +154,26 @@ public class VerticalFlowLayout extends FlowLayout {
 		int maxwidth = targetSize - (insets.left + insets.right + getHgap() * 2);
 //		int maxwidth =  target.getSize().width - (insets.left + insets.right + getHgap() * 2);
 		int numcomp = target.getComponentCount();
+		// vfill stretches the last visible component (an invisible last one
+		// used to disable it)
+		int lastVisible = -1;
+		for (int i = numcomp - 1; i >= 0; i--) {
+			if (target.getComponent(i).isVisible()) {
+				lastVisible = i;
+				break;
+			}
+		}
 		int x = insets.left + getHgap(), y = 0;
 		int colw = 0, start = 0;
 		for (int i = 0; i < numcomp; i++) {
 			Component m = target.getComponent(i);
 			if (m.isVisible()) {
 				Dimension d = m.getPreferredSize();
-				if ((this.vfill) && (i == (numcomp - 1))) {
-					d.height = Math.max((maxheight - y), m.getPreferredSize().height);
+				if (this.vfill && i == lastVisible) {
+					// The gap placed before it is part of the column too: without
+					// it, the component overflowed into the bottom gap
+					int available = maxheight - y - (y > 0 ? getVgap() : 0);
+					d.height = Math.max(available, d.height);
 				}
 				if (this.hfill) {
 					m.setSize(maxwidth, d.height);

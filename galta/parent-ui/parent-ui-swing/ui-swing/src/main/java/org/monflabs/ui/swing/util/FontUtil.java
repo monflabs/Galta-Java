@@ -17,6 +17,8 @@ package org.monflabs.ui.swing.util;
 
 import java.awt.Font;
 
+import javax.swing.plaf.FontUIResource;
+
 /**
  * Some Font utilities
  * 
@@ -24,10 +26,15 @@ import java.awt.Font;
  */
 public class FontUtil {
 	
+	/**
+	 * The bold version of a font: same family, size (fractional sizes
+	 * included) and attributes. A {@link FontUIResource} stays one, so the
+	 * look and feel still treats it as its own.
+	 */
 	public static Font boldify(Font font) {
 		if(!font.isBold()) {
-			int style = font.getStyle() | Font.BOLD;
-			return new Font( font.getName(), style, font.getSize() );
+			Font bold = font.deriveFont(font.getStyle() | Font.BOLD, font.getSize2D());
+			return font instanceof FontUIResource ? new FontUIResource(bold) : bold;
 		}
 	    return font;
     }

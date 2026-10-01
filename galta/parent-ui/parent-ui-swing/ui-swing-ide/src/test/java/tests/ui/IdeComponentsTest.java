@@ -191,6 +191,37 @@ public class IdeComponentsTest extends ProjectTestCase {
 		assertEquals("after", text(ta));
 	}
 
+	public void testArrowColorFollowsTheBackground() {
+		org.monflabs.ui.swing.ide.syntax.SyntaxTextArea ta = new org.monflabs.ui.swing.ide.syntax.SyntaxTextArea();
+		ta.setBackground(java.awt.Color.WHITE);
+		java.awt.Color light = ta.getArrowColor();
+		assertFalse("a yellow arrow is invisible on white", java.awt.Color.YELLOW.equals(light));
+		ta.setBackground(new java.awt.Color(0x20, 0x20, 0x20));
+		assertEquals(java.awt.Color.YELLOW, ta.getArrowColor());
+		ta.setArrowColor(java.awt.Color.RED);
+		assertEquals(java.awt.Color.RED, ta.getArrowColor());
+	}
+
+	public void testComponentStateManagerWithoutPersistence() {
+		// no store set: the controls still get their default values and the
+		// init callbacks still run
+		assertFalse(org.monflabs.ui.swing.settings.UiPersistentSettings.isAvailable());
+		org.monflabs.ui.swing.settings.ComponentStateManager m = new org.monflabs.ui.swing.settings.ComponentStateManager("test");
+		assertFalse(m.isEnabled());
+		javax.swing.JCheckBox cb = new javax.swing.JCheckBox();
+		java.util.List<Boolean> init = new java.util.ArrayList<>();
+		m.add(cb, "flag", true, init::add);
+		assertTrue(cb.isSelected());
+		assertEquals(java.util.List.of(true), init);
+		javax.swing.JComboBox<String> combo = new javax.swing.JComboBox<>(new String[] {"a", "b", "c"});
+		java.util.List<Integer> index = new java.util.ArrayList<>();
+		m.add(combo, "combo", 2, index::add);
+		assertEquals(2, combo.getSelectedIndex());
+		assertEquals(java.util.List.of(2), index);
+		// an empty base path: disabled too
+		assertFalse(new org.monflabs.ui.swing.settings.ComponentStateManager("").isEnabled());
+	}
+
 	public void testTrimmedToTheMaximumSize() throws Exception {
 		JTextArea ta = new JTextArea();
 		PrintStream ps = TextAreaOutputStream.getPrintStream(ta);
