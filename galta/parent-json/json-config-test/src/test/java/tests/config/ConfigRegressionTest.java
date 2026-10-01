@@ -59,7 +59,7 @@ public class ConfigRegressionTest extends ProjectTestCase {
 		// Stored: the referenced resource is encrypted right after the load...
 		JsonObject db = parse(c.getResourceAsString("db.json"));
 		assertTrue((String)db.get("password"), enc.isEncrypted((String)db.get("password")));
-		assertEquals("secret", enc.decryptValue((String)db.get("password")));
+		assertEquals("secret", enc.decrypt(new String[] {"db","password"}, (String)db.get("password")));
 		assertEquals("h", db.get("host"));
 		// ...the main one keeps its reference and its (not selected) top level password
 		JsonObject main = parse(c.getResourceAsString(null));
@@ -75,7 +75,7 @@ public class ConfigRegressionTest extends ProjectTestCase {
 		assertTrue(c.updateValues( (u) -> u.put("db/password", "changed") ));
 		db = parse(c.getResourceAsString("db.json"));
 		assertTrue(enc.isEncrypted((String)db.get("password")));
-		assertEquals("changed", enc.decryptValue((String)db.get("password")));
+		assertEquals("changed", enc.decrypt(new String[] {"db","password"}, (String)db.get("password")));
 		assertEquals("changed", c.getString("db/password"));
 	}
 	
@@ -99,13 +99,13 @@ public class ConfigRegressionTest extends ProjectTestCase {
 								.build();
 		assertEquals("[[x]]", c.getString("password"));
 		String stored = (String)parse(c.getResourceAsString(null)).get("password");
-		assertTrue(stored, stored.startsWith("[[v2:"));
-		assertEquals("[[x]]", enc.decryptValue(stored));
+		assertTrue(stored, stored.startsWith("[[v3:"));
+		assertEquals("[[x]]", enc.decrypt(new String[] {"password"}, stored));
 		
 		assertTrue(c.updateValues( (u) -> u.put("password", "[[y]]") ));
 		assertEquals("[[y]]", c.getString("password"));
 		stored = (String)parse(c.getResourceAsString(null)).get("password");
-		assertEquals("[[y]]", enc.decryptValue(stored));
+		assertEquals("[[y]]", enc.decrypt(new String[] {"password"}, stored));
 	}
 	
 	public void testTypedUpdatesKeepTheirType() throws Exception {
@@ -175,9 +175,9 @@ public class ConfigRegressionTest extends ProjectTestCase {
 								.build();
 		assertEquals("A value to encrypt", c.getString("password"));
 		String stored = (String)parse(c.getResourceAsString(null)).get("password");
-		assertTrue(stored, stored.startsWith("[[v2:"));
+		assertTrue(stored, stored.startsWith("[[v3:"));
 		assertFalse(enc.needsReencryption(stored));
-		assertEquals("A value to encrypt", enc.decryptValue(stored));
+		assertEquals("A value to encrypt", enc.decrypt(new String[] {"password"}, stored));
 	}
 
 	public void testArrayValuesAreEncrypted() throws Exception {
@@ -188,9 +188,9 @@ public class ConfigRegressionTest extends ProjectTestCase {
 								.build();
 		JsonObject stored = parse(c.getResourceAsString(null));
 		org.monflabs.json.JsonArray a = (org.monflabs.json.JsonArray)stored.get("secrets");
-		assertEquals("a", enc.decryptValue((String)a.get(0)));
-		assertEquals("b", enc.decryptValue((String)((org.monflabs.json.JsonArray)a.get(1)).get(0)));
-		assertEquals("c", enc.decryptValue((String)((JsonObject)a.get(2)).get("x")));
+		assertEquals("a", enc.decrypt(new String[] {"secrets"}, (String)a.get(0)));
+		assertEquals("b", enc.decrypt(new String[] {"secrets"}, (String)((org.monflabs.json.JsonArray)a.get(1)).get(0)));
+		assertEquals("c", enc.decrypt(new String[] {"secrets","x"}, (String)((JsonObject)a.get(2)).get("x")));
 		assertEquals(3, ((Number)a.get(3)).intValue());
 		assertEquals("d", ((org.monflabs.json.JsonArray)stored.get("plain")).get(0));
 		// Decrypted in memory

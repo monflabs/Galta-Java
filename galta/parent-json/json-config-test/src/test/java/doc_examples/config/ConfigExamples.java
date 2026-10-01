@@ -255,7 +255,9 @@ public class ConfigExamples extends ProjectTestCase {
 
 		config.updateValues(u -> u.put("db/host", "h2"));
 		assertEquals("h2", config.getString("db/host"));
-		assertEquals("h", readJson(folder.resolve("common.json")).getObject("db").get("host"));  // not written back
+		JsonObject common = readJson(folder.resolve("common.json"));
+		assertEquals("h2", common.getObject("db").get("host"));                     // written back to its part
+		assertEquals(1, common.getInt("other"));                                     // the rest is kept
 		assertEquals("common.json#/db", readJson(folder.resolve("app.json")).getObject("db").get("$ref"));
 	}
 
@@ -286,7 +288,7 @@ public class ConfigExamples extends ProjectTestCase {
 		String enc = stored.getObject("db").getString("password");
 		assertTrue(enc.startsWith("[[") && enc.endsWith("]]"));
 		assertEquals("joe", stored.getString("user"));
-		assertEquals("s3cret", encryptor.decryptValue(enc));
+		assertEquals("s3cret", encryptor.decrypt(new String[] {"db", "password"}, enc));  // bound to its key path
 
 		// Updated values are encrypted when saved
 		config.updateValues(u -> u.put("password", "new"));
@@ -297,7 +299,7 @@ public class ConfigExamples extends ProjectTestCase {
 	public void testEncryptorStandalone() throws Exception {
 		KeyEncryptor encryptor = new KeyEncryptor("my-master-key", keys -> true);
 		String enc = encryptor.encryptValue("hello");
-		assertTrue(encryptor.isEncrypted(enc));                  // "[[v2:" + base64 + "]]"
+		assertTrue(encryptor.isEncrypted(enc));                  // "[[v3:" + base64 + "]]"
 		assertEquals("hello", encryptor.decryptValue(enc));
 		assertFalse(enc.equals(encryptor.encryptValue("hello"))); // random IV: never the same text
 	}

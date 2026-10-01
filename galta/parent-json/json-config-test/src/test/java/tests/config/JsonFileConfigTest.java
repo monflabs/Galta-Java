@@ -369,10 +369,10 @@ public class JsonFileConfigTest extends ProjectTestCase {
 		assertEquals("56", o.get("passw0rd"));
 		String p1 = (String)o.get("password");
 		String p2 = (String)((JsonObject)o.get("c")).get("password");
-		assertTrue(p1, p1.startsWith("[[v2:"));
-		assertTrue(p2, p2.startsWith("[[v2:"));
-		assertEquals("34", enc.decryptValue(p1));
-		assertEquals("78", enc.decryptValue(p2));
+		assertTrue(p1, p1.startsWith("[[v3:"));
+		assertTrue(p2, p2.startsWith("[[v3:"));
+		assertEquals("34", enc.decrypt(new String[] {"password"}, p1));
+		assertEquals("78", enc.decrypt(new String[] {"c","password"}, p2));
 	}
 	
 	public void testEncryptNestedKeyPath() throws Exception {
@@ -405,7 +405,7 @@ public class JsonFileConfigTest extends ProjectTestCase {
 		assertEquals("deep", ((JsonObject)((JsonObject)stored.get("db")).get("x")).get("password"));
 		String storedNested = (String)((JsonObject)stored.get("db")).get("password");
 		assertTrue(enc.isEncrypted(storedNested));
-		assertEquals("nested", enc.decryptValue(storedNested));
+		assertEquals("nested", enc.decrypt(new String[] {"db","password"}, storedNested));
 		
 		// Same after an explicit save
 		assertTrue( c.save() );

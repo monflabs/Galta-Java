@@ -36,7 +36,7 @@ public class KeyEncryptorTest extends ProjectTestCase {
 	
 		String orgValue = "A value to encrypt";
 		String encValue = e.encrypt(toEnc, orgValue);
-		assertTrue(encValue, encValue.startsWith("[[v2:") && encValue.endsWith("]]"));
+		assertTrue(encValue, encValue.startsWith("[[v3:") && encValue.endsWith("]]"));
 		assertEquals(orgValue, e.encrypt(noEnc, orgValue));
 		
 		assertTrue (e.isEncrypted(encValue));

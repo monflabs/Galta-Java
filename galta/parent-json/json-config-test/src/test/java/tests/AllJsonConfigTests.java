@@ -17,6 +17,7 @@ package tests;
 
 import doc_examples.config.ConfigExamples;
 import junit.framework.TestSuite;
+import tests.config.ConfigHardeningTest;
 import tests.config.ConfigRegressionTest;
 import tests.config.CustomJsonConfigTest;
 import tests.config.JsonFileConfigTest;
@@ -31,6 +32,7 @@ public class AllJsonConfigTests extends TestSuite {
 		suite.addTestSuite(JsonFileConfigTest.class);
 		suite.addTestSuite(KeyEncryptorTest.class);
 		suite.addTestSuite(ConfigRegressionTest.class);
+		suite.addTestSuite(ConfigHardeningTest.class);
 
 		suite.addTestSuite(ConfigExamples.class);
 
