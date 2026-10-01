@@ -178,22 +178,26 @@ public class MemoryJsonDb {
 	}
 	
 	public synchronized JsonDbRecord insert(JsonKey key, Object content) {
-		checkValid();
-		if(records.containsKey(key)) {
-			throw new JsonException(null, "Record with key {0} already exists", key);
-		}
-		transactionId++;
-		deleted.remove(key);
-		Instant now = now();
-		RecordEntry r = new RecordEntry(key,content,now,now);
-		records.put(key,r);
-		return r;
+		return put(key, content, Boolean.FALSE);
 	}
-	
+
 	public synchronized JsonDbRecord update(JsonKey key, Object content) {
+		return put(key, content, Boolean.TRUE);
+	}
+
+	public synchronized JsonDbRecord upsert(JsonKey key, Object content) {
+		return put(key, content, null);
+	}
+
+	/**
+	 * Stores a record.
+	 * @param mustExist true if the record must already exist (update), false if it must
+	 * not (insert), null if it does not matter (upsert)
+	 */
+	private JsonDbRecord put(JsonKey key, Object content, Boolean mustExist) {
 		checkValid();
-		if(!records.containsKey(key)) {
-			throw new JsonException(null, "Record with key {0} does not exist", key);
+		if(mustExist!=null && records.containsKey(key)!=mustExist) {
+			throw new JsonException(null, mustExist ? "Record with key {0} does not exist" : "Record with key {0} already exists", key);
 		}
 		transactionId++;
 		deleted.remove(key);
@@ -202,17 +206,7 @@ public class MemoryJsonDb {
 		records.put(key,r);
 		return r;
 	}
-	
-	public synchronized JsonDbRecord upsert(JsonKey key, Object content) {
-		checkValid();
-		transactionId++;
-		deleted.remove(key);
-		Instant now = now();
-		RecordEntry r = new RecordEntry(key,content,now,now);
-		records.put(key,r);
-		return r;
-	}
-	
+
 	public synchronized void delete(JsonKey key) {
 		checkValid();
 		if(!records.containsKey(key)) {
@@ -337,6 +331,36 @@ public class MemoryJsonDb {
 	// This method do not generate error
 	// 
 	
+	/**
+	 * Number of records matching a filter (null for all), without copying them. The filter
+	 * is called while the DB is locked.
+	 */
+	synchronized int countRecords(Predicate<JsonDbRecord> filter) {
+		checkValid();
+		if(filter==null) {
+			return records.size();
+		}
+		int count = 0;
+		for(RecordEntry r: records.values()) {
+			if(filter.test(r)) {
+				count++;
+			}
+		}
+		return count;
+	}
+	/**
+	 * First record matching a filter (null for all), or null, without copying the records.
+	 * The filter is called while the DB is locked.
+	 */
+	synchronized JsonDbRecord firstRecord(Predicate<JsonDbRecord> filter) {
+		checkValid();
+		for(RecordEntry r: records.values()) {
+			if(filter==null || filter.test(r)) {
+				return r;
+			}
+		}
+		return null;
+	}
 	/**
 	 * Snapshot of the records, so a select can be iterated while the DB is modified.
 	 */

@@ -263,4 +263,42 @@ public class MemoryDbConsistencyTest extends ProjectTestCase {
 		table.clear();
 		assertNull(table.lastReplication("s", "t2"));
 	}
+
+	public void testSelectCountAndFirst() throws Exception {
+		MemoryJsonDb db = new MemoryJsonDb();
+		db.insert(JsonKey.of("a","1"), JsonObject.of("v",1));
+		db.insert(JsonKey.of("b","2"), JsonObject.of("v",2));
+		db.insert(JsonKey.of("a","3"), JsonObject.of("v",3));
+		assertEquals(3, db.select().count());
+		assertEquals(2, db.select().collection("a").count());
+		assertEquals(1, db.select().collection("a").filter(r -> ((JsonObject)r.getJson()).getInt("v")>1).count());
+		assertEquals("1", db.select().first().getKey().getId());
+		assertEquals("3", db.select().collection("a").filter(r -> ((JsonObject)r.getJson()).getInt("v")>1).first().getKey().getId());
+		assertNull(db.select().collection("zz").first());
+		assertEquals(0, db.select().collection("zz").count());
+		// first() stops at the first match
+		int[] calls = new int[1];
+		db.select().filter(r -> { calls[0]++; return true; }).first();
+		assertEquals(1, calls[0]);
+	}
+
+	public void testInsertUpdateUpsert() throws Exception {
+		MemoryJsonDb db = new MemoryJsonDb();
+		JsonKey k = JsonKey.of("c","k");
+		db.insert(k, JsonObject.of("v",1));
+		org.junit.Assert.assertThrows(org.monflabs.json.JsonException.class, () -> db.insert(k, JsonObject.of("v",2)));
+		db.update(k, JsonObject.of("v",2));
+		org.junit.Assert.assertThrows(org.monflabs.json.JsonException.class, () -> db.update(JsonKey.of("c","x"), JsonObject.of("v",2)));
+		db.upsert(JsonKey.of("c","x"), JsonObject.of("v",3));
+		assertEquals(2, db.count());
+		db.delete(k);
+		assertTrue(db.isDeleted(k));
+		db.upsert(k, JsonObject.of("v",4));
+		assertFalse(db.isDeleted(k));
+	}
+
+	public void testDbTargetSupportsDeletions() throws Exception {
+		MemoryJsonDb db = new MemoryJsonDb();
+		assertTrue(org.monflabs.json.impexp.db.JsonDbTarget.newBuilder().db(db).build().supportsDeletions());
+	}
 }

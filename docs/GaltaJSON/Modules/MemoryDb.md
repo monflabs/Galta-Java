@@ -71,7 +71,7 @@ int n = db.execute(d -> {            // atomic read-modify-write
 
 ## Selecting
 
-`select()` starts a `JsonSelect`, narrowed with `collection(name)` and `filter(Predicate<JsonDbRecord>)`, and consumed with `stream()`, `forEach()`, `collect()`, `first()`, `count()`, `keys()` or `records()`. Records come in insertion order (an update keeps the position). A select iterates over a snapshot, so the database can be modified while iterating.
+`select()` starts a `JsonSelect`, narrowed with `collection(name)` and `filter(Predicate<JsonDbRecord>)`, and consumed with `stream()`, `forEach()`, `collect()`, `first()`, `count()`, `keys()` or `records()`. Records come in insertion order (an update keeps the position). A select iterates over a snapshot, so the database can be modified while iterating. `count()` and `first()` take no snapshot: they scan the records while the database is locked (`first()` stops at the first match), so their filter must not wait on another thread using the database.
 
 Sample: `doc_examples/memdb/MemoryDbExamples.java` (`testSelect`)
 

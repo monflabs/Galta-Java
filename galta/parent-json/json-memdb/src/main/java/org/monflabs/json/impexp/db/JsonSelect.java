@@ -30,7 +30,7 @@ import org.monflabs.util.iterators.Iterators;
 
 /**
  * Select json records.
- * 
+ *
  * @author priand
  *
  */
@@ -43,59 +43,68 @@ public class JsonSelect {
 	JsonSelect(MemoryJsonDb db) {
 		this.db = db;
 	}
-	
+
 	public JsonSelect collection(String collection) {
 		this.collection = collection;
 		return this;
 	}
-	
+
 	public JsonSelect filter(Predicate<JsonDbRecord> filter) {
 		this.filter = filter;
 		return this;
 	}
-	
+
+	/**
+	 * The number of matching records. The records are not copied: the filter is called
+	 * while the DB is locked.
+	 */
 	public int count() {
-		return Iterators.size(records());
+		return db.countRecords(predicate());
 	}
-	
+
+	/**
+	 * The first matching record, or null. The records are not copied: the filter is called
+	 * while the DB is locked.
+	 */
 	public JsonDbRecord first() {
-		return Iterators.first(records());
+		return db.firstRecord(predicate());
 	}
-	
+
 	public List<JsonDbRecord> collect() {
 		return collect(new ArrayList<JsonDbRecord>());
 	}
-	
+
 	public List<JsonDbRecord> collect(List<JsonDbRecord> list) {
 		return Iterators.collect(records(),list);
 	}
-	
+
 	public void forEach(Consumer<JsonDbRecord> f) {
 		records().forEachRemaining(f);
 	}
-	
+
 	public Stream<JsonDbRecord> stream() {
 		return StreamSupport.stream(
                 Spliterators.spliteratorUnknownSize(records(), Spliterator.ORDERED), false);
 	}
-	
+
 	public Iterator<JsonDbRecord> records() {
 		// Iterate a snapshot taken under the DB lock, so the DB can be modified while iterating
-		return Iterators.filter(db.snapshotRecords().iterator(), (r) -> {
-			if(collection!=null) {
-				if(!collection.equals(r.getKey().getCollection())) {
-					return false;
-				}
-			}
-			if(filter!=null) {
-				if(!filter.test(r)) {
-					return false;
-				}
-			}
-			return true;
-		});
+		Predicate<JsonDbRecord> p = predicate();
+		Iterator<JsonDbRecord> it = db.snapshotRecords().iterator();
+		return p!=null ? Iterators.filter(it, p) : it;
 	}
-	
+
+	// The collection and filter conditions, null when there is none
+	private Predicate<JsonDbRecord> predicate() {
+		String col = collection;
+		Predicate<JsonDbRecord> f = filter;
+		if(col==null) {
+			return f;
+		}
+		Predicate<JsonDbRecord> byCol = (r) -> col.equals(r.getKey().getCollection());
+		return f!=null ? byCol.and(f) : byCol;
+	}
+
 	public List<JsonKey> keys() {
 		List<JsonKey> keys = new ArrayList<>();
 		for(Iterator<JsonDbRecord> it=records(); it.hasNext(); ) {
