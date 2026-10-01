@@ -42,12 +42,12 @@ public class JSExpressionExecutor implements JSExecutor {
     }
 
     @Override
-	public void queueMicrotask(MicroTask task, long atTimeMs) {
-    	throw RuntimeUtil.error("This executor does not support micro-tasks");
+	public void queueMacrotask(MacroTask task) {
+    	throw RuntimeUtil.error("This executor does not support macro-tasks");
     }
 
     @Override
-	public void queueMacrotask(MacroTask task) {
+	public void queueMacrotask(MacroTask task, long delayMs) {
     	throw RuntimeUtil.error("This executor does not support macro-tasks");
     }
 

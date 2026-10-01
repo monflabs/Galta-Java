@@ -28,6 +28,7 @@ import org.monflabs.galtajs.rt.builtins.BaseMethod;
 import org.monflabs.galtajs.rt.builtins.Callable;
 import org.monflabs.galtajs.rt.builtins.standard.global.StandardObjects;
 import org.monflabs.galtajs.rt.executors.JSExecutor;
+import org.monflabs.galtajs.rt.executors.MacroTask;
 import org.monflabs.galtajs.rt.executors.MicroTask;
 
 /**
@@ -189,9 +190,10 @@ public class HostLibrary extends GlobalLibrary {
 		private void schedule(TimerEntry entry, long delayMs) {
 			JSRuntimeContext ctx = JSRuntimeContext.get();
 			JSExecutor executor = ctx.getGlobalContext().getExecutor();
-			long readyAt = System.currentTimeMillis() + delayMs;
 			String label = entry.repeating ? "setInterval" : "setTimeout";
-			executor.queueMicrotask(new MicroTask(label, ctx, null) {
+			// A timer callback is a macrotask: it runs after the pending
+			// microtasks (promise reactions), never before them
+			executor.queueMacrotask(new MacroTask(label, ctx, null) {
 				@Override
 				public void run() {
 					if (entry.canceled) {
@@ -207,7 +209,7 @@ public class HostLibrary extends GlobalLibrary {
 						}
 					}
 				}
-			}, readyAt);
+			}, delayMs);
 		}
 
 		// btoa: encode a "binary string" (each char code must be 0..255) as Base64.

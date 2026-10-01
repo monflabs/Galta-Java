@@ -15,87 +15,6 @@
  */
 package org.monflabs.galtajs.rt.executors;
 
-/**
- * ============================================================
- *  DESIGN DOCUMENT — JSRuntimePro (Semaphore Event Loop)
- * ============================================================
- *
- *  GOAL
- *  ----
- *  Provide a compact, thread-safe Java runtime that emulates
- *  JavaScript's async model:
- *    • Promises and async/await
- *    • Generators (function*)
- *    • Distinct micro- and macrotask queues
- *    • Correct ordering (micro → macro)
- *    • Fully event-driven (no polling)
- *    • Deterministic shutdown when idle
- *
- *  ============================================================
- *  1. OVERVIEW
- *  ============================================================
- *
- *             ┌────────────────────────────┐
- *             │ Application Code           │
- *             │ async / await / generator  │
- *             └──────────────┬─────────────┘
- *                            │
- *                            ▼
- *             ┌────────────────────────────┐
- *             │          Scheduler         │
- *             │ • Event loop thread        │
- *             │ • Microtask + Macrotask    │
- *             │   queues                   │
- *             │ • Semaphore wakeups        │
- *             └──────────────┬─────────────┘
- *                            │
- *        ┌──────────────┬────┴─────────────┬─────────────┐
- *        ▼              ▼                  ▼             ▼
- *  Async Executor  Timer Executor   Promise Engine    Generators
- *
- *  ============================================================
- *  2. EVENT LOOP DESIGN
- *  ============================================================
- *
- *  - Microtasks (Promise continuations, await resumes)
- *    always execute before macrotasks.
- *
- *  - Macrotasks (delay/setTimeout, external events)
- *    execute one per tick.
- *
- *  - The loop blocks on a semaphore. Every enqueue or async
- *    completion releases a permit. Permits accumulate if the
- *    signal happens before the wait, eliminating lost signals.
- *
- *  - The loop exits when:
- *       microQ.isEmpty() && macroQ.isEmpty() &&
- *       PENDING_ASYNC == 0
- *
- *  ============================================================
- *  3. THREADS
- *  ============================================================
- *   • Event loop — runs Scheduler.runLoop()
- *   • Async executor — cached pool or virtual threads
- *   • Timer executor — scheduled thread pool
- *
- *  ============================================================
- *  4. PROMISES & AWAIT
- *  ============================================================
- *  BuiltinPromise queues microtasks upon resolution.
- *  Await.await() parks only the async worker thread until
- *  the awaited promise resolves or rejects.
- *
- *  ============================================================
- *  5. ADVANTAGES
- *  ============================================================
- *   [x] No polling or fixed wake intervals
- *   [x] No missed signals
- *   [x] Idle CPU = 0%
- *   [x] Thread-safe and deterministic
- *   [x] Works on Java 17+, supports virtual threads (Java 21+)
- *
- * ============================================================
- */
 import java.util.ArrayDeque;
 import java.util.NoSuchElementException;
 import java.util.PriorityQueue;
@@ -110,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -128,6 +48,23 @@ import org.monflabs.util.generators.GeneratorImpl;
 import org.monflabs.util.generators.GeneratorScheduler;
 import org.monflabs.util.generators.Yielder;
 
+/**
+ * Executor emulating the JavaScript event loop.
+ * <p>
+ * The thread that calls {@link #execute(Supplier, boolean)} runs the code,
+ * then the event loop: every queued microtask (promise reactions, await
+ * resumptions), then one macrotask (a due timer being one), and so on,
+ * until nothing is pending. It blocks on a semaphore, released by every
+ * enqueue and by the completion of async work running on other threads, so
+ * it never polls. A pending timer caps the wait at its deadline.
+ * <p>
+ * Async functions and module top-level await run as coroutines (see
+ * {@link #runAsyncBody}): an await suspends the coroutine and resumes it
+ * from a promise reaction. {@link #asyncFunction} runs Java code (blocking
+ * I/O for example) on a worker thread and settles a promise once it is
+ * done. The queues and the worker pool are created lazily, on first use,
+ * and released once the outermost {@code execute()} returns.
+ */
 public class JSAsyncExecutor implements JSExecutor {
 	
 	// The creation cost is unnecessary for small expressions when async is not used
@@ -141,9 +78,10 @@ public class JSAsyncExecutor implements JSExecutor {
 		final ArrayDeque<AsyncTask> microQ = new ArrayDeque<>(32);
 		final ArrayDeque<AsyncTask> macroQ = new ArrayDeque<>(32);
 
-		// Delayed microtasks, ordered by earliest readyAt. Guarded by `lock`.
-		// A monotonically-increasing sequence disambiguates ties so ordering
-		// is stable (FIFO among tasks scheduled for the same instant).
+		// Timers: macrotasks moved to macroQ once due, ordered by earliest
+		// readyAt (System.nanoTime() based). Guarded by `lock`. A
+		// monotonically-increasing sequence disambiguates ties so ordering is
+		// stable (FIFO among tasks scheduled for the same instant).
 		final PriorityQueue<TimedTask> timedQ = new PriorityQueue<>();
 		final AtomicLong timedSeq = new AtomicLong();
 
@@ -182,9 +120,9 @@ public class JSAsyncExecutor implements JSExecutor {
 	private static final class TimedTask implements Comparable<TimedTask> {
 		final long readyAt;
 		final long seq;
-		final MicroTask task;
+		final MacroTask task;
 
-		TimedTask(long readyAt, long seq, MicroTask task) {
+		TimedTask(long readyAt, long seq, MacroTask task) {
 			this.readyAt = readyAt;
 			this.seq = seq;
 			this.task = task;
@@ -192,7 +130,8 @@ public class JSAsyncExecutor implements JSExecutor {
 
 		@Override
 		public int compareTo(TimedTask o) {
-			int c = Long.compare(readyAt, o.readyAt);
+			// nanoTime values: compare the difference, not the values
+			int c = Long.signum(readyAt - o.readyAt);
 			return c != 0 ? c : Long.compare(seq, o.seq);
 		}
 	}
@@ -278,23 +217,6 @@ public class JSAsyncExecutor implements JSExecutor {
 	}
 
 	@Override
-	public void queueMicrotask(MicroTask r, long atTimeMs) {
-		AsyncData asyncData = getAsyncData();
-		if (atTimeMs - System.currentTimeMillis() <= 0) {
-			queueMicrotask(r);
-			return;
-		}
-		asyncData.lock.lock();
-		try {
-			asyncData.timedQ.add(new TimedTask(atTimeMs, asyncData.timedSeq.incrementAndGet(), r));
-		} finally {
-			asyncData.lock.unlock();
-		}
-		// Wake the loop so it can shorten its wait to the new earliest deadline.
-		asyncData.wakeups.release();
-	}
-
-	@Override
 	public void queueMacrotask(MacroTask r) {
 		AsyncData asyncData = getAsyncData();
 		asyncData.lock.lock();
@@ -305,6 +227,24 @@ public class JSAsyncExecutor implements JSExecutor {
 			asyncData.lock.unlock();
 		}
 		//Console.log("queueMacrotask release: {0}",wakeups.availablePermits());
+		asyncData.wakeups.release();
+	}
+
+	@Override
+	public void queueMacrotask(MacroTask r, long delayMs) {
+		if (delayMs <= 0) {
+			queueMacrotask(r);
+			return;
+		}
+		AsyncData asyncData = getAsyncData();
+		long readyAt = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(delayMs);
+		asyncData.lock.lock();
+		try {
+			asyncData.timedQ.add(new TimedTask(readyAt, asyncData.timedSeq.incrementAndGet(), r));
+		} finally {
+			asyncData.lock.unlock();
+		}
+		// Wake the loop so it can shorten its wait to the new earliest deadline.
 		asyncData.wakeups.release();
 	}
 
@@ -396,7 +336,8 @@ public class JSAsyncExecutor implements JSExecutor {
 			return returnValue;
 		}
 
-		AtomicInteger type = new AtomicInteger(1);
+		// 0: not completed yet, 1: returned, 2: threw
+		AtomicInteger type = new AtomicInteger(0);
 		AtomicReference<Object> result = new AtomicReference<>();
 		// Runs code's own synchronous prefix (up to its first top-level
 		// await, if any) synchronously right here, via the same spec-correct
@@ -440,6 +381,12 @@ public class JSAsyncExecutor implements JSExecutor {
 			} finally {
 				shutdown();
 			}
+			// Stopped before the code completed: not a success. (Code that
+			// awaits a promise nothing will ever settle also ends here
+			// without completing - it returns undefined.)
+			if (type.get()==0 && STOP) {
+				throw new JSRuntimeInterruptException();
+			}
 		}
 		if (type.get()==2) {
 			throw RuntimeUtil.wrap(result.get());
@@ -468,104 +415,50 @@ public class JSAsyncExecutor implements JSExecutor {
 	}
 	
 	private void drainPendingTasks() {
-		AsyncData asyncData = _asyncData;
-		if(asyncData.hasPending()) {
-			draining = true;
-			try {
-				while (!STOP && asyncData.hasPending()) {
-					checkFatal();
-					AsyncTask task = null;
-					long waitNanos = -1L; // <0 means "wait indefinitely"
-					asyncData.lock.lock();
-					try {
-						// Promote any due timed microtasks to microQ.
-						long now = System.currentTimeMillis();
-						while (!asyncData.timedQ.isEmpty()
-								&& asyncData.timedQ.peek().readyAt <= now) {
-							asyncData.microQ.addLast(asyncData.timedQ.poll().task);
-						}
-						if (!asyncData.microQ.isEmpty()) {
-							//Console.log("Execute micro task: {0}", microQ.toString());
-							task = asyncData.microQ.pollFirst();
-						} else if (!asyncData.macroQ.isEmpty()) {
-							task = asyncData.macroQ.pollFirst();
-						} else if (!asyncData.timedQ.isEmpty()) {
-							waitNanos = TimeUnit.MILLISECONDS.toNanos(
-									asyncData.timedQ.peek().readyAt - now);
-						}
-					} finally {
-						asyncData.lock.unlock();
-					}
-	
-					if (task != null) {
-						currentTask = task;
-						try {
-							_executeTask(task);
-						} catch (Throwable e) {
-							// Send or ignore?
-							throw RuntimeUtil.wrap(e);
-						} finally {
-							currentTask = null;
-						}
-						continue;
-					}
-	
-					// No work in queues: check for idle termination
-					if (STOP || !asyncData.hasPending()) {
-						break;
-					}
-	
-					// Wait until next signal (cannot miss). If a timed task is
-					// pending, cap the wait at its deadline so we wake to run it
-					// even if no other signal arrives.
-					//Console.log("Loop acquire: {0}",wakeups.availablePermits());
-					if (waitNanos < 0) {
-						asyncData.wakeups.acquire();
-					} else if (waitNanos > 0) {
-						asyncData.wakeups.tryAcquire(waitNanos, TimeUnit.NANOSECONDS);
-					}
-				}
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			} finally {
-				draining = false;
-			}
-		}
+		drain(() -> false);
 	}
 
-	// See JSExecutor.drainUntil()'s own doc. Deliberately a SEPARATE
-	// method from drainPendingTasks() above (some duplication) rather
-	// than a shared/parameterized refactor of it - that loop is
-	// delicate, already the subject of multiple hard-won bug fixes (see
-	// KnownGaps.md's own tick-ordering entries), and not worth the risk
-	// of a shared-code regression for this narrower, later-added caller.
+	// See JSExecutor.drainUntil()'s own doc.
 	@Override
-	public void drainUntil(java.util.function.BooleanSupplier condition) {
+	public void drainUntil(BooleanSupplier condition) {
+		drain(condition);
+	}
+
+	// The event loop: runs every microtask, then one macrotask (a due timer
+	// being one), and so on, until nothing is pending any more, stop() is
+	// called or `until` becomes true. Blocks on the wakeups semaphore when
+	// only async work (or a timer not yet due) is pending.
+	private void drain(BooleanSupplier until) {
 		AsyncData asyncData = _asyncData;
-		if(asyncData==null || condition.getAsBoolean()) {
+		if(asyncData==null) {
 			return;
 		}
 		boolean wasDraining = draining;
 		draining = true;
 		try {
-			while (!STOP && !condition.getAsBoolean() && asyncData.hasPending()) {
+			while (!STOP && !until.getAsBoolean() && asyncData.hasPending()) {
 				checkFatal();
+				// Every enqueue/completion releases a permit, but the queues
+				// are re-checked below anyway: consume the permits already
+				// there, so the wait further down only returns on a NEW signal
+				// instead of spinning over stale ones.
+				asyncData.wakeups.drainPermits();
 				AsyncTask task = null;
 				long waitNanos = -1L; // <0 means "wait indefinitely"
 				asyncData.lock.lock();
 				try {
-					long now = System.currentTimeMillis();
+					// Due timers become macrotasks
+					long now = System.nanoTime();
 					while (!asyncData.timedQ.isEmpty()
-							&& asyncData.timedQ.peek().readyAt <= now) {
-						asyncData.microQ.addLast(asyncData.timedQ.poll().task);
+							&& asyncData.timedQ.peek().readyAt - now <= 0) {
+						asyncData.macroQ.addLast(asyncData.timedQ.poll().task);
 					}
 					if (!asyncData.microQ.isEmpty()) {
 						task = asyncData.microQ.pollFirst();
 					} else if (!asyncData.macroQ.isEmpty()) {
 						task = asyncData.macroQ.pollFirst();
 					} else if (!asyncData.timedQ.isEmpty()) {
-						waitNanos = TimeUnit.MILLISECONDS.toNanos(
-								asyncData.timedQ.peek().readyAt - now);
+						waitNanos = asyncData.timedQ.peek().readyAt - now;
 					}
 				} finally {
 					asyncData.lock.unlock();
@@ -583,10 +476,14 @@ public class JSAsyncExecutor implements JSExecutor {
 					continue;
 				}
 
-				if (STOP || condition.getAsBoolean() || !asyncData.hasPending()) {
+				// No work in queues: check for idle termination
+				if (STOP || until.getAsBoolean() || !asyncData.hasPending()) {
 					break;
 				}
 
+				// Wait until the next signal (cannot miss one: a permit released
+				// after drainPermits() above stays available). If a timer is
+				// pending, cap the wait at its deadline.
 				if (waitNanos < 0) {
 					asyncData.wakeups.acquire();
 				} else if (waitNanos > 0) {
@@ -595,10 +492,9 @@ public class JSAsyncExecutor implements JSExecutor {
 			}
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
+			throw new JSRuntimeInterruptException();
 		} finally {
-			if(!wasDraining) {
-				draining = false;
-			}
+			draining = wasDraining;
 		}
 	}
 
@@ -915,97 +811,4 @@ public class JSAsyncExecutor implements JSExecutor {
 			}
 		);
 	}
-
-
-	/* ============================================================ */
-	/* 5. Demonstration */
-	/* ============================================================ */
-/*		
-	private static BuiltinPromise delay(JSAsyncExecutor executor, ScheduledThreadPoolExecutor timer, int ms, Object value) {
-		BuiltinPromise p = new BuiltinPromise(executor.getEnvironment());
-		timer.schedule(() -> executor.queueMacrotask(new MacroTask("delay") {
-			@Override
-			public void run() {
-				p.fulfill(value);
-			}
-		}), ms, TimeUnit.MILLISECONDS);
-		return p;
-	}
-
-	public static void main(String[] args) {
-		JSEnvironment env = new JSDefaultEnvironment();
-		JSAsyncExecutor executor = new JSAsyncExecutor(env);
-		JSGlobalContext ctx = new InterpretedGlobalRuntimeContext(env, executor);
-
-		ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(2);
-
-		AtomicLong MICRO_COUNT = new AtomicLong();
-		AtomicLong MACRO_COUNT = new AtomicLong();
-
-		ctx.run(() -> {
-			Object result = executor.execute( () -> {
-				Console.log("=== JSRuntimePro (Semaphore Event Loop) ===");
-
-				// Generator demo
-				Generator<Object> gen = executor.generator(y -> {
-					Console.log("[Gen] start");
-					y.yield("1");
-					Console.log("[Gen] resumed");
-					y.yield("2");
-					Console.log("[Gen] done");
-				});
-				while (gen.hasNext()) {
-					Object r = gen.next();
-					Console.log("[Main] yield => {0}", r);
-				}
-
-				// Async demo
-				BuiltinPromise p = executor.asyncFunction(() -> {
-					Console.log("[Async] start on {0}", Thread.currentThread());
-
-					executor.queueMicrotask(new MicroTask("[Microtask] before delays") {
-						@Override
-						public void run() {
-							 MICRO_COUNT.incrementAndGet();
-							 Console.log("[Microtask] before delays");
-						}
-					});
-					executor.queueMacrotask(new MacroTask("Macrotask] queued early") {
-						@Override
-						public void run() {
-							 MACRO_COUNT.incrementAndGet();
-							 Console.log("Macrotask] queued early");
-						}
-					});
-
-					Object a = executor.await(executor.delay(executor, timer, 200, "A"));
-					Console.log("[Async] got {0}", a);
-					executor.queueMicrotask(new MicroTask("[Microtask] after A") {
-						@Override
-						public void run() {
-							 MICRO_COUNT.incrementAndGet();
-							 Console.log("[Microtask] after A");
-						}
-					});
-
-					Object b = executor.await(executor.delay(executor, timer, 200, "B"));
-					Console.log("[Async] got {0}",  b);
-					return "done";
-				});
-
-				p.then_((t, a) -> {
-					Console.log("[Async] resolved: {0}", a[0]);
-					return RuntimeUtil.UNDEFINED;
-				}, (t, a) -> {
-					Console.log("[Async] rejected: {0}", a[0]);
-					return RuntimeUtil.UNDEFINED;
-				});
-				
-				return "DONE!";
-			});
-			Console.log("=== Event loop complete, result={0} ===", result);
-			Console.log("Microtasks: {0}, Macrotasks: {1}", MICRO_COUNT.get(), MACRO_COUNT.get());
-		});
-	}
-*/	
 }

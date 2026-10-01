@@ -29,14 +29,14 @@ public interface JSExecutor {
 	
 	public void queueMicrotask(MicroTask task);
 
-	/**
-	 * Enqueue a microtask that will not run before {@code atTimeMs} (an absolute
-	 * time in milliseconds, comparable to {@link System#currentTimeMillis()}).
-	 * If the time has already passed, the task is queued immediately.
-	 */
-	public void queueMicrotask(MicroTask task, long atTimeMs);
-
 	public void queueMacrotask(MacroTask task);
+
+	/**
+	 * Enqueue a macrotask (a timer) that will not run before {@code delayMs}
+	 * milliseconds. Once due it is queued like any other macrotask, so it
+	 * runs after the pending microtasks.
+	 */
+	public void queueMacrotask(MacroTask task, long delayMs);
 	
 	public void performMicrotaskCheckpoint();
 	
