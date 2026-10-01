@@ -81,6 +81,9 @@ public class StringUtilTest extends ProjectTestCase {
 		assertEquals( "A", StringUtil.trim(" A ") );
 		assertEquals( "A", StringUtil.trim("A ") );
 		assertEquals( "A", StringUtil.trim(" A") );
+		// The same white spaces as trimLeft()/trimRight(): String.strip(), not String.trim()
+		assertEquals( "A", StringUtil.trim("\u2003A\u2003") );
+		assertEquals( "\u0001A", StringUtil.trim("\u0001A") );
 	}
 	
 	public void testTrimLeft() {
@@ -91,6 +94,10 @@ public class StringUtilTest extends ProjectTestCase {
 		assertEquals( "A ", StringUtil.trimLeft(" A ") );
 		assertEquals( "A ", StringUtil.trimLeft("A ") );
 		assertEquals( "A", StringUtil.trimLeft(" A") );
+		assertEquals( "A\u2003", StringUtil.trimLeft("\u2003A\u2003") );
+		assertEquals( null, StringUtil.trimRight(null) );
+		assertEquals( " A", StringUtil.trimRight(" A \t\n") );
+		assertEquals( "", StringUtil.trimRight("  ") );
 	}
 	
 	public void testReplaceFirst() {
@@ -160,7 +167,11 @@ public class StringUtilTest extends ProjectTestCase {
 		assertEquals("ab", StringUtil.toCamelCase("ab"));
 		assertEquals("aB", StringUtil.toCamelCase("a-b"));
 		assertEquals("abCd", StringUtil.toCamelCase("ab-cd"));
-		assertEquals("abCd", StringUtil.toCamelCase("AB-CD"));
+		// Only the character after a dash changes: camel case is kept
+		assertEquals("ABCD", StringUtil.toCamelCase("AB-CD"));
+		assertEquals("innerHTML", StringUtil.toCamelCase("innerHTML"));
+		assertEquals("innerHtml", StringUtil.toCamelCase("inner-html"));
+		assertNull(StringUtil.toCamelCase(null));
 	}
 	
 	public void testKebabCase() throws Exception {
@@ -177,8 +188,16 @@ public class StringUtilTest extends ProjectTestCase {
 
 	public void testRedacted() {
 		assertEquals( "<null>", StringUtil.redacted(null) );
-		assertEquals( "abc...REDACTED", StringUtil.redacted("abc") );
-		assertEquals( "abcde...REDACTED", StringUtil.redacted("abcdefghijkl", 5) );
+		// At most a quarter of the value, nothing for a short one: the first 5 characters
+		// used to be shown whatever the length (all of "abc")
+		assertEquals( "...REDACTED", StringUtil.redacted("abc") );
+		assertEquals( "...REDACTED", StringUtil.redacted("abcdefg") );
+		assertEquals( "ab...REDACTED", StringUtil.redacted("abcdefgh") );
+		assertEquals( "abc...REDACTED", StringUtil.redacted("abcdefghijkl", 5) );
+		assertEquals( "abcde...REDACTED", StringUtil.redacted("abcdefghijklmnopqrstuvwxyz", 5) );
+		assertEquals( "ab...REDACTED", StringUtil.redacted("abcdefghijklmnopqrstuvwxyz", 2) );
+		// A surrogate pair is not split
+		assertEquals( "a...REDACTED", StringUtil.redacted("a\uD83D\uDE00cdefgh") );
 		assertEquals( "...REDACTED", StringUtil.redacted("") );
 	}
 
@@ -226,6 +245,10 @@ public class StringUtilTest extends ProjectTestCase {
 		assertEquals("", StringUtil.truncate("123456", -1));
 		assertEquals("12", StringUtil.truncate("12", 3));
 		assertNull(StringUtil.truncate(null, 3));
+		// A surrogate pair is not split
+		assertEquals("a...", StringUtil.truncate("a\uD83D\uDE00cdefgh", 5));
+		assertEquals("a", StringUtil.truncate("a\uD83D\uDE00", 2));
+		assertEquals("a\uD83D\uDE00...", StringUtil.truncate("a\uD83D\uDE00cdefgh", 6));
 	}
 
 	public void testCapitalizeSurrogatePair() {

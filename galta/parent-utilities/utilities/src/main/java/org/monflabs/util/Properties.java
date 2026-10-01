@@ -83,66 +83,104 @@ public class Properties {
 	}
 	
 	
+	/**
+	 * Returns an integer property. A Number must be an integral value within the int range,
+	 * a String an integer (surrounding spaces are ignored).
+	 * @throws IllegalArgumentException if the value is not a valid integer
+	 */
 	public int getInt(String name) {
 		return getInt(name,0);
 	}
 	public int getInt(String name, int defaultValue) {
 		if(props.containsKey(name)) {
 			Object o = props.get(name);
-			if(o instanceof Number n) {
-				return n.intValue();
+			if(o==null) {
+				return defaultValue;
 			}
-			if(o instanceof String s) {
-				return Integer.parseInt(s);
+			try {
+				if(o instanceof Number n) {
+					return TypeUtil.toBigDecimal(n).intValueExact();
+				}
+				return Integer.parseInt(o.toString().trim());
+			} catch(ArithmeticException | NumberFormatException e) {
+				throw invalid(e, "integer", name, o);
 			}
 		} else if(parent!=null) {
 			return parent.getInt(name,defaultValue);
 		}
 		return defaultValue;
 	}
-	
-	
+
+
+	/**
+	 * Returns a long property. A Number must be an integral value within the long range,
+	 * a String an integer (surrounding spaces are ignored).
+	 * @throws IllegalArgumentException if the value is not a valid long
+	 */
 	public long getLong(String name) {
 		return getLong(name,0);
 	}
 	public long getLong(String name, long defaultValue) {
 		if(props.containsKey(name)) {
 			Object o = props.get(name);
-			if(o instanceof String s) {
-				return Long.parseLong(s);
+			if(o==null) {
+				return defaultValue;
 			}
-			if(o instanceof Number n) {
-				return n.longValue();
+			try {
+				if(o instanceof Number n) {
+					return TypeUtil.toBigDecimal(n).longValueExact();
+				}
+				return Long.parseLong(o.toString().trim());
+			} catch(ArithmeticException | NumberFormatException e) {
+				throw invalid(e, "long", name, o);
 			}
 		} else if(parent!=null) {
 			return parent.getLong(name,defaultValue);
 		}
 		return defaultValue;
 	}
-	
-	
+
+
+	/**
+	 * Returns a boolean property. A String must be "true" or "false" (ignoring case and
+	 * surrounding spaces), a Number is true when it is not 0.
+	 * @throws IllegalArgumentException if the value is not a valid boolean (anything but
+	 * "true" used to be silently false)
+	 */
 	public boolean getBoolean(String name) {
 		return getBoolean(name,false);
 	}
 	public boolean getBoolean(String name, boolean defaultValue) {
 		if(props.containsKey(name)) {
 			Object o = props.get(name);
-			if(o instanceof String s) {
-				return Boolean.parseBoolean(s);
+			if(o==null) {
+				return defaultValue;
 			}
 			if(o instanceof Boolean b) {
 				return b;
 			}
 			if(o instanceof Number n) {
-				return n.intValue()!=0;
+				return n.doubleValue()!=0;
 			}
+			String s = o.toString().trim();
+			if(s.equalsIgnoreCase("true")) {
+				return true;
+			}
+			if(s.equalsIgnoreCase("false")) {
+				return false;
+			}
+			throw invalid(null, "boolean", name, o);
 		} else if(parent!=null) {
 			return parent.getBoolean(name,defaultValue);
 		}
 		return defaultValue;
 	}
-	
-	
+
+	private static IllegalArgumentException invalid(Exception cause, String type, String name, Object value) {
+		return new IllegalArgumentException(StringFormat.format("Invalid {0} value \"{1}\" for property {2}", type, value, name), cause);
+	}
+
+
 	public String getString(String name) {
 		return getString(name,null);
 	}

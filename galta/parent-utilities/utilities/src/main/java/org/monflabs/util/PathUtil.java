@@ -262,27 +262,37 @@ public class PathUtil {
     }
 
     
+    /**
+     * Returns the extension of the last name of the path, without the dot: "" when there
+     * is none, including for a dotfile like ".bashrc" (as FilesUtil.getFileExtension()), and
+     * null for a null path.
+     */
     public String getFileExtension(String path) {
     	if(path!=null) {
-	    	int pos = Math.max(0, lastSeparator(path));
-	    	int ext = path.lastIndexOf('.');
-	    	if(ext>=pos) {
-	    		return path.substring(ext+1);
-	    	}
-	    	return "";
+	    	int ext = extensionDot(path);
+	    	return ext>=0 ? path.substring(ext+1) : "";
     	}
     	return null;
     }
 
+    /**
+     * Removes the extension of the last name of the path, if any: a dotfile like ".bashrc"
+     * has no extension and is returned unchanged.
+     */
     public String removeExtension(String path) {
     	if(path!=null) {
-	    	int pos = Math.max(0, lastSeparator(path));
-	    	int ext = path.lastIndexOf('.');
-	    	if(ext>=pos) {
+	    	int ext = extensionDot(path);
+	    	if(ext>=0) {
 	    		return path.substring(0,ext);
 	    	}
     	}
     	return path;
+    }
+    // The dot starting the extension of the last name, which can't be its first character
+    private int extensionDot(String path) {
+    	int nameStart = lastSeparator(path)+1;
+    	int ext = path.lastIndexOf('.');
+    	return ext>nameStart ? ext : -1;
     }
 
     public String setExtension(String path, String extension) {

@@ -12,10 +12,10 @@ Methods that take a `Charset` use it. Their overloads without one use UTF-8, exc
 |---|---|
 | `IOStreamUtil.readContent(InputStream)` (UTF-8) | `readContent(InputStream, Charset)` |
 | `IOStreamUtil.setContent(OutputStream, String)` (UTF-8) | `setContent(OutputStream, String, Charset)` |
-| `FileUtil.readContent(File)` (UTF-8) | `readContent(File, Charset)` |
-| `FileUtil.setContent(File, String)` (UTF-8) | `setContent(File, String, Charset)` |
+| `FileUtil.readContent(File)` (UTF-8, deprecated) | `readContent(File, Charset)` |
+| `FileUtil.setContent(File, String)` (UTF-8, deprecated) | `setContent(File, String, Charset)` |
 | `new ReaderInputStream(reader)` (`Charset.defaultCharset()`) | `new ReaderInputStream(reader, Charset)` or `(reader, "encodingName")` |
-| `new WriterOutputStream(writer)` (UTF-8) | `new WriterOutputStream(writer, Charset)` or `(writer, CharsetDecoder)` |
+| `new WriterOutputStream(writer[, autoFlush])` (UTF-8) | `new WriterOutputStream(writer, Charset[, autoFlush])` or `(writer, CharsetDecoder[, autoFlush])` |
 | `LRUCachedOutputStream` (decodes the bytes it caches, UTF-8) | none |
 
 ## IOStreamUtil
@@ -51,20 +51,23 @@ assertEquals("Error while closing stream", e.getMessage());
 
 | Method | Does |
 |---|---|
-| `readContent(File[, Charset])` | reads a text file |
-| `setContent(File, String[, Charset])` | writes a text file, replacing it |
+| `readContent(File[, Charset])` | deprecated: reads a text file, replacing malformed input |
+| `setContent(File, String[, Charset])` | deprecated: writes a text file, replacing it |
 | `copy(File src, File tgt)` | copies the bytes |
-| `prepareDirectory(dir[, clear])` | creates the directory and its parents; by default first deletes it if it exists |
+| `prepareEmptyDirectory(dir)` | creates the directory and its parents, after deleting it (with its content) if it exists |
+| `prepareDirectory(dir, clear)` | creates the directory and its parents; with `clear`, first deletes it if it exists. `prepareDirectory(dir)` is deprecated: it clears, like `prepareEmptyDirectory` |
 | `emptyDirectory(dir)` | deletes the content, keeps the directory; `false` if it is not a directory or something could not be deleted |
 | `deleteFile(file)` | deletes a file or a directory tree; `false` if something could not be deleted |
 
 `FileUtil` throws unchecked exceptions: I/O errors come back as a `ForwardRuntimeException` naming the file.
 
+`readContent` and `setContent` are deprecated in favor of the `java.nio.file` API: `FilesUtil.readString(Path)` or `Files.readString(Path[, Charset])` report malformed input with a `MalformedInputException`, where `readContent` silently replaces it with U+FFFD; `Files.writeString` writes a text file.
+
 Sample: `doc_examples/util/IOExamples.java` (`testFileUtil`)
 
 ```java
 File dir = new File(Files.createTempDirectory("doc").toFile(), "out");
-FileUtil.prepareDirectory(dir);                  // creates it (and empties it if it existed)
+FileUtil.prepareEmptyDirectory(dir);             // creates it (and empties it if it existed)
 File f = new File(dir, "notes.txt");
 FileUtil.setContent(f, "caf\u00e9", StandardCharsets.UTF_8);
 assertEquals("caf\u00e9", FileUtil.readContent(f, StandardCharsets.UTF_8));
@@ -96,7 +99,7 @@ assertEquals("Error while reading file " + f.getPath(), e.getMessage());
 
 ### Names and extensions
 
-`getParentPath` returns `""` for a name without a separator and `null` for `null` or `""`. The extension is whatever follows the last `.` of the file name; a dot in a directory name does not count.
+`getParentPath` returns `""` for a name without a separator and `null` for `null` or `""`. The extension is whatever follows the last `.` of the file name; a dot in a directory name does not count, and a dotfile such as `.bashrc` has no extension (as with `FilesUtil.getFileExtension`).
 
 Sample: `doc_examples/util/IOExamples.java` (`testPathUtilNames`)
 
@@ -159,7 +162,7 @@ assertEquals("java.util", PathUtil.DOT.getParentPath("java.util.List"));
 | Class | Purpose |
 |---|---|
 | `ReaderInputStream` | an `InputStream` over a `Reader`, encoding the characters |
-| `WriterOutputStream` | an `OutputStream` into a `Writer`, decoding the bytes (with a `Charset`, malformed input is replaced, not rejected); every `write` flushes the writer |
+| `WriterOutputStream` | an `OutputStream` into a `Writer`, decoding the bytes (with a `Charset`, malformed input is replaced, not rejected); the decoded characters are buffered until `flush()`/`close()`, or flushed (with the writer) after every `write` with `autoFlush` |
 | `FastStringReader` | an unsynchronized `Reader` over a `String`, with an optional start index and `mark`/`reset` |
 | `FastBufferedInputStream`, `FastBufferedOutputStream`, `FastBufferedReader`, `FastBufferedWriter` | unsynchronized buffered streams (8 KB for input, 16 KB for output by default); `get(stream)` (except on the reader) wraps a stream unless it already is one |
 | `LRUCharBuffer.MemoryCharBuffer` | a bounded buffer that keeps the most recent characters |

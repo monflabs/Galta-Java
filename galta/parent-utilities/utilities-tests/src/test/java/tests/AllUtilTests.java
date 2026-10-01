@@ -74,6 +74,7 @@ public class AllUtilTests extends TestSuite {
 		suite.addTestSuite(PathUtilTest.class);
 		suite.addTestSuite(VersionTest.class);
 		suite.addTestSuite(TypeUtilTest.class);
+		suite.addTestSuite(tests.util.PropertiesTest.class);
 		suite.addTestSuite(MiscUtilTest.class);
 		suite.addTestSuite(TextBuilderTest.class);
 		suite.addTestSuite(ConsoleAndExceptionTest.class);

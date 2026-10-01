@@ -30,9 +30,27 @@ import java.nio.file.Files;
  */ 
 public class FileUtil {
 	
+    /**
+     * Creates the directory, deleting it first if it exists: the same as
+     * {@link #prepareEmptyDirectory(File)}.
+     * @deprecated the name doesn't say that the existing content is deleted: use
+     * {@link #prepareEmptyDirectory(File)}, or {@link #prepareDirectory(File, boolean)}
+     */
+    @Deprecated
     public static void prepareDirectory( File file ) {
+    	prepareEmptyDirectory(file);
+    }
+    /**
+     * Creates the directory and its parents, after deleting it (and its whole content)
+     * if it already exists.
+     */
+    public static void prepareEmptyDirectory( File file ) {
     	prepareDirectory(file, true);
     }
+    /**
+     * Creates the directory and its parents. With clear, the directory is deleted first
+     * (with its whole content) if it already exists.
+     */
     public static void prepareDirectory( File file, boolean clear ) {
     	if(clear && file.exists()) {
     		prune(file,true);
@@ -74,11 +92,22 @@ public class FileUtil {
 		return result;
 	}	
 	
+	/**
+	 * Reads a UTF-8 text file. Malformed input is replaced (U+FFFD) instead of being
+	 * reported.
+	 * @deprecated use {@link org.monflabs.util.path.FilesUtil#readString(java.nio.file.Path)}
+	 * or {@link Files#readString(java.nio.file.Path)}, which report malformed input
+	 */
+	@Deprecated
 	public static String readContent(File file) {
 		return readContent(file, StandardCharsets.UTF_8);
 	}
-	// Not Files.readString(): it throws on malformed input, where a Reader (and new
-	// String()) replaces it
+	/**
+	 * Reads a text file. Malformed input is replaced (U+FFFD) instead of being reported.
+	 * @deprecated use {@link Files#readString(java.nio.file.Path, Charset)}, which reports
+	 * malformed input
+	 */
+	@Deprecated
 	public static String readContent(File file, Charset cs) {
 		try {
 			return new String(Files.readAllBytes(file.toPath()), cs);
@@ -86,12 +115,21 @@ public class FileUtil {
 			throw new ForwardRuntimeException(ex, "Error while reading file {0}", file.getPath());
 		}
 	}
-
+	
+	/**
+	 * Writes a UTF-8 text file, replacing it.
+	 * @deprecated use {@link Files#writeString(java.nio.file.Path, CharSequence, java.nio.file.OpenOption...)}
+	 */
+	@Deprecated
 	public static void setContent(File file, String content) {
 		setContent(file, content, StandardCharsets.UTF_8);
 	}
-	// Not Files.writeString(): it throws on unmappable characters, where a Writer (and
-	// getBytes()) replaces them
+	/**
+	 * Writes a text file, replacing it. Unmappable characters are replaced.
+	 * @deprecated use {@link Files#writeString(java.nio.file.Path, CharSequence, Charset, java.nio.file.OpenOption...)},
+	 * which reports unmappable characters
+	 */
+	@Deprecated
 	public static void setContent(File file, String content, Charset cs) {
 		try {
 			Files.write(file.toPath(), content.getBytes(cs));

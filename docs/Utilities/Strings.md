@@ -12,10 +12,10 @@ Every method is static and accepts `null` where it makes sense. A theme runs thr
 | Comparison | `equals`, `equalsIgnoreCase`, `compareTo`, `compareToIgnoreCase` | `null` equals `""`; empty values sort first |
 | Search | `containsIgnoreCase`, `indexIgnoreCase` | no regular expressions, no allocation |
 | Split / join | `splitString(s, sep[, trim])`, `join(array, sep[, index, length][, ignoreNulls])`, `concatStrings(array, sep, trim)`, `toString(Object)` | single-character separators; `join` prints `null` as `""` and expands arrays as `[a,b]` |
-| Trim / pad | `trim`, `trimLeft`, `padLeft`, `padRight`, `truncate` | `truncate` appends `...` within the maximum length |
+| Trim / pad | `trim`, `trimLeft`, `trimRight`, `padLeft`, `padRight`, `truncate` | the trims remove the `Character.isWhitespace` characters (`String.strip()`); `truncate` appends `...` within the maximum length |
 | Replace | `replaceFirst`, `replaceAll` (`String` or `char` arguments), `normalizeLineBreaks` | literal text, never a regular expression |
 | Case | `toCamelCase`, `toKebabCase`, `capitalizeFirstCharacter` | |
-| Misc | `redacted`, `toUnsignedHex2`, `toUnsignedHex4` | |
+| Misc | `redacted`, `toUnsignedHex2`, `toUnsignedHex4` | the hex methods write the low 8 or 16 bits: always 2 or 4 digits |
 
 ### Splitting and joining
 
@@ -51,7 +51,7 @@ assertTrue(StringUtil.containsIgnoreCase("Content-Type", "TYPE"));
 
 ### Padding, truncation and case
 
-`padLeft`/`padRight` never shorten a string that is already long enough. `truncate(s, max)` keeps `max-3` characters and appends `...`; when `max` is 3 or less there is no room for the ellipsis and the string is simply cut to `max` characters. `toCamelCase` lower-cases everything that does not follow a dash, and `toKebabCase` puts a dash before each word, keeping an acronym together (`URLValue` gives `url-value`).
+`padLeft`/`padRight` never shorten a string that is already long enough. `truncate(s, max)` keeps `max-3` characters and appends `...`; when `max` is 3 or less there is no room for the ellipsis and the string is simply cut to `max` characters. `truncate` never splits a surrogate pair: it keeps one character less instead. `toCamelCase` removes the dashes and upper-cases the character after each of them, leaving the others as they are (`innerHTML` stays `innerHTML`), and `toKebabCase` puts a dash before each word, keeping an acronym together (`URLValue` gives `url-value`).
 
 Sample: `doc_examples/util/StringsExamples.java` (`testPadTruncateCase`)
 
@@ -63,7 +63,7 @@ assertEquals("Hello...", StringUtil.truncate("Hello world", 8));
 assertEquals("00ff", StringUtil.toUnsignedHex4(255));
 
 assertEquals("backgroundColor", StringUtil.toCamelCase("background-color"));
-assertEquals("fooBar", StringUtil.toCamelCase("Foo-BAR"));          // other letters are lower-cased
+assertEquals("innerHTML", StringUtil.toCamelCase("innerHTML"));     // other characters are kept
 assertEquals("background-color", StringUtil.toKebabCase("backgroundColor"));
 assertEquals("url-value", StringUtil.toKebabCase("URLValue"));     // an acronym stays one word
 assertEquals("Hello", StringUtil.capitalizeFirstCharacter("hello"));
@@ -87,13 +87,14 @@ assertEquals("a\nb\nc\n\nd", StringUtil.normalizeLineBreaks("a\r\nb\rc\n\rd")); 
 
 ### Redacting secrets
 
-`redacted(s)` keeps the first 5 characters (or `max` with the two-argument form) and appends `...REDACTED`, so a token can be logged without leaking it. A `null` value prints as `<null>`.
+`redacted(s)` keeps the first characters and appends `...REDACTED`, so a token can be logged without leaking it: at most 5 (or `max` with the two-argument form), never more than a quarter of the value, and none for a value shorter than 8 characters. A `null` value prints as `<null>`.
 
 Sample: `doc_examples/util/StringsExamples.java` (`testRedacted`)
 
 ```java
-assertEquals("sk-12...REDACTED", StringUtil.redacted("sk-1234567890"));
+assertEquals("sk-...REDACTED", StringUtil.redacted("sk-1234567890"));     // at most a quarter
 assertEquals("sk...REDACTED", StringUtil.redacted("sk-1234567890", 2));
+assertEquals("...REDACTED", StringUtil.redacted("1234"));               // nothing of a short value
 assertEquals("<null>", StringUtil.redacted(null));
 ```
 
@@ -105,7 +106,7 @@ Sample: `doc_examples/util/StringsExamples.java` (`testStringFormat`)
 
 ```java
 assertEquals("1 + 1 = 2", StringFormat.format("{0} + {0} = {1}", 1, 2));
-assertEquals("Hello !", StringFormat.format("Hello {1}!", "a"));        // missing argument: empty
+assertEquals("Hello {1}!", StringFormat.format("Hello {1}!", "a"));     // missing argument: kept
 assertEquals("null", StringFormat.format("{0}", (Object) null));
 assertEquals("{name} {} x", StringFormat.format("{name} {} {0}", "x")); // non-numeric braces are kept
 assertEquals("", StringFormat.format(null));
@@ -120,7 +121,7 @@ It is deliberately simpler than `java.text.MessageFormat`:
 | | `StringFormat` | `MessageFormat` |
 |---|---|---|
 | Placeholder | `{0}`, `{12}`: digits only | `{0}`, `{0,number,#.##}`, ... |
-| Missing argument | replaced by nothing | left as `{1}` |
+| Missing argument | left as `{1}` | left as `{1}` |
 | `null` argument | `null` | `null` |
 | Single quote | literal text | starts a quoted section (`It's {0}` loses the quote and the placeholder) |
 | Numbers and dates | `toString()` | formatted for the locale (`1,234,567`) |

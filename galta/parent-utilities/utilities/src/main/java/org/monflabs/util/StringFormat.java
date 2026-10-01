@@ -48,10 +48,10 @@ public class StringFormat {
 	                        }
 	                    }
 	                    // An unterminated "{0" (end of string before '}') is literal text
-	                    if(ok && closed) {
-	                    	if(parameters!=null && idx<parameters.length) {
-	                    		buffer.append( parameters[idx] );
-	                    	}
+	                    // A placeholder without a matching parameter is kept as is, like
+	                    // MessageFormat does (it used to vanish)
+	                    if(ok && closed && parameters!=null && idx<parameters.length) {
+	                    	buffer.append( parameters[idx] );
 	                    	i = j;
 	                    	break;
 	                    }

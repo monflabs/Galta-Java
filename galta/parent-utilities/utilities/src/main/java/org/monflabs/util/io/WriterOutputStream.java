@@ -36,27 +36,59 @@ import java.nio.charset.CodingErrorAction;
  * redirect an {@link OutputStream} to a {@link Writer} for compatibility
  * purposes. It is much more efficient to write to the {@link Writer}
  * directly.</p>
+ *
+ * <p>The decoded characters are buffered: they reach the writer when the buffer is full,
+ * and on {@link #flush()} and {@link #close()}. With <i>autoFlush</i>, every write is
+ * followed by a {@link #flush()} (which also flushes the writer), so the text is published
+ * immediately - e.g. for a console or text area sink.</p>
  */
 public class WriterOutputStream extends OutputStream {
 
     private final Writer out;
     private final CharsetDecoder decoder;
+    private final boolean autoFlush;
     private final ByteBuffer decoderIn = ByteBuffer.allocate(256);
     private final CharBuffer decoderOut = CharBuffer.allocate(128);
 
     public WriterOutputStream(Writer out) {
     	this(out, StandardCharsets.UTF_8);
     }
-    
+
+    /**
+     * @param autoFlush whether every write is followed by a {@link #flush()}
+     */
+    public WriterOutputStream(Writer out, boolean autoFlush) {
+    	this(out, StandardCharsets.UTF_8, autoFlush);
+    }
+
     public WriterOutputStream(Writer out, Charset charset) {
+        this(out, charset, false);
+    }
+
+    /**
+     * @param autoFlush whether every write is followed by a {@link #flush()}
+     */
+    public WriterOutputStream(Writer out, Charset charset, boolean autoFlush) {
         this(out, charset.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPLACE)
-                .onUnmappableCharacter(CodingErrorAction.REPLACE));
+                .onUnmappableCharacter(CodingErrorAction.REPLACE), autoFlush);
     }
 
     public WriterOutputStream(Writer out, CharsetDecoder decoder) {
+        this(out, decoder, false);
+    }
+
+    /**
+     * @param autoFlush whether every write is followed by a {@link #flush()}
+     */
+    public WriterOutputStream(Writer out, CharsetDecoder decoder, boolean autoFlush) {
         this.out = out;
         this.decoder = decoder;
+        this.autoFlush = autoFlush;
+    }
+
+    public boolean isAutoFlush() {
+    	return autoFlush;
     }
 
     @Override
@@ -81,9 +113,11 @@ public class WriterOutputStream extends OutputStream {
             len -= c;
             off += c;
         }
-        // Flushed on every write on purpose: subclasses (console/text-area sinks) rely on
-        // flush() being called to publish the text immediately
-        flush();
+        // The writer used to be flushed on every write: it now only is with autoFlush, for
+        // the sinks (console, text area) that must publish the text immediately
+        if(autoFlush) {
+        	flush();
+        }
     }
 
     @Override

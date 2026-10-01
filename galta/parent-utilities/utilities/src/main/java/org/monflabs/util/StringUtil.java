@@ -53,18 +53,29 @@ public class StringUtil {
         return b.toString();
     }
 
+    // trim, trimLeft and trimRight remove the same characters: the white spaces as defined by
+    // Character.isWhitespace() (String.strip()). trim() used to be String.trim(), which
+    // removes every character up to U+0020 (control characters included) but no Unicode space.
+
+    /**
+     * Removes the leading and trailing white spaces (String.strip()); null stays null.
+     */
     public static final String trim(String s) {
-        // Call the String method which more efficient
-        if (s!=null) {
-            return s.trim();
-        } else {
-            return null;
-        }
+        return s!=null ? s.strip() : null;
     }
 
+    /**
+     * Removes the leading white spaces (String.stripLeading()); null stays null.
+     */
     public static final String trimLeft(String s) {
-        // stripLeading() drops the same characters (Character.isWhitespace())
         return s!=null ? s.stripLeading() : null;
+    }
+
+    /**
+     * Removes the trailing white spaces (String.stripTrailing()); null stays null.
+     */
+    public static final String trimRight(String s) {
+        return s!=null ? s.stripTrailing() : null;
     }
     
     public static boolean containsIgnoreCase(String str, String searchStr) {
@@ -108,6 +119,10 @@ public class StringUtil {
         return s1.compareToIgnoreCase(s2);
     }
 
+    /**
+     * Compares two strings, treating null and "" as the same (empty) value: unlike
+     * Objects.equals(), equals(null, "") is true.
+     */
     public static final boolean equals( String s1, String s2 ) {
         if( s1==null || s2==null ) {
             return isEmpty(s1)==isEmpty(s2);
@@ -315,34 +330,37 @@ public class StringUtil {
     public static String truncate(String s, int maxLen) {
     	if(s!=null && s.length()>maxLen) {
     		if(maxLen>3) {
-    			s = s.substring(0,maxLen-3) + "...";
+    			s = s.substring(0,cutIndex(s,maxLen-3)) + "...";
     		} else {
-    			s = s.substring(0,Math.max(0,maxLen));
+    			s = s.substring(0,cutIndex(s,Math.max(0,maxLen)));
     		}
     	}
     	return s;
     }
+    // Where to cut s to keep at most len chars, without splitting a surrogate pair
+    private static int cutIndex(String s, int len) {
+    	if(len>0 && len<s.length() && Character.isHighSurrogate(s.charAt(len-1)) && Character.isLowSurrogate(s.charAt(len))) {
+    		return len-1;
+    	}
+    	return len;
+    }
 
-	
+
+    /**
+     * The 2 lower-case hexadecimal digits of the low 8 bits of the value: the other bits
+     * are ignored (a larger value used to give more digits).
+     */
     public static String toUnsignedHex2(int value) {
-   		String v = Integer.toHexString(value);
-   		switch(v.length()) {
-			case 0:		return "00";	
-   			case 1:		return "0"+v;	
-   		}
-   		return v;
-   	}
-    
+    	return java.util.HexFormat.of().toHexDigits((byte)value);
+    }
+
+    /**
+     * The 4 lower-case hexadecimal digits of the low 16 bits of the value: the other bits
+     * are ignored (a larger value used to give more digits).
+     */
     public static String toUnsignedHex4(int value) {
-   		String v = Integer.toHexString(value);
-   		switch(v.length()) {
-			case 0:		return "0000";	
-   			case 1:		return "000"+v;	
-   			case 2:		return "00"+v;	
-   			case 3:		return "0"+v;
-   		}
-   		return v;
-   	}
+    	return java.util.HexFormat.of().toHexDigits((short)value);
+    }
 
 	public static String capitalizeFirstCharacter(String s) {
 		if(isNotEmpty(s)) {
@@ -356,6 +374,12 @@ public class StringUtil {
 	}
 
     
+	/**
+	 * Converts a dash-separated name to camel case: the dashes are removed and the character
+	 * following each of them is upper-cased ("background-color" gives "backgroundColor").
+	 * The other characters are kept as they are, so a name already in camel case is left
+	 * unchanged ("innerHTML" used to become "innerhtml").
+	 */
 	public static String toCamelCase(String s) {
 		if(s!=null) {
 			int length = s.length();
@@ -366,7 +390,7 @@ public class StringUtil {
 				if(c=='-') {
 					nextIsUpperCase = true;
 				} else {
-					b.append(nextIsUpperCase?Character.toUpperCase(c):Character.toLowerCase(c));
+					b.append(nextIsUpperCase?Character.toUpperCase(c):c);
 					nextIsUpperCase = false;
 				}
 			}
@@ -398,14 +422,23 @@ public class StringUtil {
 		return null;
 	}
 	
+	/**
+	 * A secret (a token, a password...) as it can be logged: at most its first 5 characters,
+	 * see {@link #redacted(String, int)}.
+	 */
 	public static String redacted(String s) {
 		return redacted(s,5);
 	}
+	/**
+	 * A secret (a token, a password...) as it can be logged: its first characters followed
+	 * by "...REDACTED". At most max characters, and never more than a quarter of the value,
+	 * are shown: nothing for a value shorter than 8 characters. A null value gives "&lt;null&gt;".
+	 */
 	public static String redacted(String s, int max) {
 		if(s==null) {
 			return "<null>";
 		}
-		int len = Math.max(0, Math.min(max, s.length()));
-		return s.substring(0,len)+"...REDACTED";
+		int len = s.length()<8 ? 0 : Math.max(0, Math.min(max, s.length()/4));
+		return s.substring(0,cutIndex(s,len))+"...REDACTED";
 	}
 }

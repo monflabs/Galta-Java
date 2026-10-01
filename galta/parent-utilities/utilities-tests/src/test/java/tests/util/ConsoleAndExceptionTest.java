@@ -70,4 +70,55 @@ public class ConsoleAndExceptionTest extends ProjectTestCase {
 		ThrowingFunction<String,String,IOException> f = s -> { throw ise; };
 		assertSame(ise, assertThrows(IllegalStateException.class, () -> ExceptionUtil.unchecked(f).apply("a")));
 	}
+
+	public void testUncheckedRestoresInterruptStatus() throws Exception {
+		// Catching the InterruptedException cleared the interrupt status, which was lost
+		ThrowingRunnable<InterruptedException> sleep = () -> Thread.sleep(10_000);
+		Thread.currentThread().interrupt();
+		try {
+			ForwardRuntimeException e = assertThrows(ForwardRuntimeException.class, () -> ExceptionUtil.unchecked(sleep).run());
+			assertTrue(e.getCause() instanceof InterruptedException);
+			assertTrue(Thread.currentThread().isInterrupted());
+		} finally {
+			Thread.interrupted();
+		}
+		ThrowingConsumer<String,InterruptedException> c = s -> { throw new InterruptedException(); };
+		try {
+			assertThrows(ForwardRuntimeException.class, () -> ExceptionUtil.unchecked(c).accept("a"));
+			assertTrue(Thread.interrupted());
+		} finally {
+			Thread.interrupted();
+		}
+		// Other exceptions don't touch the interrupt status
+		ThrowingRunnable<IOException> io = () -> { throw new IOException("io"); };
+		assertThrows(ForwardRuntimeException.class, () -> ExceptionUtil.unchecked(io).run());
+		assertFalse(Thread.currentThread().isInterrupted());
+	}
+
+	public void testConsoleOutput() throws Exception {
+		java.io.PrintStream out = System.out;
+		java.io.PrintStream err = System.err;
+		java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+		java.io.ByteArrayOutputStream e = new java.io.ByteArrayOutputStream();
+		try {
+			System.setOut(new java.io.PrintStream(o, true, "UTF-8"));
+			System.setErr(new java.io.PrintStream(e, true, "UTF-8"));
+			Console.log("plain {0}");
+			Console.log("a {0} b {1}", 1, "x");
+			Console.err("err {0}", 2);
+			Console.nolog("nothing {0}", 3);
+			Console.noerr("nothing {0}", 3);
+			Console.log((Throwable)null);
+			Console.exception(new IllegalStateException("boom"), "context {0}", 4);
+			assertSame(System.out, Console.outStream());
+			assertSame(System.err, Console.errStream());
+		} finally {
+			System.setOut(out);
+			System.setErr(err);
+		}
+		String nl = System.lineSeparator();
+		assertEquals("plain {0}" + nl + "a 1 b x" + nl, o.toString("UTF-8"));
+		String errText = e.toString("UTF-8");
+		assertTrue(errText, errText.startsWith("err 2" + nl + "context 4" + nl + "java.lang.IllegalStateException: boom"));
+	}
 }

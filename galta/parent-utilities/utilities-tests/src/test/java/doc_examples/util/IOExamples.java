@@ -45,9 +45,10 @@ public class IOExamples extends ProjectTestCase {
 		assertEquals("Error while closing stream", e.getMessage());
 	}
 
+	@SuppressWarnings("deprecation")
 	public void testFileUtil() throws Exception {
 		File dir = new File(Files.createTempDirectory("doc").toFile(), "out");
-		FileUtil.prepareDirectory(dir);                  // creates it (and empties it if it existed)
+		FileUtil.prepareEmptyDirectory(dir);             // creates it (and empties it if it existed)
 		File f = new File(dir, "notes.txt");
 		FileUtil.setContent(f, "caf\u00e9", StandardCharsets.UTF_8);
 		assertEquals("caf\u00e9", FileUtil.readContent(f, StandardCharsets.UTF_8));

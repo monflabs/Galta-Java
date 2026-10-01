@@ -26,6 +26,14 @@ public class StringFormatTest extends ProjectTestCase {
 		assertEquals( "A C and {} B", StringFormat.format("A {0} and {} B", "C") );
 	}
 
+	public void testMissingParameterKept() throws Exception {
+		// A placeholder without a parameter used to vanish
+		assertEquals("Hello {1}!", StringFormat.format("Hello {1}!", "a"));
+		assertEquals("a {0} {1}", StringFormat.format("a {0} {1}"));
+		assertEquals("a {0}", StringFormat.format("a {0}", (Object[])null));
+		assertEquals("x {2} y", StringFormat.format("{0} {2} {1}", "x", "y"));
+	}
+
 	public void testUnterminatedPlaceholder() throws Exception {
 		// Used to substitute the parameter although the '}' was missing
 		assertEquals( "a{0", StringFormat.format("a{0", "X") );
@@ -35,9 +43,9 @@ public class StringFormatTest extends ProjectTestCase {
 
 	public void testHugePlaceholderIndex() throws Exception {
 		// The index used to wrap around: {4294967296} became {0}, {2147483648} threw
-		assertEquals("x  y", StringFormat.format("x {4294967296} y", "a"));
-		assertEquals("x  y", StringFormat.format("x {2147483648} y", "a"));
-		assertEquals("x  y", StringFormat.format("x {99999999999999999999} y", "a"));
+		assertEquals("x {4294967296} y", StringFormat.format("x {4294967296} y", "a"));
+		assertEquals("x {2147483648} y", StringFormat.format("x {2147483648} y", "a"));
+		assertEquals("x {99999999999999999999} y", StringFormat.format("x {99999999999999999999} y", "a"));
 		assertEquals("a b", StringFormat.format("{0} {1}", "a", "b"));
 		assertEquals("b", StringFormat.format("{01}", "a", "b"));   // leading zeros are fine
 	}

@@ -54,7 +54,7 @@ public class TextBuilderTest extends ProjectTestCase {
 	}
 
 	public void testCarriageReturns() throws Exception {
-		// A '\r' is dropped and must not trigger the indentation of an empty line
+		// "\r\n" is one line break, and must not trigger the indentation of an empty line
 		TextBuilder b = new TextBuilder();
 		b.incIndent();
 		b.append("a\r\n");
@@ -62,6 +62,17 @@ public class TextBuilderTest extends ProjectTestCase {
 		b.append("b");
 		assertEquals("  a\n\n  b", b.toString());
 		assertEquals(3, b.getCurrentLine());
+	}
+
+	public void testLoneCarriageReturn() throws Exception {
+		// A lone '\r' (old Mac line break) used to be dropped, joining the two lines
+		TextBuilder b = new TextBuilder();
+		b.incIndent();
+		b.append("a\rb\r\rc\r");
+		b.append('\n');
+		b.append("d");
+		assertEquals("  a\n  b\n\n  c\n  d", b.toString());
+		assertEquals(5, b.getCurrentLine());
 	}
 
 	public void testClearAndCharSequence() throws Exception {

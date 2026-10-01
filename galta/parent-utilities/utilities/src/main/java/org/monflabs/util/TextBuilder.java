@@ -28,6 +28,9 @@ public class TextBuilder implements CharSequence {
 	private int indent;
 	private boolean nl = true;
 	private int currentLine = 1;
+	// The last character appended was a '\r', already turned into a line break: a '\n'
+	// right after it is part of the same "\r\n" line break
+	private boolean afterCR;
 	
 	public TextBuilder() {
 		this(DEFAULT_SIZE);
@@ -61,6 +64,7 @@ public class TextBuilder implements CharSequence {
 		indent = 0;
 		nl = true;
 		currentLine = 1;
+		afterCR = false;
 		return this;
 	}
 	
@@ -80,10 +84,22 @@ public class TextBuilder implements CharSequence {
 		return this;
 	}
 	
+	/**
+	 * Appends a character, indenting it if it starts a line. The line breaks are
+	 * normalized to '\n': "\r\n" and a lone '\r' are both one line break.
+	 */
 	public TextBuilder append(char c) {
 		if(c=='\r') {
-			// Carriage returns are dropped: they must not trigger the indentation either
+			afterCR = false;
+			append('\n');
+			afterCR = true;
 			return this;
+		}
+		if(afterCR) {
+			afterCR = false;
+			if(c=='\n') {
+				return this;
+			}
 		}
 		if(c=='\n') {
 			nl = true;

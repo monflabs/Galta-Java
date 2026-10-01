@@ -42,6 +42,15 @@ public class ExceptionUtil {
 		public R apply(T t) throws E;
 	}
 	
+	// An InterruptedException is wrapped too, but the interrupt status it cleared is
+	// restored first, so that the code up the stack still sees the interruption
+	private static ForwardRuntimeException wrap(Exception e) {
+		if (e instanceof InterruptedException) {
+			Thread.currentThread().interrupt();
+		}
+		return new ForwardRuntimeException(e);
+	}
+
 	public static Runnable unchecked(ThrowingRunnable<?> tc) {
 	    return () -> {
 	        try {
@@ -49,7 +58,7 @@ public class ExceptionUtil {
 	        } catch (RuntimeException e) {
 	            throw e; // Already unchecked: don't wrap it
 	        } catch (Exception e) {
-	            throw new ForwardRuntimeException(e);
+	            throw wrap(e);
 	        }
 	    };
 	}
@@ -61,7 +70,7 @@ public class ExceptionUtil {
 	        } catch (RuntimeException e) {
 	            throw e; // Already unchecked: don't wrap it
 	        } catch (Exception e) {
-	            throw new ForwardRuntimeException(e);
+	            throw wrap(e);
 	        }
 	    };
 	}
@@ -73,7 +82,7 @@ public class ExceptionUtil {
 	        } catch (RuntimeException e) {
 	            throw e; // Already unchecked: don't wrap it
 	        } catch (Exception e) {
-	            throw new ForwardRuntimeException(e);
+	            throw wrap(e);
 	        }
 	    };
 	}
@@ -85,7 +94,7 @@ public class ExceptionUtil {
 	        } catch (RuntimeException e) {
 	            throw e; // Already unchecked: don't wrap it
 	        } catch (Exception e) {
-	            throw new ForwardRuntimeException(e);
+	            throw wrap(e);
 	        }
 	    };
 	}

@@ -35,4 +35,42 @@ public class WriterOutputStreamTest extends ProjectTestCase {
         
         assertEquals(content, sw.toString());
     }
+
+    private static class CountingWriter extends StringWriter {
+    	int flushes;
+    	@Override
+    	public void flush() {
+    		flushes++;
+    		super.flush();
+    	}
+    }
+
+    public void testNoFlushPerWrite() throws Exception {
+    	// The writer used to be flushed on every single write
+    	CountingWriter w = new CountingWriter();
+    	WriterOutputStream os = new WriterOutputStream(w);
+    	assertFalse(os.isAutoFlush());
+    	for (int i = 0; i < 10; i++) {
+    		os.write('a');
+    	}
+    	assertEquals(0, w.flushes);
+    	assertEquals("", w.toString());          // still buffered
+    	os.flush();
+    	assertEquals(1, w.flushes);
+    	assertEquals("aaaaaaaaaa", w.toString());
+    	os.write("b".getBytes(StandardCharsets.UTF_8));
+    	os.close();
+    	assertEquals("aaaaaaaaaab", w.toString());
+    }
+
+    public void testAutoFlush() throws Exception {
+    	CountingWriter w = new CountingWriter();
+    	WriterOutputStream os = new WriterOutputStream(w, true);
+    	assertTrue(os.isAutoFlush());
+    	os.write('a');
+    	assertEquals("a", w.toString());          // published immediately
+    	os.write("bc".getBytes(StandardCharsets.UTF_8));
+    	assertEquals("abc", w.toString());
+    	assertEquals(2, w.flushes);
+    }
 }

@@ -77,6 +77,26 @@ public class FileUtilTest extends ProjectTestCase {
 		assertTrue(Files.exists(p[2]));
 	}
 
+	@SuppressWarnings("deprecation")
+	public void testPrepareEmptyDirectory() throws Exception {
+		File dir = Files.createTempDirectory("prep").toFile();
+		try {
+			File sub = new File(dir, "sub");
+			FileUtil.prepareEmptyDirectory(sub);
+			assertTrue(sub.isDirectory());
+			Files.writeString(new File(sub, "a.txt").toPath(), "a");
+			FileUtil.prepareDirectory(sub, false);           // kept
+			assertEquals(1, sub.list().length);
+			FileUtil.prepareEmptyDirectory(sub);             // emptied
+			assertEquals(0, sub.list().length);
+			Files.writeString(new File(sub, "b.txt").toPath(), "b");
+			FileUtil.prepareDirectory(sub);                  // deprecated: still clears
+			assertEquals(0, sub.list().length);
+		} finally {
+			FileUtil.deleteFile(dir);
+		}
+	}
+
 	public void testDeleteSymbolicLinkItself() throws Exception {
 		Path[] p = linkSetup();
 		Path link = p[0].resolve("link");

@@ -127,18 +127,25 @@ public class PathUtilTest extends ProjectTestCase {
         assertEquals("", PathUtil.POSIX.getFileExtension("/a.b/myfile"));
         assertEquals("", PathUtil.POSIX.getFileExtension("/a.b/"));
         assertEquals("b", PathUtil.POSIX.getFileExtension("/a.b"));
-        assertEquals("ex", PathUtil.POSIX.getFileExtension(".ex"));
-        assertEquals("ex", PathUtil.POSIX.getFileExtension("/.ex"));
+        // A dotfile has no extension, as with FilesUtil.getFileExtension()
+        assertEquals("", PathUtil.POSIX.getFileExtension(".ex"));
+        assertEquals("", PathUtil.POSIX.getFileExtension("/.ex"));
+        assertEquals("ex", PathUtil.POSIX.getFileExtension("/.bashrc.ex"));
         assertEquals("ex", PathUtil.POSIX.getFileExtension("myfile.ex"));
         assertEquals("ex", PathUtil.POSIX.getFileExtension("a.b/myfile.ex"));
-        assertEquals("ex", PathUtil.POSIX.getFileExtension("a.b/.ex"));
+        assertEquals("", PathUtil.POSIX.getFileExtension("a.b/.ex"));
+        assertEquals("", PathUtil.WIN.getFileExtension("a.b\\.ex"));
+        assertEquals("ex", PathUtil.WIN.getFileExtension("a.b\\x.ex"));
 
         // Additional cases
         assertEquals("gz", PathUtil.POSIX.getFileExtension("archive.tar.gz"));
         assertEquals("", PathUtil.POSIX.getFileExtension("dir/"));
         assertEquals("", PathUtil.POSIX.getFileExtension(""));
         assertEquals(null, PathUtil.POSIX.getFileExtension(null));
-        assertEquals("hidden", PathUtil.POSIX.getFileExtension(".hidden"));
+        assertEquals("", PathUtil.POSIX.getFileExtension(".hidden"));
+        assertEquals(".hidden", PathUtil.POSIX.removeExtension(".hidden"));
+        assertEquals("a/.hidden", PathUtil.POSIX.removeExtension("a/.hidden"));
+        assertEquals("a/.hidden", PathUtil.POSIX.removeExtension("a/.hidden.txt"));
     }
 
     public void testRemoveExtension() {
@@ -155,7 +162,7 @@ public class PathUtilTest extends ProjectTestCase {
         // Additional cases
         assertEquals("archive.tar", PathUtil.POSIX.removeExtension("archive.tar.gz"));
         assertEquals("file", PathUtil.POSIX.removeExtension("file.txt"));
-        assertEquals("", PathUtil.POSIX.removeExtension(".ext"));
+        assertEquals(".ext", PathUtil.POSIX.removeExtension(".ext"));   // a dotfile has no extension
         assertEquals(null, PathUtil.POSIX.removeExtension(null));
         assertEquals("dir/file", PathUtil.POSIX.removeExtension("dir/file.txt"));
     }

@@ -49,7 +49,7 @@ public class StringsExamples extends ProjectTestCase {
 		assertEquals("00ff", StringUtil.toUnsignedHex4(255));
 
 		assertEquals("backgroundColor", StringUtil.toCamelCase("background-color"));
-		assertEquals("fooBar", StringUtil.toCamelCase("Foo-BAR"));          // other letters are lower-cased
+		assertEquals("innerHTML", StringUtil.toCamelCase("innerHTML"));     // other characters are kept
 		assertEquals("background-color", StringUtil.toKebabCase("backgroundColor"));
 		assertEquals("url-value", StringUtil.toKebabCase("URLValue"));     // an acronym stays one word
 		assertEquals("Hello", StringUtil.capitalizeFirstCharacter("hello"));
@@ -66,14 +66,15 @@ public class StringsExamples extends ProjectTestCase {
 	}
 
 	public void testRedacted() throws Exception {
-		assertEquals("sk-12...REDACTED", StringUtil.redacted("sk-1234567890"));
+		assertEquals("sk-...REDACTED", StringUtil.redacted("sk-1234567890"));     // at most a quarter
 		assertEquals("sk...REDACTED", StringUtil.redacted("sk-1234567890", 2));
+		assertEquals("...REDACTED", StringUtil.redacted("1234"));               // nothing of a short value
 		assertEquals("<null>", StringUtil.redacted(null));
 	}
 
 	public void testStringFormat() throws Exception {
 		assertEquals("1 + 1 = 2", StringFormat.format("{0} + {0} = {1}", 1, 2));
-		assertEquals("Hello !", StringFormat.format("Hello {1}!", "a"));        // missing argument: empty
+		assertEquals("Hello {1}!", StringFormat.format("Hello {1}!", "a"));     // missing argument: kept
 		assertEquals("null", StringFormat.format("{0}", (Object) null));
 		assertEquals("{name} {} x", StringFormat.format("{name} {} {0}", "x")); // non-numeric braces are kept
 		assertEquals("", StringFormat.format(null));
