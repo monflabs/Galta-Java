@@ -172,7 +172,7 @@ config.updateValues(u -> u.put("db/host", "db.internal"));
 // db.json  -> {"host":"db.internal","port":5432}
 ```
 
-With a `JsonFileConfig`, a referenced file must be inside the configuration folder: an absolute path or a `..` climbing out of it is rejected (`ConfigException`), as the referenced files are also written back when saving. The files are replaced atomically (written to a temporary file, then moved). A `$ref` inside a referenced resource is followed too, and a local `#/...` reference there is relative to that resource. A reference may carry a JSON Pointer fragment (`common.json#/db`, see [Pointers](/GaltaJSON/Pointers)); such a value is read, but it is not written back when saving.
+With a `JsonFileConfig`, a referenced file must be inside the configuration folder: an absolute path or a `..` climbing out of it is rejected (`ConfigException`), as the referenced files are also written back when saving. The files are replaced atomically (written to a temporary file, then moved). A `$ref` inside a referenced resource is followed too, and a local `#/...` reference there is relative to that resource. Each resource is loaded once, however many references lead to it: they all share its content. A reference may carry a JSON Pointer fragment (`common.json#/db`, see [Pointers](/GaltaJSON/Pointers)); such a value is read, but it is not written back when saving (unless the same resource is also referenced as a whole, as the shared content is then saved with it). The resource name of a nested reference is resolved against the referring resource when loading, but saved as written.
 
 Sample: `doc_examples/config/ConfigExamples.java` (`testReferenceLimits`)
 

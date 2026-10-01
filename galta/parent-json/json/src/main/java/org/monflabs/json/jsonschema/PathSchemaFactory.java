@@ -78,6 +78,17 @@ public class PathSchemaFactory extends SchemaFactory {
 		if(!Files.isRegularFile(f)) {
 			return null;
 		}
+		// A symbolic link must not lead outside of the schema location either
+		try {
+			Path realRoot = root.toRealPath();
+			Path realFile = f.toRealPath();
+			if(!realFile.startsWith(realRoot) || realFile.equals(realRoot)) {
+				return null;
+			}
+			f = realFile;
+		} catch(IOException ex) {
+			return null;
+		}
 		try(Reader r=Files.newBufferedReader(f)) {
 			return JsonObject.parse(r);
 		} catch(IOException ex) {

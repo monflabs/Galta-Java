@@ -133,7 +133,7 @@ JsonPointer.EMPTY.getChild("7").equals(JsonPointer.of("/7")); // true: the same 
 
 ## JSON references
 
-`JsonReference.resolve(factory, json, resolver, keepReferences)` replaces, anywhere in `json`, every object with a string `"$ref": "<url>#<pointer>"` property by the value it refers to. Its other properties are ignored, as the specification requires. The `Resolver` loads the document named by the URL part: the base `JsonReference.Resolver(root)` answers the empty URL (a `#/...` reference inside the document) with `root` and throws a `JsonException` for any other URL. The fragment is a percent-decoded JSON Pointer read in that document; a location that doesn't exist is a `JsonException`, not a `null`. A reference to a reference is followed, and a cycle made only of references (`#/a` -> `#/b` -> `#/a`) is a `JsonException`. A container referring to one of its parents (a recursive schema) is legal: the result is a cyclic graph, and `findReferences()` reports each container once.
+`JsonReference.resolve(factory, json, resolver, keepReferences)` replaces, anywhere in `json`, every object with a string `"$ref": "<url>#<pointer>"` property by the value it refers to. Its other properties are ignored, as the specification requires. The `Resolver` loads the document named by the URL part: the base `JsonReference.Resolver(root)` answers the empty URL (a `#/...` reference inside the document) with `root` and throws a `JsonException` for any other URL. The fragment is either empty (`other.json`, `#`: the whole document) or a percent-encoded JSON Pointer starting with `/`, read in that document; a location that doesn't exist, a malformed percent escape, or a plain name fragment (`#foo`, an anchor, which only schemas support) is a `JsonException`, not a `null`. A pointer may go through other references (`#/b/c` where `/b` is itself a `$ref`): they are followed on the way. A reference to a reference is followed, and a cycle made only of references (`#/a` -> `#/b` -> `#/a`) is a `JsonException`. A container referring to one of its parents (a recursive schema) is legal: the result is a cyclic graph, and `findReferences()` reports each container once.
 
 `resolve()` returns the resolved value: `json` itself, updated in place, unless `json` is a reference.
 
@@ -167,7 +167,13 @@ The referenced value is inserted as is, not copied: after resolution the same co
 
 ### External documents and keeping references
 
-Subclass `Resolver` and override `apply(factory, url)` to load other documents. With `keepReferences` set to `true`, each resolved container remembers its reference (`getReference()`), `JsonReference.findReferences(container, callback)` lists them, and a stringifier with `setOutputReferences(true)` writes them back as `{"$ref": ...}` instead of their content.
+Subclass `Resolver` and override `apply(factory, url)` to load other documents. With `keepReferences` set to `true`, each resolved container remembers its reference (`getReference()`), `JsonReference.findReferences(container, callback)` lists them, and a stringifier with `setOutputReferences(true)` writes them back as `{"$ref": ...}` instead of their content. A container that is the target of several references keeps the first one met, in document order.
+
+How the documents are scoped:
+
+- A reference is relative to the document holding it. The URL is resolved against that document's URL by `Resolver.resolveUrl(documentUrl, url)` (RFC 3986 for URIs, the parent path otherwise), so `c.json` inside `dir/b.json` is `dir/c.json`, and `#/x` inside `dir/b.json` is in `dir/b.json`. The root document's URL is the optional second argument of `Resolver(root, baseUrl)`; without one, the references of the root are passed to `apply()` as written.
+- `apply()` receives that resolved URL, and is called at most once per document during a `resolve()` call: the documents are cached by normalized URL (`./d.json` and `d.json` are the same). All the references to a document share its content, and two documents referring to each other give a cyclic graph instead of an endless expansion.
+- `resolve(factory, json, resolver, keepReferences, true)` processes `json` as a JSON Schema: the data keywords (`const`, `enum`, `default`, `examples`) are left untouched, the names under `properties`, `$defs`... are not taken for keywords, a reference to the `$id` of a loaded (sub)schema resolves to it without loading anything, and `#name` designates a `$anchor` (or a draft-07 `"$id": "#name"`). Relative references are still resolved against the document URL, not against `$id`.
 
 Sample: `doc_examples/json/PointersExamples.java` (`testResolveExternalReferences`)
 
@@ -227,7 +233,7 @@ s.stringify(schema);    // {"defs":{"u":{"t":1}},"p":{"$ref":"#/defs/u"}}
 - `add()` inserts into arrays and `setValue()` overwrites: pick the one that matches the intent.
 - `-` never exists outside of `add()`/`setValue()`: use `-1` for the last item.
 - `"/"` is the `""` member, not the whole document (that is `""`).
-- Resolved references share their target; `deepClone()` the document first if the copies must be independent.
+- Resolved references share their target, and a recursive document resolves to a cyclic graph. `deepClone()`, `equals()`, `hashCode()` and a plain `stringify()` recurse into the values and do not terminate on such a graph; clone the document *before* resolving it when an untouched copy is needed, and stringify a cyclic result with `setOutputReferences(true)` after resolving with `keepReferences`.
 
 ## Source
 

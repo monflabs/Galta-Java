@@ -38,9 +38,13 @@ public abstract class SchemaFactory {
 	
 	/**
 	 * Load a schema.
-	 * @param resolve if true, the "$ref" references inside the schema are resolved, the
-	 * references relative to the document being resolved against it, the others using
-	 * this factory
+	 * @param resolve if true, the "$ref" references inside the schema are resolved: a
+	 * relative reference is resolved against the URI of the document holding it, each
+	 * external schema is loaded once (using this factory), and a recursive schema gives a
+	 * cyclic graph of nodes. The data keywords ("const", "enum", "default", "examples") are
+	 * not processed, and a reference to the "$id" of a loaded (sub)schema, or to a "$anchor",
+	 * is resolved without loading anything.
+	 * @throws JsonException if a reference cannot be resolved
 	 */
 	public SchemaNode getSchema(String uri, boolean resolve) {
 		JsonObject o = loadSchemaAsSchema(uri);
@@ -48,27 +52,20 @@ public abstract class SchemaFactory {
 			return null;
 		}
 		if(resolve) {
-			JsonObject root = o;
-			Object resolved = JsonReference.resolve(JsonFactory.get(), o, new JsonReference.Resolver(root) {
+			Object resolved = JsonReference.resolve(JsonFactory.get(), o, new JsonReference.Resolver(o, uri) {
 				@Override
 				public Object apply(JsonFactory f, String u) {
 					if(u==null || u.isEmpty() || u.equals(uri)) {
-						return root;
+						return getRoot();
 					}
-					// A relative reference is relative to the referring schema
-					String abs = u;
-					try {
-						abs = java.net.URI.create(uri).resolve(u).toString();
-					} catch(IllegalArgumentException ex) {
-						// Not a URI: use it as is
-					}
-					JsonObject ext = loadSchemaAsSchema(abs);
+					// u is already resolved against the referring document
+					JsonObject ext = loadSchemaAsSchema(u);
 					if(ext==null) {
 						throw new JsonException(null,"Cannot resolve schema '{0}'", u);
 					}
 					return ext;
 				}
-			}, true);
+			}, true, true);
 			if(!(resolved instanceof JsonObject ro)) {
 				throw new JsonException(null,"The schema '{0}' does not resolve to an object", uri);
 			}

@@ -156,7 +156,11 @@ private static SchemaType schemaType(String json) {
 
 ## Loading schemas
 
-`SchemaFactory` is the base for schema loaders: `getSchema(uri)` returns a `SchemaNode`, or `null` when the loader does not know the URI. `PathSchemaFactory(directory, baseUri)` loads the file `<directory>/<path>` for a URI `<baseUri>/<path>` (with a `null` base, for any relative URI). `SchemaNode` does not resolve `$ref`; see [JSON References](/GaltaJSON/Pointers#json-references).
+`SchemaFactory` is the base for schema loaders: `getSchema(uri)` returns a `SchemaNode`, or `null` when the loader does not know the URI. `PathSchemaFactory(directory, baseUri)` loads the file `<directory>/<path>` for a URI `<baseUri>/<path>` (with a `null` base, for any relative URI). A file reached through a symbolic link pointing outside of the directory is not loaded either.
+
+`getSchema(uri)` resolves the `$ref` references of the schema (`getSchema(uri, false)` doesn't), as [JSON References](/GaltaJSON/Pointers#json-references) in schema mode: a reference object is replaced by the schema it designates, so the `SchemaNode` tree never shows a `$ref` that could be resolved. A relative reference is resolved against the URI of the schema holding it and loaded with the same factory, each schema being loaded once; a reference to the `$id` of a loaded (sub)schema or to a `$anchor` (`#name`) needs no loading; the data keywords (`const`, `enum`, `default`, `examples`) are left as they are. A reference that cannot be resolved is a `JsonException`.
+
+A recursive schema (a tree node whose `children` refer to the node itself, or two schemas referring to each other) resolves to a **cyclic** graph of nodes: walk it with a visited set, and don't `deepClone()`, compare, hash or plainly `stringify()` it, as these recurse without end.
 
 Sample: `doc_examples/json/SchemaExamples.java` (`testPathSchemaFactory`)
 

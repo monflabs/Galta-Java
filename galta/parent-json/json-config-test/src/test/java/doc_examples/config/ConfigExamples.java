@@ -241,7 +241,10 @@ public class ConfigExamples extends ProjectTestCase {
 				{ "db": { "host": "h" }, "other": 1 }
 				""");
 		Files.writeString(folder.resolve("outer.json"), """
-				{ "inner": { "$ref": "common.json" } }
+				{ "inner": { "$ref": "other.json" } }
+				""");
+		Files.writeString(folder.resolve("other.json"), """
+				{ "other": 1 }
 				""");
 		JsonFileConfig config = JsonFileConfig.newBuilder()
 				.folder(folder)
