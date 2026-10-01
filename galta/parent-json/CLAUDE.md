@@ -42,7 +42,7 @@ Package root: `org.monflabs.json`
 
 ## `json-serialization`
 
-Serializes plain Java objects and records to/from `JsonObject`. Constraints: classes need a no-arg constructor (records use their canonical constructor); circular references are not supported. Uses reflection; field (or record component) names map directly to JSON keys. The scalar types share `ScalarClassAdapter`/`ScalarFieldAdapter` and the primitive arrays `PrimitiveArrayClassAdapter`.
+Serializes plain Java objects and records to/from `JsonObject`. Constraints: classes need a no-arg constructor (records use their canonical constructor); circular references are not supported. Uses reflection; field (or record component) names map directly to JSON keys. The scalar types share `ScalarClassAdapter`/`ScalarFieldAdapter` and the primitive arrays `PrimitiveArrayClassAdapter`. `SimpleRegistry` is thread safe (lock-free lookups, creation under a lock, adapters published only when their initialization succeeds) and creates its built-in adapters (scalars, `java.time`/`UUID`/`URI`/`Date` via `StringValueClassAdapter`, `Optional`, `Number`, collections) on each `build()`. A JSON null assigns null (an error for a primitive); errors inside a graph are `SerializationException`s carrying a `$.a[1].b` path; `CycleGuard` also enforces the max depth. User docs: `docs/GaltaJSON/Modules/Serialization.md`, samples in `doc_examples/serialization/SerializationExamples.java`.
 
 ## `json-config`
 

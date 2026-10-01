@@ -114,6 +114,9 @@ public class SerializationHardeningTest extends ProjectTestCase {
 		assertThrows(JsonException.class, () -> NumberConverter.toInt(tiny));
 		assertThrows(JsonException.class, () -> NumberConverter.toBigInteger(tiny));
 		assertThrows(JsonException.class, () -> NumberConverter.toBigInteger(new BigDecimal("-1e10000000")));
+		assertThrows(JsonException.class, () -> NumberConverter.toDouble(huge));
+		assertThrows(JsonException.class, () -> NumberConverter.toFloat(huge));
+		assertEquals(0.0, NumberConverter.toDouble(tiny));
 		// Parsed from a JSON text
 		Object parsed = JsonFactory.get().parse("[1e10000000]");
 		Object n = ((JsonArray)parsed).get(0);
@@ -618,6 +621,16 @@ public class SerializationHardeningTest extends ProjectTestCase {
 		a.value = new StringBuilder("x");
 		JsonException e = assertThrows(JsonException.class, () -> all.serialize(a));
 		assertTrue(message(e), message(e).contains("register an adapter"));
+		// A JDK bound (Comparable) is not a problem for such a factory
+		Sorted<String> sorted = new Sorted<>();
+		sorted.value = "v";
+		assertEquals(JsonObject.of("value", "v"), all.serialize(sorted));
+		assertEquals("v", all.deserialize(Sorted.class, JsonObject.of("value", "v")).value);
+	}
+	public static class Sorted<T extends Comparable<T>> {
+		T value;
+		public Sorted() {
+		}
 	}
 
 	// ------------------------------------------------------------------

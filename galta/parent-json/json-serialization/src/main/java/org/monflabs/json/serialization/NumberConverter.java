@@ -155,7 +155,7 @@ public final class NumberConverter {
 		if(n instanceof Float f) return f;
 		double d = n.doubleValue();
 		float f = (float)d;
-		if(Float.isInfinite(f) && !Double.isInfinite(d)) {
+		if(Float.isInfinite(f) && (!Double.isInfinite(d) || n instanceof BigDecimal || n instanceof BigInteger)) {
 			throw outOfRange(n, "float");
 		}
 		return f;

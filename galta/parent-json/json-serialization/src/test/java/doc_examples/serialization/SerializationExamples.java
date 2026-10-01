@@ -2,16 +2,29 @@ package doc_examples.serialization;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.net.URI;
+import java.time.Duration;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.UUID;
 
 import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonFactory;
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.serialization.ClassAdapter;
+import org.monflabs.json.serialization.SerializationException;
 import org.monflabs.json.serialization.SimpleRegistry;
+import org.monflabs.json.serialization.TypeRef;
 import org.monflabs.json.serialization.classes.BaseClassAdapter;
 import org.monflabs.json.serialization.classes.SimpleClassAdapter;
 
@@ -83,7 +96,7 @@ public class SerializationExamples extends ProjectTestCase {
 			// Object doesn't have a field named email
 			assertTrue(e.getMessage(), e.getMessage().contains("email"));
 		}
-		// A null value is ignored, whatever the key
+		// A null value for an unknown key is ignored
 		Person p = registry.deserialize(Person.class, JsonObject.of("name", "Ada", "email", null));
 		assertEquals("Ada", p.name);
 	}
@@ -137,6 +150,8 @@ public class SerializationExamples extends ProjectTestCase {
 		// Assign to a variable (or cast to Object) first
 		Object json = registry.serialize(p);
 		assertEquals("Ada", registry.deserialize(Person.class, json).name);
+		// Or use toJson(), which returns an Object
+		assertEquals("Ada", registry.fromJson(Person.class, registry.toJson(p)).name);
 	}
 
 	public void testFieldFilter() throws Exception {
@@ -491,6 +506,254 @@ public class SerializationExamples extends ProjectTestCase {
 			fail();
 		} catch(JsonException e) {
 			assertTrue(e.getCause() instanceof NoSuchMethodException);
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// Null values
+	// ------------------------------------------------------------------
+
+	public static class Settings {
+		String theme = "dark";
+		int fontSize = 12;
+		Optional<String> locale = Optional.of("en");
+		public Settings() {
+		}
+	}
+
+	public void testNullValues() throws Exception {
+		SimpleRegistry registry = SimpleRegistry.newBuilder()
+				.add(Settings.class)
+				.build();
+
+		Settings s = registry.deserialize(Settings.class, JsonObject.of("theme", null, "locale", null));
+		assertNull(s.theme);                              // null replaces the default
+		assertEquals(Optional.empty(), s.locale);         // an Optional becomes empty
+		assertEquals(12, s.fontSize);                     // absent: untouched
+
+		try {
+			registry.deserialize(Settings.class, JsonObject.of("fontSize", null));
+			fail();
+		} catch(JsonException e) {
+			// A null JSON value cannot be assigned to the int field fontSize (at $.fontSize)
+			assertTrue(e.getMessage(), e.getMessage().contains("fontSize"));
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// NaN and infinities
+	// ------------------------------------------------------------------
+
+	public static class Sample {
+		double value;
+		public Sample() {
+		}
+	}
+
+	public void testNonFiniteNumbers() throws Exception {
+		SimpleRegistry registry = SimpleRegistry.newBuilder()
+				.nonFiniteNumbersAsStrings(true)
+				.add(Sample.class)
+				.build();
+
+		Sample s = new Sample();
+		s.value = Double.NaN;
+		JsonObject json = registry.serialize(s);
+		assertEquals("NaN", json.get("value"));          // {"value":"NaN"}
+		assertTrue(Double.isNaN(registry.deserialize(Sample.class, JsonObject.parse(json.stringify())).value));
+	}
+
+	// ------------------------------------------------------------------
+	// Value types
+	// ------------------------------------------------------------------
+
+	public static class Meeting {
+		UUID id;
+		LocalDate day;
+		LocalTime start;
+		Duration length;
+		ZoneId zone;
+		Optional<URI> link;
+		public Meeting() {
+		}
+	}
+
+	public void testValueTypes() throws Exception {
+		SimpleRegistry registry = SimpleRegistry.newBuilder()
+				.add(Meeting.class)
+				.build();
+
+		Meeting m = new Meeting();
+		m.id = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+		m.day = LocalDate.of(2026, 9, 26);
+		m.start = LocalTime.of(9, 30);
+		m.length = Duration.ofMinutes(45);
+		m.zone = ZoneId.of("Europe/Paris");
+		m.link = Optional.empty();
+
+		JsonObject json = registry.serialize(m);
+		// {"id":"123e4567-e89b-12d3-a456-426614174000","day":"2026-09-26","start":"09:30:00",
+		//  "length":"PT45M","zone":"Europe/Paris","link":null}
+		assertEquals("2026-09-26", json.get("day"));
+		assertEquals("09:30:00", json.get("start"));
+		assertEquals("PT45M", json.get("length"));
+		assertNull(json.get("link"));
+
+		Meeting back = registry.deserialize(Meeting.class, json);
+		assertEquals(m.start, back.start);
+		assertEquals(Optional.empty(), back.link);
+	}
+
+	// ------------------------------------------------------------------
+	// Declared collection types
+	// ------------------------------------------------------------------
+
+	public static class Index {
+		SortedMap<String, Integer> counts;               // read back as a TreeMap
+		Deque<String> history;                           // read back as an ArrayDeque
+		EnumSet<Color> colors;                           // EnumSet.noneOf(Color.class)
+		public Index() {
+		}
+	}
+
+	public void testDeclaredCollectionTypes() throws Exception {
+		SimpleRegistry registry = SimpleRegistry.newBuilder()
+				.add(Index.class)
+				.build();
+		Index i = registry.deserialize(Index.class, JsonObject.of(
+				"counts", JsonObject.of("b", 2, "a", 1),
+				"history", org.monflabs.json.JsonArray.of("x", "y"),
+				"colors", org.monflabs.json.JsonArray.of("GREEN")));
+		assertEquals(TreeMap.class, i.counts.getClass());
+		assertEquals("a", i.counts.firstKey());
+		assertEquals(ArrayDeque.class, i.history.getClass());
+		assertEquals(EnumSet.of(Color.GREEN), i.colors);
+	}
+
+	// ------------------------------------------------------------------
+	// Sealed types
+	// ------------------------------------------------------------------
+
+	public sealed interface Shape permits Circle, Square {
+	}
+	public record Circle(double radius) implements Shape {
+	}
+	public record Square(double side) implements Shape {
+	}
+	public static class Drawing {
+		List<Shape> shapes;
+		public Drawing() {
+		}
+	}
+
+	public void testSealedTypes() throws Exception {
+		SimpleRegistry registry = SimpleRegistry.newBuilder()
+				.sealedTypes()                            // "@type", or sealedTypes("kind")
+				.add(Drawing.class)
+				.build();
+
+		Drawing d = new Drawing();
+		d.shapes = List.of(new Circle(1), new Square(2));
+		JsonObject json = registry.serialize(d);
+		// {"shapes":[{"@type":"Circle","radius":1.0},{"@type":"Square","side":2.0}]}
+		assertEquals("Circle", json.getArray("shapes").getObject(0).getString("@type"));
+
+		Drawing back = registry.deserialize(Drawing.class, json);
+		assertEquals(new Square(2), back.shapes.get(1));
+	}
+
+	// ------------------------------------------------------------------
+	// Generic types at the top level
+	// ------------------------------------------------------------------
+
+	public void testTypeRef() throws Exception {
+		SimpleRegistry registry = SimpleRegistry.newBuilder()
+				.add(Item.class)
+				.build();
+
+		Object json = registry.toJson(List.of(new Item("A"), new Item("B")));
+		List<Item> items = registry.fromJson(new TypeRef<List<Item>>() {}, json);
+		assertEquals("B", items.get(1).sku);
+
+		Map<String, Item> byId = registry.fromJson(new TypeRef<Map<String, Item>>() {},
+				JsonObject.of("a", JsonObject.of("sku", "A")));
+		assertEquals("A", byId.get("a").sku);
+	}
+
+	// ------------------------------------------------------------------
+	// Typed lambda properties
+	// ------------------------------------------------------------------
+
+	public static class Ticket {
+		Item item;
+		LocalDate due;
+		public Ticket() {
+		}
+	}
+
+	public void testTypedLambdaFields() throws Exception {
+		SimpleRegistry registry = SimpleRegistry.newBuilder()
+				.add(Item.class)
+				.add(Ticket.class, b -> b
+						.add("item", Item.class, (Ticket t) -> t.item, (t, v) -> t.item = v)
+						.add("due", LocalDate.class, (Ticket t) -> t.due, (t, v) -> t.due = v))
+				.build();
+
+		Ticket t = new Ticket();
+		t.item = new Item("X");
+		t.due = LocalDate.of(2026, 10, 1);
+		JsonObject json = registry.serialize(t);
+		// {"item":{"sku":"X"},"due":"2026-10-01"}
+		assertEquals("2026-10-01", json.get("due"));
+		assertEquals("X", registry.deserialize(Ticket.class, json).item.sku);
+	}
+
+	// ------------------------------------------------------------------
+	// Errors
+	// ------------------------------------------------------------------
+
+	public static class Basket {
+		List<Line> lines;
+		public Basket() {
+		}
+	}
+	public static class Line {
+		int quantity;
+		public Line() {
+		}
+	}
+
+	public void testErrorPaths() throws Exception {
+		SimpleRegistry registry = SimpleRegistry.newBuilder()
+				.add(Basket.class)
+				.add(Line.class)
+				.build();
+		try {
+			registry.deserialize(Basket.class, JsonObject.of("lines",
+					org.monflabs.json.JsonArray.of(JsonObject.of("quantity", 1), JsonObject.of("quantity", 1.5))));
+			fail();
+		} catch(SerializationException e) {
+			// Number 1.5 has a fraction, cannot convert it to int (at $.lines[1].quantity)
+			assertEquals("$.lines[1].quantity", e.getPath());
+		}
+	}
+
+	public void testMaxDepth() throws Exception {
+		SimpleRegistry registry = SimpleRegistry.newBuilder()
+				.maxDepth(100)                            // 1000 by default
+				.add(Node.class)
+				.build();
+		Node head = new Node();
+		Node n = head;
+		for(int i=0; i<200; i++) {
+			n = n.next = new Node();
+		}
+		try {
+			registry.serialize(head);
+			fail();
+		} catch(JsonException e) {
+			// Cannot serialize an object graph nested deeper than 100 levels (at $.next.next...)
+			assertTrue(e.getMessage(), e.getMessage().contains("deeper than 100"));
 		}
 	}
 }

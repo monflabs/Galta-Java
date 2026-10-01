@@ -69,7 +69,11 @@ public class SimpleClassAdapter<C> extends BaseClassAdapter {
 			return;
 		}
 		if(!isReflectable(clazz)) {
-			throw new JsonException(null, "Cannot read the fields of {0} by reflection, its package is not open (a JDK class?): register an adapter for this class", clazz.getName());
+			if(hasInstanceFields(clazz)) {
+				throw new JsonException(null, "Cannot read the fields of {0} by reflection, its package is not open (a JDK class?): register an adapter for this class", clazz.getName());
+			}
+			// An interface, or a class without state: no property
+			return;
 		}
 		// The hierarchy walk stops at the first class that cannot be reflected (a JDK class,
 		// like Exception or AbstractList): its fields are not serialized
@@ -102,6 +106,17 @@ public class SimpleClassAdapter<C> extends BaseClassAdapter {
 				}
 			}
 		}
+	}
+
+	private static boolean hasInstanceFields(Class<?> clazz) {
+		for(Class<?> c=clazz; c!=null; c=c.getSuperclass()) {
+			for(Field f: c.getDeclaredFields()) {
+				if(!Modifier.isStatic(f.getModifiers()) && !Modifier.isTransient(f.getModifiers())) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

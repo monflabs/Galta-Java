@@ -29,6 +29,7 @@ import java.util.List;
 import org.monflabs.json.serialization.ClassAdapter;
 import org.monflabs.json.serialization.JsonRegistry;
 import org.monflabs.json.serialization.classes.ParameterizedClassAdapter;
+import org.monflabs.json.serialization.classes.SimpleClassAdapter;
 import org.monflabs.json.serialization.classes.arrays.ObjectArrayClassAdapter;
 
 /**
@@ -242,9 +243,16 @@ public class GenericTypeResolver {
 		Type[] bounds = tv.getBounds();
 		Class<?> b = bounds.length>0 ? erase(bounds[0]) : Object.class;
 		if(b!=Object.class) {
-			ClassAdapter a = registry.findAdapterOrNull(b);
-			if(a!=null) {
-				return a;
+			try {
+				ClassAdapter a = registry.findAdapterOrNull(b);
+				// A reflection adapter of an interface or an abstract class (created by a class
+				// factory) cannot read anything back: the Object adapter is better
+				if(a!=null && !(a instanceof SimpleClassAdapter<?> && (b.isInterface() || Modifier.isAbstract(b.getModifiers())))) {
+					return a;
+				}
+			} catch(RuntimeException ex) {
+				// A bound that cannot be adapted (Comparable for a class factory accepting
+				// every class...): the values are kept as is
 			}
 		}
 		return objectAdapter(registry);
