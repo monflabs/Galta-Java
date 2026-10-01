@@ -16,87 +16,106 @@
 package org.monflabs.filesystem.file;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.FileStore;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.attribute.FileAttributeView;
 import java.nio.file.attribute.FileStoreAttributeView;
 
 /**
- * A FileStore implementation that delegates to java.io.File API.
+ * The FileStore of a file, delegating to the platform's own FileStore
+ * ({@link Files#getFileStore(Path)}). Walking up to the filesystem root made the store
+ * report the root volume - read-only and with the wrong sizes for a file on another mount.
  */
 public class FileBasedFileStore extends FileStore {
-    
-    private final File root;
-    
+
+    private final FileStore delegate;
+
+    /**
+     * The store of a file, or of its nearest existing ancestor when it does not exist.
+     * @throws UncheckedIOException if no store can be determined
+     */
     public FileBasedFileStore(File file) {
-        // Find the root for this file
-        File current = file.getAbsoluteFile();
-        while (current.getParentFile() != null) {
-            current = current.getParentFile();
-        }
-        this.root = current;
+        this(storeOf(file));
     }
-    
+
+    public FileBasedFileStore(FileStore delegate) {
+        this.delegate = delegate;
+    }
+
+    private static FileStore storeOf(File file) {
+        Path p = file.getAbsoluteFile().toPath();
+        while (p != null && !Files.exists(p)) {
+            p = p.getParent();
+        }
+        if (p == null) {
+            p = file.getAbsoluteFile().toPath().getRoot();
+        }
+        try {
+            return Files.getFileStore(p);
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
+
     @Override
     public String name() {
-        return root.getAbsolutePath();
+        return delegate.name();
     }
-    
+
     @Override
     public String type() {
-        // Return a generic type since File API doesn't provide this
-        return "file";
+        return delegate.type();
     }
-    
+
     @Override
     public boolean isReadOnly() {
-        // Check if the root can be written to
-        return !root.canWrite();
+        return delegate.isReadOnly();
     }
-    
+
     @Override
     public long getTotalSpace() throws IOException {
-        return root.getTotalSpace();
+        return delegate.getTotalSpace();
     }
-    
+
     @Override
     public long getUsableSpace() throws IOException {
-        return root.getUsableSpace();
+        return delegate.getUsableSpace();
     }
-    
+
     @Override
     public long getUnallocatedSpace() throws IOException {
-        return root.getFreeSpace();
+        return delegate.getUnallocatedSpace();
     }
-    
+
+    @Override
+    public long getBlockSize() throws IOException {
+        return delegate.getBlockSize();
+    }
+
     @Override
     public boolean supportsFileAttributeView(Class<? extends FileAttributeView> type) {
-        // Basic support only
-        return false;
+        return delegate.supportsFileAttributeView(type);
     }
-    
+
     @Override
     public boolean supportsFileAttributeView(String name) {
-        // Basic support only
-        return "basic".equals(name);
+        return delegate.supportsFileAttributeView(name);
     }
-    
+
     @Override
     public <V extends FileStoreAttributeView> V getFileStoreAttributeView(Class<V> type) {
-        // Not supported
-        return null;
+        return delegate.getFileStoreAttributeView(type);
     }
-    
+
     @Override
     public Object getAttribute(String attribute) throws IOException {
-        switch (attribute) {
-            case "totalSpace":
-                return getTotalSpace();
-            case "usableSpace":
-                return getUsableSpace();
-            case "unallocatedSpace":
-                return getUnallocatedSpace();
-            default:
-                throw new UnsupportedOperationException("Attribute not supported: " + attribute);
-        }
+        return delegate.getAttribute(attribute);
+    }
+
+    @Override
+    public String toString() {
+        return delegate.toString();
     }
 }

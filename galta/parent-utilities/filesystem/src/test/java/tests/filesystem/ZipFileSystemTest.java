@@ -448,4 +448,40 @@ public class ZipFileSystemTest extends ProjectTestCase {
         // An IOException from the filter used to silently drop the entry
         assertThrows(IOException.class, () -> Files.newDirectoryStream(fs.getPath("/"), p -> { throw new IOException("filter"); }));
     }
+
+    public void testUnsafeEntryNamesAreSkipped() throws Exception {
+        java.nio.file.Path zip = new File(tempZipFolder, "slip.zip").toPath();
+        try (java.util.zip.ZipOutputStream out = new java.util.zip.ZipOutputStream(Files.newOutputStream(zip))) {
+            for (String name : new String[] {"../evil.txt", "/abs.txt", "ok/./x.txt", "ok/../y.txt", "a//b.txt", "good/sub/a.txt", "good/b.txt"}) {
+                out.putNextEntry(new java.util.zip.ZipEntry(name));
+                out.write(name.getBytes());
+                out.closeEntry();
+            }
+        }
+        Map<String, Object> env = new HashMap<>();
+        env.put(ZipFileSystemProvider.ZIP_FILE_PARAM, zip);
+        try (FileSystem zfs = provider.newFileSystem(ZipFileSystem.DEFAULT_URI, env);
+             java.util.stream.Stream<Path> walk = Files.walk(zfs.getPath("/"))) {
+            // A ".." child made Files.walk() loop forever, and paths climb out of the archive
+            java.util.List<String> all = walk.map(Path::toString).sorted().toList();
+            assertEquals(java.util.List.of("/", "/good", "/good/b.txt", "/good/sub", "/good/sub/a.txt"), all);
+            assertTrue(Files.isDirectory(zfs.getPath("/good/sub")));   // implicit directory
+            assertEquals("good/sub/a.txt", Files.readString(zfs.getPath("/good/sub/a.txt")));
+            assertFalse(Files.exists(zfs.getPath("/evil.txt")));
+            assertFalse(Files.exists(zfs.getPath("/ok")));
+        }
+    }
+
+    public void testRegisteredProviderFindsTheArchiveOfAUri() throws IOException {
+        ZipFileSystemProvider registered = new ZipFileSystemProvider(true);
+        Map<String, Object> env = new HashMap<>();
+        env.put(ZipFileSystemProvider.ZIP_FILE_PARAM, tempZipFile);
+        try (FileSystem zfs = registered.newFileSystem(URI.create("zip:///archive.zip"), env)) {
+            Path p = zfs.getPath("/dir1/file3.txt");
+            Path back = registered.getPath(p.toUri());
+            assertSame(zfs, back.getFileSystem());
+            assertEquals(p, back);
+            assertThrows(java.nio.file.FileSystemNotFoundException.class, () -> registered.getFileSystem(URI.create("zip:///other.zip")));
+        }
+    }
 }

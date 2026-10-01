@@ -236,4 +236,32 @@ public class MemoryFileSystemTest extends AbstractFileSystemTest {
         java.nio.file.Files.write(fs.getPath("/still.txt"), "ok".getBytes());
         assertTrue(java.nio.file.Files.exists(fs.getPath("/still.txt")));
     }
+
+    public void testRegisteredProviderKeysByAuthorityNotPath() throws IOException {
+        org.monflabs.filesystem.memory.MemoryFileSystemProvider provider = new org.monflabs.filesystem.memory.MemoryFileSystemProvider(true);
+        try (FileSystem a = provider.newFileSystem(java.net.URI.create("memory:///"), new java.util.HashMap<>());
+             FileSystem b = provider.newFileSystem(java.net.URI.create("memory://other/"), new java.util.HashMap<>())) {
+            java.nio.file.Path file = a.getPath("/docs/a b.txt");
+            // The URI of a file finds its filesystem: the path names the file, not the filesystem
+            java.nio.file.Path back = provider.getPath(file.toUri());
+            assertSame(a, back.getFileSystem());
+            assertEquals(file, back);
+            assertSame(a, provider.getFileSystem(java.net.URI.create("memory:///anything/else")));
+            assertSame(b, provider.getFileSystem(java.net.URI.create("memory://other/x")));
+            // Same scheme and authority: the same filesystem, whatever the path
+            assertThrows(java.nio.file.FileSystemAlreadyExistsException.class,
+                () -> provider.newFileSystem(java.net.URI.create("memory:///x"), new java.util.HashMap<>()));
+        }
+    }
+
+    public void testDotInFileNameIsNotADotSegment() throws IOException {
+        // A "." in a file name is not a "." segment, while real "."/".." segments still resolve
+        java.nio.file.Files.createDirectories(getPath("/a.b/c"));
+        java.nio.file.Files.write(getPath("/a.b/c/d.e.txt"), new byte[] {1});
+        assertTrue(java.nio.file.Files.exists(getPath("/a.b/c/d.e.txt")));
+        assertTrue(java.nio.file.Files.exists(getPath("/a.b/./c/../c/d.e.txt")));
+        assertTrue(java.nio.file.Files.exists(getPath("/a.b//c/d.e.txt")));
+        assertTrue(java.nio.file.Files.exists(getPath("/.././a.b/c")));
+        assertFalse(java.nio.file.Files.exists(getPath("/a.b/c/..d.e.txt")));
+    }
 }

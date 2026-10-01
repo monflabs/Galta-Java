@@ -61,4 +61,11 @@ public class PathFileSystemTest extends AbstractFileSystemTest {
     	return "PathFileSystem (sandboxed)";
     }
 
+
+    public void testToUriDoesNotDiscloseTheHostPath() throws IOException {
+        java.net.URI uri = fs.getPath("/dir/a b.txt").toUri();
+        assertEquals(java.net.URI.create("pathfs:///dir/a%20b.txt"), uri);
+        assertFalse(uri.toString(), uri.toString().contains(tempFileFolder.getName()));
+        assertEquals("/x", fs.getPath("/../x").toUri().getPath());
+    }
 }

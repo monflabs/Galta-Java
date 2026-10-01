@@ -25,6 +25,7 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -82,13 +83,72 @@ public class ZipFileSystem extends AbstractFileSystem {
     
     private final ZipFile zipFile;
     private final ZipFileStore fileStore;
-    
+    // Indexed once when the archive is opened: entry name (without a trailing "/") ->
+    // entry, and directory name ("" for the root) -> names of its direct children
+    private final Map<String, ZipEntry> entries = new HashMap<>();
+    private final Map<String, Set<String>> directories = new HashMap<>();
+
     public ZipFileSystem(ZipFileSystemProvider provider, URI uri, ZipFile zipFile) {
     	super(provider, uri, "/");
         this.zipFile = zipFile;
         this.fileStore = new ZipFileStore(this);
+        index();
     }
-    
+
+    private void index() {
+        directories.put("", new LinkedHashSet<>());
+        Enumeration<? extends ZipEntry> en = zipFile.entries();
+        while (en.hasMoreElements()) {
+            ZipEntry entry = en.nextElement();
+            String name = entry.getName();
+            boolean dir = name.endsWith("/");
+            if (dir) {
+                name = name.substring(0, name.length() - 1);
+            }
+            if (!isSafeEntryName(name)) {
+                // "/abs", "../x", "a/./b", "a//b": a ".." child made Files.walk() loop
+                // forever and let paths climb out of the archive (zip-slip)
+                continue;
+            }
+            // The first entry wins, as with ZipFile.getEntry()
+            entries.putIfAbsent(name, entry);
+            if (dir) {
+                directories.computeIfAbsent(name, k -> new LinkedHashSet<>());
+            }
+            // Register the entry with its parent, and the (possibly implicit) ancestors
+            String child = name;
+            int slash = child.lastIndexOf('/');
+            while (true) {
+                String parent = slash < 0 ? "" : child.substring(0, slash);
+                Set<String> siblings = directories.get(parent);
+                boolean known = siblings != null;
+                if (!known) {
+                    siblings = new LinkedHashSet<>();
+                    directories.put(parent, siblings);
+                }
+                siblings.add(child.substring(slash + 1));
+                if (known || parent.isEmpty()) {
+                    break;
+                }
+                child = parent;
+                slash = child.lastIndexOf('/');
+            }
+        }
+    }
+
+    // A relative name made of non empty segments, none of them "." or ".."
+    private static boolean isSafeEntryName(String name) {
+        if (name.isEmpty() || name.startsWith("/") || name.indexOf('\\') >= 0) {
+            return false;
+        }
+        for (String segment : name.split("/", -1)) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     public void close() throws IOException {
         if (isOpen()) {
@@ -146,34 +206,25 @@ public class ZipFileSystem extends AbstractFileSystem {
     public ZipEntry getEntry(ZipPath path) {
         checkOpen();
         String pathStr = entryName(path);
-        
+
         // Root directory
         if (pathStr.isEmpty()) {
             return createRootEntry();
         }
-        
-        // Try exact match
-        ZipEntry entry = zipFile.getEntry(pathStr);
+
+        ZipEntry entry = entries.get(pathStr);
         if (entry != null) {
             return entry;
         }
-        
-        // Try with trailing slash (for directories)
-        if (!pathStr.endsWith("/")) {
-            entry = zipFile.getEntry(pathStr + "/");
-            if (entry != null) {
-                return entry;
-            }
-        }
-        
-        // Check if it's an implicit directory (has children but no entry)
-        if (hasChildren(pathStr)) {
+
+        // An implicit directory (has children but no entry)
+        if (directories.containsKey(pathStr)) {
             return createImplicitDirectoryEntry(pathStr);
         }
-        
+
         return null;
     }
-    
+
     /**
      * The entry name of a path: absolute, "." and ".." resolved ("/a/../a/b.txt" is "a/b.txt"),
      * without the leading slash.
@@ -181,23 +232,6 @@ public class ZipFileSystem extends AbstractFileSystem {
     private static String entryName(ZipPath path) {
         String pathStr = path.toAbsolutePath().normalize().toString();
         return pathStr.startsWith("/") ? pathStr.substring(1) : pathStr;
-    }
-    
-    /**
-     * Check if a path has children (to detect implicit directories).
-     */
-    private boolean hasChildren(String pathStr) {
-        String prefix = pathStr.endsWith("/") ? pathStr : pathStr + "/";
-        
-        Enumeration<? extends ZipEntry> entries = zipFile.entries();
-        while (entries.hasMoreElements()) {
-            ZipEntry entry = entries.nextElement();
-            if (entry.getName().startsWith(prefix)) {
-                return true;
-            }
-        }
-        
-        return false;
     }
     
     /**
@@ -233,58 +267,16 @@ public class ZipFileSystem extends AbstractFileSystem {
      */
     public List<Path> listDirectory(ZipPath dir) {
         checkOpen();
-        String dirPath = entryName(dir);
-        
-        // Normalize directory path
-        if (!dirPath.isEmpty() && !dirPath.endsWith("/")) {
-            dirPath = dirPath + "/";
-        }
-        
-        Set<String> children = new LinkedHashSet<>();
-        
-        // Scan all ZIP entries
-        Enumeration<? extends ZipEntry> entries = zipFile.entries();
-        while (entries.hasMoreElements()) {
-            ZipEntry entry = entries.nextElement();
-            String entryName = entry.getName();
-            
-            // Check if entry is under this directory
-            if (dirPath.isEmpty() || entryName.startsWith(dirPath)) {
-                // Get relative path
-                String relativePath = dirPath.isEmpty() ? entryName : entryName.substring(dirPath.length());
-                
-                // Skip if empty (shouldn't happen)
-                if (relativePath.isEmpty()) {
-                    continue;
-                }
-                
-                // Get first component (direct child)
-                int slashIndex = relativePath.indexOf('/');
-                String childName;
-                if (slashIndex > 0) {
-                    // Directory entry
-                    childName = relativePath.substring(0, slashIndex);
-                } else if (slashIndex == 0) {
-                    // Skip entries that start with slash
-                    continue;
-                } else {
-                    // File entry
-                    childName = relativePath;
-                }
-                
-                children.add(childName);
+        Set<String> children = directories.get(entryName(dir));
+        List<Path> result = new ArrayList<>();
+        if (children != null) {
+            for (String child : children) {
+                result.add(dir.resolve(child));
             }
         }
-        
-        // Convert to paths
-        List<Path> result = new ArrayList<>();
-        for (String child : children) {
-            result.add(dir.resolve(child));
-        }
-        
         return result;
     }
-    
+
     /**
      * Get the underlying ZipFile (for debugging/testing).
      */

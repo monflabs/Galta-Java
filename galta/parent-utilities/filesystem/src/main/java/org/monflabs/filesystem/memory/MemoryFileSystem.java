@@ -68,6 +68,9 @@ public class MemoryFileSystem extends AbstractFileSystem {
 	public static final URI DEFAULT_URI = URI.create(MemoryFileSystemProvider.SCHEME + ":///");
     
     private final Map<String, MemoryFileNode> nodes = new ConcurrentHashMap<>();
+    // Guards structural changes (create/delete/move): a check-then-create sequence in
+    // the provider must hold it, or two CREATE_NEW opens of the same path both succeed
+    final Object structureLock = new Object();
     private final MemoryFileNode root;
     
     public MemoryFileSystem(MemoryFileSystemProvider provider, URI uri) {
@@ -132,6 +135,12 @@ public class MemoryFileSystem extends AbstractFileSystem {
      * Create a new node at the given path.
      */
     public void createNode(MemoryPath path, MemoryFileNode node) {
+        synchronized (structureLock) {
+            _createNode(path, node);
+        }
+    }
+    
+    private void _createNode(MemoryPath path, MemoryFileNode node) {
         path = (MemoryPath) path.toAbsolutePath().normalize();
         String normalizedPath = normalizePath(path.toString());
         
@@ -152,6 +161,12 @@ public class MemoryFileSystem extends AbstractFileSystem {
      * Delete the node at the given path.
      */
     public void deleteNode(MemoryPath path) {
+        synchronized (structureLock) {
+            _deleteNode(path);
+        }
+    }
+    
+    private void _deleteNode(MemoryPath path) {
         path = (MemoryPath) path.toAbsolutePath().normalize();
         String normalizedPath = normalizePath(path.toString());
         
@@ -178,7 +193,7 @@ public class MemoryFileSystem extends AbstractFileSystem {
         }
         
         // Resolve "." and ".." (and collapse "//") so "/a/../b" is looked up as "/b"
-        if (path.contains(".") || path.contains("//")) {
+        if (needsNormalization(path)) {
             path = createPath(path.startsWith("/") ? path : "/" + path).normalize().toString();
         }
         
@@ -193,6 +208,27 @@ public class MemoryFileSystem extends AbstractFileSystem {
         }
         
         return path;
+    }
+    
+    // True for a "//", or a "." or ".." segment - not for a dot in a file name
+    private static boolean needsNormalization(String path) {
+        int len = path.length();
+        int segStart = 0;
+        for (int i = 0; i <= len; i++) {
+            if (i == len || path.charAt(i) == '/') {
+                int segLen = i - segStart;
+                if (segLen == 0) {
+                    // "//" (an empty segment that is not the leading or trailing slash)
+                    if (i > 0 && i < len) {
+                        return true;
+                    }
+                } else if (path.charAt(segStart) == '.' && (segLen == 1 || (segLen == 2 && path.charAt(segStart + 1) == '.'))) {
+                    return true;
+                }
+                segStart = i + 1;
+            }
+        }
+        return false;
     }
     
     /**

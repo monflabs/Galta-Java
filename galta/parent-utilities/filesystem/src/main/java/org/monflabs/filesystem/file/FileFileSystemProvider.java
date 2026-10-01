@@ -37,7 +37,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,6 +44,7 @@ import java.util.Set;
 import org.monflabs.filesystem.AbstractFileSystem;
 import org.monflabs.filesystem.AbstractFileSystemProvider;
 import org.monflabs.filesystem.AbstractPath;
+import org.monflabs.filesystem.ListDirectoryStream;
 import org.monflabs.filesystem.Sandbox;
 
 /**
@@ -192,22 +192,7 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
             }
         }
         
-        return new DirectoryStream<Path>() {
-            private boolean closed = false;
-            
-            @Override
-            public Iterator<Path> iterator() {
-                if (closed) {
-                    throw new IllegalStateException("DirectoryStream is closed");
-                }
-                return paths.iterator();
-            }
-            
-            @Override
-            public void close() {
-                closed = true;
-            }
-        };
+        return new ListDirectoryStream(paths);
     }
     
     @Override
@@ -295,6 +280,27 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
             .setTimes(lastModifiedTime, lastAccessTime, createTime);
     }
     
+    /**
+     * Two paths locate the same file when the underlying files are the same, which a
+     * lexical comparison misses (symbolic links, case-insensitive volumes, two
+     * filesystems with different roots over the same directory).
+     */
+    @Override
+    public boolean isSameFile(Path path, Path path2) throws IOException {
+        checkPath(path);
+        if (path.equals(path2)) {
+            return true;
+        }
+        if (!(path2 instanceof FilePath) || path2.getFileSystem().provider() != this) {
+            return false;
+        }
+        path = toAbsolutePath(path);
+        path2 = toAbsolutePath(path2);
+        validatePath((FilePath) path);
+        validatePath((FilePath) path2);
+        return Files.isSameFile(((FilePath) path).toFile().toPath(), ((FilePath) path2).toFile().toPath());
+    }
+
     @Override
     public boolean isHidden(Path path) throws IOException {
         checkPath(path);
@@ -310,7 +316,9 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
         path = toAbsolutePath(path);
         validatePath((FilePath) path);
         File file = ((FilePath) path).toFile();
-        return new FileBasedFileStore(file);
+        // The store of the file itself (NoSuchFileException if it does not exist, as
+        // Files.getFileStore() specifies), not of the root of the host filesystem
+        return new FileBasedFileStore(Files.getFileStore(file.toPath()));
     }
     
     @Override

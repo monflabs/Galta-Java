@@ -106,7 +106,7 @@ try (FileSystem fs = PathFileSystem.newBuilder().root(root.toPath()).build()) {
 
 ### FileFileSystem or PathFileSystem
 
-Both expose a folder of the local disk. `FileFileSystem` goes through `java.io.File`, uses the OS separator, and `toFile()` works. `PathFileSystem` goes through `java.nio`, always uses `/` whatever the platform, and converts to the real path with `toOSPath(String)`; its `toUri()` is the URI of the real file.
+Both expose a folder of the local disk. `FileFileSystem` goes through `java.io.File`, uses the OS separator, and `toFile()` works. `PathFileSystem` goes through `java.nio`, always uses `/` whatever the platform, and converts to the real path with `toOSPath(String)`. With a root, its `toUri()` is a `pathfs:` URI of the virtual path (like a sandboxed `FileFileSystem`), so it never discloses the host path; without one, it is the URI of the real file.
 
 Sample: `doc_examples/filesystem/FileSystemsExamples.java` (`testPathFileSystem`)
 
@@ -118,8 +118,8 @@ try (PathFileSystem fs = PathFileSystem.newBuilder().root(root.toPath()).build()
 
     fs.getSeparator();                    // "/" on every platform
     fs.toOSPath("/data/values.txt");      // <root>/data/values.txt
-    // toUri() is the URI of the real file
-    p.toUri();                            // root.toPath().resolve("data/values.txt").toUri()
+    // With a root, toUri() is a URI of the virtual path: it does not disclose the host path
+    p.toUri();                            // pathfs:///data/values.txt
 }
 ```
 
@@ -261,7 +261,7 @@ try (FileSystem fs = ZipFileSystem.newBuilder().zipFile(zip).build()) {
 
 `Path.toUri()` uses the provider's scheme, with the characters that need it encoded. The providers are not registered with the JDK (the module has no `META-INF/services` entry), so `Path.of(URI)` and `FileSystems.newFileSystem(URI, ...)` do not find them: build filesystems with the builders, or call a provider instance directly.
 
-Each class has a shared default provider that does not keep track of the filesystems it creates. A provider constructed with `registered = true` remembers them by URI: `getFileSystem(uri)` finds an open one, creating a second one for the same URI throws `FileSystemAlreadyExistsException`, and closing a filesystem unregisters it.
+Each class has a shared default provider that does not keep track of the filesystems it creates. A provider constructed with `registered = true` remembers them by the scheme and authority of their URI (the path names a file inside a filesystem, so `getPath(uri)` finds the filesystem of any of its files' URIs; zip and resource URIs also carry the filesystem in their path, before the `!`): `getFileSystem(uri)` finds an open one, creating a second one for the same URI throws `FileSystemAlreadyExistsException`, and closing a filesystem unregisters it.
 
 Sample: `doc_examples/filesystem/FileSystemsExamples.java` (`testUris`)
 

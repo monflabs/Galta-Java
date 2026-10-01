@@ -1415,4 +1415,51 @@ public abstract class AbstractFileSystemTest extends ProjectTestCase {
         assertEquals(Files.exists(relative.toAbsolutePath()), Files.exists(relative));
         assertTrue(Files.isSameFile(relative, relative.toAbsolutePath()));
     }
+
+    // ==================== Regression tests ====================
+
+    public void testDirectoryStreamIteratorOnlyOnce() throws IOException {
+        Files.write(getPath("/one.txt"), new byte[] {1});
+        try (java.nio.file.DirectoryStream<Path> ds = Files.newDirectoryStream(getPath("/"))) {
+            java.util.Iterator<Path> it = ds.iterator();
+            // A second iterator() call must fail (DirectoryStream contract); every provider
+            // used to hand out a fresh iterator each time
+            assertThrows(IllegalStateException.class, () -> ds.iterator());
+            assertTrue(it.hasNext());
+            ds.close();
+            // A closed stream's iterator behaves as if the end had been reached
+            assertFalse(it.hasNext());
+        }
+    }
+
+    public void testConcurrentCreateNew() throws Exception {
+        // Two CREATE_NEW opens of the same path must never both succeed
+        for (int round = 0; round < 20; round++) {
+            Path p = getPath("/race-" + round + ".txt");
+            int threads = 8;
+            java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(threads);
+            java.util.concurrent.atomic.AtomicInteger created = new java.util.concurrent.atomic.AtomicInteger();
+            java.util.List<Thread> list = new java.util.ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                Thread t = new Thread(() -> {
+                    try {
+                        barrier.await();
+                        try (java.nio.channels.SeekableByteChannel c = Files.newByteChannel(p,
+                                java.nio.file.StandardOpenOption.CREATE_NEW, java.nio.file.StandardOpenOption.WRITE)) {
+                            created.incrementAndGet();
+                        }
+                    } catch (java.nio.file.FileAlreadyExistsException expected) {
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+                list.add(t);
+                t.start();
+            }
+            for (Thread t : list) {
+                t.join();
+            }
+            assertEquals(1, created.get());
+        }
+    }
 }

@@ -126,8 +126,8 @@ public class FileSystemsExamples extends ProjectTestCase {
 			assertEquals("/", fs.getSeparator());   // "/" on every platform
 			assertEquals(root.toPath().resolve("data").resolve("values.txt"), fs.toOSPath("/data/values.txt"));
 			assertEquals("42", Files.readString(root.toPath().resolve("data/values.txt")));
-			// toUri() is the URI of the real file
-			assertEquals(root.toPath().resolve("data/values.txt").toUri(), p.toUri());
+			// With a root, toUri() is a URI of the virtual path: it does not disclose the host path
+			assertEquals(URI.create("pathfs:///data/values.txt"), p.toUri());
 		}
 	}
 

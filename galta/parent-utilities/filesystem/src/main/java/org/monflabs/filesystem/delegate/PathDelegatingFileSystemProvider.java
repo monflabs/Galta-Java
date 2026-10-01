@@ -35,7 +35,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +42,7 @@ import java.util.Set;
 import org.monflabs.filesystem.AbstractFileSystem;
 import org.monflabs.filesystem.AbstractFileSystemProvider;
 import org.monflabs.filesystem.AbstractPath;
+import org.monflabs.filesystem.ListDirectoryStream;
 import org.monflabs.filesystem.Sandbox;
 
 /**
@@ -153,22 +153,7 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
             }
         }
         
-        return new DirectoryStream<Path>() {
-            private boolean closed = false;
-            
-            @Override
-            public Iterator<Path> iterator() {
-                if (closed) {
-                    throw new IllegalStateException("DirectoryStream is closed");
-                }
-                return paths.iterator();
-            }
-            
-            @Override
-            public void close() {
-                closed = true;
-            }
-        };
+        return new ListDirectoryStream(paths);
     }
     
     @Override
@@ -256,6 +241,26 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         return Files.isHidden(delPath.toDelegatePath());
     }
     
+    /**
+     * Two paths locate the same file when the delegate files are the same, which a
+     * lexical comparison misses (symbolic links, case-insensitive volumes...).
+     */
+    @Override
+    public boolean isSameFile(Path path, Path path2) throws IOException {
+        checkPath(path);
+        if (path.equals(path2)) {
+            return true;
+        }
+        if (!(path2 instanceof PathDelegatingPath) || path2.getFileSystem().provider() != this) {
+            return false;
+        }
+        PathDelegatingPath p1 = (PathDelegatingPath) toAbsolutePath(path);
+        PathDelegatingPath p2 = (PathDelegatingPath) toAbsolutePath(path2);
+        validatePath(p1);
+        validatePath(p2);
+        return Files.isSameFile(p1.toDelegatePath(), p2.toDelegatePath());
+    }
+
     @Override
     public FileStore getFileStore(Path path) throws IOException {
         checkPath(path);

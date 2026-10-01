@@ -62,9 +62,17 @@ public class PathPath extends AbstractPath {
     @Override
     public URI toUri() {
         PathFileSystem pfs = getFileSystem();
-        // Convert virtual path to OS path, then to URI
-        java.nio.file.Path osPath = pfs.toOSPath(toString());
-        return osPath.toUri();
+        if (pfs.getRootPath() != null) {
+            // Sandboxed: a URI of the virtual path, which never discloses where the root
+            // lives on the host (normalized, so it never shows a ".." above the root)
+            try {
+                return new URI(pfs.provider().getScheme(), "", toUriPath(toAbsolutePath().normalize()), null, null);
+            } catch (java.net.URISyntaxException e) {
+                throw new IllegalArgumentException(e);
+            }
+        }
+        // Unsandboxed: the virtual path is the host path, so the URI of the real file
+        return pfs.toOSPath(toString()).toUri();
     }
     
     @Override

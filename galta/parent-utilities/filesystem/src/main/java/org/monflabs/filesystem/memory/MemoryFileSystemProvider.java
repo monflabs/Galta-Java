@@ -41,7 +41,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,6 +48,7 @@ import java.util.Set;
 import org.monflabs.filesystem.AbstractFileSystem;
 import org.monflabs.filesystem.AbstractFileSystemProvider;
 import org.monflabs.filesystem.AbstractPath;
+import org.monflabs.filesystem.ListDirectoryStream;
 
 /**
  * FileSystemProvider for in-memory filesystem.
@@ -94,32 +94,38 @@ public class MemoryFileSystemProvider extends AbstractFileSystemProvider {
         boolean create = options.contains(StandardOpenOption.CREATE);
         boolean createNew = options.contains(StandardOpenOption.CREATE_NEW);
         
-        MemoryFileNode node = fs.getNode(memPath);
+        MemoryFileNode node;
+        // Check-then-create under the structure lock: two concurrent CREATE_NEW opens
+        // must not both succeed, nor two CREATE opens get different nodes
+        synchronized (fs.structureLock) {
+            node = fs.getNode(memPath);
         
-        if (node == null) {
-            if (!create && !createNew) {
-                throw new NoSuchFileException(path.toString());
-            }
-            // Create new file
-            MemoryPath parent = (MemoryPath) memPath.getParent();
-            if (parent != null) {
-                MemoryFileNode parentNode = fs.getNode(parent);
-                if (parentNode == null) {
-                    throw new NoSuchFileException(parent.toString());
+            if (node == null) {
+                if (!create && !createNew) {
+                    throw new NoSuchFileException(path.toString());
                 }
-                if (!parentNode.isDirectory()) {
-                    throw new NotDirectoryException(parent.toString());
+                // Create new file
+                MemoryPath parent = (MemoryPath) memPath.getParent();
+                if (parent != null) {
+                    MemoryFileNode parentNode = fs.getNode(parent);
+                    if (parentNode == null) {
+                        throw new NoSuchFileException(parent.toString());
+                    }
+                    if (!parentNode.isDirectory()) {
+                        throw new NotDirectoryException(parent.toString());
+                    }
+                }
+                node = new MemoryFileNode(memPath.getFileName().toString(), false);
+                fs.createNode(memPath, node);
+            } else {
+                if (createNew) {
+                    throw new FileAlreadyExistsException(path.toString());
+                }
+                if (node.isDirectory()) {
+                    throw new FileSystemException(path.toString(), null, "Is a directory");
                 }
             }
-            node = new MemoryFileNode(memPath.getFileName().toString(), false);
-            fs.createNode(memPath, node);
-        } else {
-            if (createNew) {
-                throw new FileAlreadyExistsException(path.toString());
-            }
-            if (node.isDirectory()) {
-                throw new FileSystemException(path.toString(), null, "Is a directory");
-            }
+        
         }
         
         // The node's permissions apply to channels too, not only to checkAccess()
@@ -161,22 +167,7 @@ public class MemoryFileSystemProvider extends AbstractFileSystemProvider {
             }
         }
         
-        return new DirectoryStream<Path>() {
-            private boolean closed = false;
-            
-            @Override
-            public Iterator<Path> iterator() {
-                if (closed) {
-                    throw new IllegalStateException("DirectoryStream is closed");
-                }
-                return paths.iterator();
-            }
-            
-            @Override
-            public void close() {
-                closed = true;
-            }
-        };
+        return new ListDirectoryStream(paths);
     }
     
     @Override
@@ -186,23 +177,25 @@ public class MemoryFileSystemProvider extends AbstractFileSystemProvider {
         MemoryFileSystem fs = (MemoryFileSystem) dir.getFileSystem();
         MemoryPath memPath = (MemoryPath) dir.normalize();
         
-        if (fs.getNode(memPath) != null) {
-            throw new FileAlreadyExistsException(dir.toString());
-        }
-        
-        MemoryPath parent = (MemoryPath) memPath.getParent();
-        if (parent != null) {
-            MemoryFileNode parentNode = fs.getNode(parent);
-            if (parentNode == null) {
-                throw new NoSuchFileException(parent.toString());
+        synchronized (fs.structureLock) {
+            if (fs.getNode(memPath) != null) {
+                throw new FileAlreadyExistsException(dir.toString());
             }
-            if (!parentNode.isDirectory()) {
-                throw new NotDirectoryException(parent.toString());
-            }
-        }
         
-        MemoryFileNode node = new MemoryFileNode(memPath.getFileName().toString(), true);
-        fs.createNode(memPath, node);
+            MemoryPath parent = (MemoryPath) memPath.getParent();
+            if (parent != null) {
+                MemoryFileNode parentNode = fs.getNode(parent);
+                if (parentNode == null) {
+                    throw new NoSuchFileException(parent.toString());
+                }
+                if (!parentNode.isDirectory()) {
+                    throw new NotDirectoryException(parent.toString());
+                }
+            }
+        
+            MemoryFileNode node = new MemoryFileNode(memPath.getFileName().toString(), true);
+            fs.createNode(memPath, node);
+        }
     }
     
     @Override
@@ -212,20 +205,22 @@ public class MemoryFileSystemProvider extends AbstractFileSystemProvider {
         MemoryFileSystem fs = (MemoryFileSystem) path.getFileSystem();
         MemoryPath memPath = (MemoryPath) path.normalize();
         
-        MemoryFileNode node = fs.getNode(memPath);
-        if (node == null) {
-            throw new NoSuchFileException(path.toString());
-        }
+        synchronized (fs.structureLock) {
+            MemoryFileNode node = fs.getNode(memPath);
+            if (node == null) {
+                throw new NoSuchFileException(path.toString());
+            }
         
-        if (node.isDirectory() && !node.getChildren().isEmpty()) {
-            throw new DirectoryNotEmptyException(path.toString());
-        }
-        if (memPath.getParent() == null) {
-            // Deleting "/" dropped the root from the index and left the filesystem unusable
-            throw new FileSystemException(path.toString(), null, "Cannot delete the root directory");
-        }
+            if (node.isDirectory() && !node.getChildren().isEmpty()) {
+                throw new DirectoryNotEmptyException(path.toString());
+            }
+            if (memPath.getParent() == null) {
+                // Deleting "/" dropped the root from the index and left the filesystem unusable
+                throw new FileSystemException(path.toString(), null, "Cannot delete the root directory");
+            }
         
-        fs.deleteNode(memPath);
+            fs.deleteNode(memPath);
+        }
     }
     
     @Override
@@ -253,6 +248,28 @@ public class MemoryFileSystemProvider extends AbstractFileSystemProvider {
         // The target may live in another memory filesystem
         MemoryFileSystem tgtFs = (MemoryFileSystem) tgtPath.getFileSystem();
         
+        // Both trees are locked (in a fixed order, so two opposite transfers can't deadlock)
+        MemoryFileSystem first = fs;
+        MemoryFileSystem second = tgtFs;
+        if (System.identityHashCode(first) > System.identityHashCode(second)) {
+            first = tgtFs;
+            second = fs;
+        }
+        // An identity hash tie between two filesystems falls back to a global lock
+        Object tie = (first != second && System.identityHashCode(first) == System.identityHashCode(second)) ? TIE_LOCK : new Object();
+        synchronized (tie) {
+            synchronized (first.structureLock) {
+                synchronized (second.structureLock) {
+                    transferLocked(source, target, srcPath, tgtPath, fs, tgtFs, move, options);
+                }
+            }
+        }
+    }
+    
+    private static final Object TIE_LOCK = new Object();
+    
+    private void transferLocked(Path source, Path target, MemoryPath srcPath, MemoryPath tgtPath,
+            MemoryFileSystem fs, MemoryFileSystem tgtFs, boolean move, CopyOption... options) throws IOException {
         MemoryFileNode srcNode = fs.getNode(srcPath);
         if (srcNode == null) {
             throw new NoSuchFileException(source.toString());

@@ -35,7 +35,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +42,7 @@ import java.util.Set;
 import org.monflabs.filesystem.AbstractFileSystem;
 import org.monflabs.filesystem.AbstractFileSystemProvider;
 import org.monflabs.filesystem.AbstractPath;
+import org.monflabs.filesystem.ListDirectoryStream;
 
 /**
  * FileSystemProvider for PathFileSystem.
@@ -142,22 +142,7 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
             }
         }
         
-        return new DirectoryStream<Path>() {
-            private boolean closed = false;
-            
-            @Override
-            public Iterator<Path> iterator() {
-                if (closed) {
-                    throw new IllegalStateException("DirectoryStream is closed");
-                }
-                return virtualPaths.iterator();
-            }
-            
-            @Override
-            public void close() {
-                closed = true;
-            }
-        };
+        return new ListDirectoryStream(virtualPaths);
     }
     
     @Override

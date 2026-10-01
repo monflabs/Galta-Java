@@ -36,8 +36,9 @@ import java.util.Map;
 public abstract class AbstractFileSystemProvider extends FileSystemProvider {
     
 	protected boolean registered;
-    // Every access goes through synchronized(fileSystems), including removeFileSystem()
-    protected final Map<URI, AbstractFileSystem> fileSystems = new HashMap<>();
+    // Keyed by fileSystemKey(uri). Every access goes through synchronized(fileSystems),
+    // including removeFileSystem()
+    protected final Map<String, AbstractFileSystem> fileSystems = new HashMap<>();
     
     protected AbstractFileSystemProvider(boolean registered) {
     	this.registered = registered;
@@ -48,11 +49,12 @@ public abstract class AbstractFileSystemProvider extends FileSystemProvider {
 		checkUri(uri);
 		if(registered) {
 			synchronized (fileSystems) {
-		        if (fileSystems.containsKey(uri)) {
+		        String key = fileSystemKey(uri);
+		        if (fileSystems.containsKey(key)) {
 		            throw new FileSystemAlreadyExistsException();
 		        }
 		        AbstractFileSystem fs = createFileSystem(uri, env);
-		        fileSystems.put(uri, fs);
+		        fileSystems.put(key, fs);
 		        return fs;
 			}
 		} else {
@@ -73,18 +75,54 @@ public abstract class AbstractFileSystemProvider extends FileSystemProvider {
         return path.toAbsolutePath();
     }
     
+    /**
+     * The part of a URI that identifies a filesystem: the scheme and the authority. The
+     * path of a URI names a file inside the filesystem, so "memory:///a.txt" and
+     * "memory:///b.txt" belong to the same filesystem. A provider whose URIs carry the
+     * filesystem identity in the path, before a "!" ("zip:///archive.zip!/entry"),
+     * returns true from {@link #isIdentityInPath()}.
+     */
+    protected String fileSystemKey(URI uri) {
+        StringBuilder b = new StringBuilder(uri.getScheme().toLowerCase(java.util.Locale.ROOT)).append("://");
+        String authority = uri.getRawAuthority();
+        if (authority != null) {
+            b.append(authority);
+        }
+        if (isIdentityInPath()) {
+            String path = uri.getPath();
+            if (path != null) {
+                int bang = path.indexOf('!');
+                String id = bang >= 0 ? path.substring(0, bang) : path;
+                // "zip:///a.zip" and "zip:///a.zip/" are the same archive
+                while (id.length() > 1 && id.endsWith("/")) {
+                    id = id.substring(0, id.length() - 1);
+                }
+                b.append(id);
+            }
+        }
+        return b.toString();
+    }
+
+    /**
+     * Whether this provider's URIs carry the filesystem identity in their path, up to a
+     * "!" separating it from the path of the file inside the filesystem.
+     */
+    protected boolean isIdentityInPath() {
+        return false;
+    }
+
     @Override
     public FileSystem getFileSystem(URI uri) {
         checkUri(uri);
         synchronized (fileSystems) {
-            AbstractFileSystem fs = fileSystems.get(uri);
+            AbstractFileSystem fs = fileSystems.get(fileSystemKey(uri));
             if (fs != null) {
             	return fs;
             }
         }
         throw new FileSystemNotFoundException();
     }
-    
+
     @Override
     public Path getPath(URI uri) {
         checkUri(uri);
@@ -92,11 +130,27 @@ public abstract class AbstractFileSystemProvider extends FileSystemProvider {
         if (path == null) {
             throw new IllegalArgumentException("URI path is null");
         }
+        if (isIdentityInPath()) {
+            // The file is what follows the "!"; a URI without one names the root
+            int bang = path.indexOf('!');
+            path = bang >= 0 ? path.substring(bang + 1) : "/";
+            if (path.isEmpty()) {
+                path = "/";
+            }
+        }
         return createPath(getFileSystem(uri), path);
     }
-    
+
     @Override
     public boolean isSameFile(Path path, Path path2) throws IOException {
+        // A lexical comparison: right for the filesystems without links (memory, zip,
+        // resources); the ones over real files override it
+        if (path.equals(path2)) {
+            return true;
+        }
+        if (path2 == null || path.getFileSystem().provider() != path2.getFileSystem().provider()) {
+            return false;
+        }
         Path normalized1 = path.toAbsolutePath().normalize();
         Path normalized2 = path2.toAbsolutePath().normalize();
         return normalized1.equals(normalized2);

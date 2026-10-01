@@ -61,4 +61,28 @@ public class FileFileSystemTest extends AbstractFileSystemTest {
     	return "FileFileSystem (sandboxed)";
     }
 
+
+    public void testIsSameFileFollowsLinks() throws IOException {
+        java.nio.file.Path target = tempFileFolder.toPath().resolve("target.txt");
+        java.nio.file.Files.writeString(target, "x");
+        try {
+            java.nio.file.Files.createSymbolicLink(tempFileFolder.toPath().resolve("link.txt"), target);
+        } catch (UnsupportedOperationException | IOException e) {
+            return; // No symbolic links on this platform
+        }
+        // A lexical comparison said false
+        assertTrue(java.nio.file.Files.isSameFile(fs.getPath("/link.txt"), fs.getPath("/target.txt")));
+        assertFalse(java.nio.file.Files.isSameFile(fs.getPath("/link.txt"), fs.getPath("/")));
+    }
+
+    public void testFileStoreIsTheStoreOfTheFile() throws IOException {
+        java.nio.file.Files.writeString(fs.getPath("/store.txt"), "x");
+        java.nio.file.FileStore store = java.nio.file.Files.getFileStore(fs.getPath("/store.txt"));
+        java.nio.file.FileStore expected = java.nio.file.Files.getFileStore(tempFileFolder.toPath());
+        // It used to be the store of "/" (read-only and with the wrong sizes on another volume)
+        assertEquals(expected.name(), store.name());
+        assertEquals(expected.isReadOnly(), store.isReadOnly());
+        assertEquals(expected.getTotalSpace(), store.getTotalSpace());
+        org.junit.Assert.assertThrows(java.nio.file.NoSuchFileException.class, () -> java.nio.file.Files.getFileStore(fs.getPath("/missing.txt")));
+    }
 }
