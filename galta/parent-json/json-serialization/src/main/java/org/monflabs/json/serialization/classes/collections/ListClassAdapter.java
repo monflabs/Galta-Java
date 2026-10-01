@@ -54,10 +54,11 @@ public class ListClassAdapter extends BaseClassAdapter {
 	public Object serialize(Object value, ClassAdapter[] genericParams) {
 		if(value!=null) {
 			ClassAdapter item = CollectionUtil.params(genericParams, 1, objectAdapter)[0];
-			List<?> l = (List<?>)value;
+			// Any Iterable (a Collection or Iterable field uses this adapter)
+			Iterable<?> l = (Iterable<?>)value;
 			CycleGuard.enter(value);
 			try {
-				JsonArray a = JsonArray.create(l.size());
+				JsonArray a = l instanceof java.util.Collection<?> c ? JsonArray.create(c.size()) : JsonArray.create();
 				for(Object v: l) {
 					a.add(item.serialize(v));
 				}

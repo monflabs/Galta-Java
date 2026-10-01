@@ -15,35 +15,49 @@
  */
 package org.monflabs.json.serialization.fields.primitives;
 
-import org.monflabs.json.serialization.NumberConverter;
 import java.lang.reflect.Field;
+import java.util.function.Function;
 
 import org.monflabs.json.JsonException;
 import org.monflabs.json.serialization.ClassAdapter;
+import org.monflabs.json.serialization.classes.primitives.ScalarClassAdapter;
 import org.monflabs.json.serialization.fields.ReflectionFieldAdapter;
 
-public class BigDecimalFieldAdapter extends ReflectionFieldAdapter {
-	
-	public BigDecimalFieldAdapter(Field field) {
+/**
+ * Adapter of a field holding a scalar: a primitive, <code>String</code>,
+ * <code>BigInteger</code> or <code>BigDecimal</code>, see {@link ScalarClassAdapter}.
+ */
+public class ScalarFieldAdapter extends ReflectionFieldAdapter {
+
+	private final Function<Object,Object> converter;
+
+	public ScalarFieldAdapter(Field field) {
 		super(field);
+		this.converter = ScalarClassAdapter.converter(field.getType());
+		if(converter==null) {
+			throw new IllegalArgumentException("Not a scalar field: "+field);
+		}
 	}
-	
+
 	@Override
 	public Object readProperty(Object _this, ClassAdapter[] genericParams) {
 		try {
-			return field.get(_this);
+			return ScalarClassAdapter.toJson(field.get(_this));
 		} catch(IllegalAccessException ex) {
 			throw new JsonException(ex);
 		}
 	}
-	
+
 	@Override
 	public void writeProperty(Object _this, Object jsonValue, ClassAdapter[] genericParams) {
 		try {
-			if(jsonValue instanceof Number n) {
-				field.set(_this, NumberConverter.toBigDecimal(n) );
+			if(jsonValue==null) {
+				if(field.getType().isPrimitive()) {
+					throw new JsonException(null, "A null JSON value cannot be assigned to the {0} field {1}", field.getType().getName(), field.getName());
+				}
+				field.set(_this, null);
 			} else {
-				throw new JsonException(null, "JSON Value is not a number");
+				field.set(_this, converter.apply(jsonValue));
 			}
 		} catch(IllegalAccessException ex) {
 			throw new JsonException(ex);

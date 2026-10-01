@@ -22,6 +22,7 @@ import org.monflabs.json.serialization.ClassAdapter;
 import org.monflabs.json.serialization.JsonRegistry;
 import org.monflabs.json.serialization.fields.GenericTypeResolver;
 import org.monflabs.json.serialization.fields.ReflectionFieldAdapter;
+import org.monflabs.json.serialization.fields.RuntimeAdapters;
 
 /**
  * Typed field.
@@ -45,6 +46,7 @@ public class TypedFieldAdapter extends ReflectionFieldAdapter {
 	
 	private String typeName;
 	private GenericTypeResolver.ResolvedType resolvedType;
+	private JsonRegistry registry;
 	
 	public TypedFieldAdapter(Field field, String typeName) {
 		super(field);
@@ -57,6 +59,7 @@ public class TypedFieldAdapter extends ReflectionFieldAdapter {
 	
 	@Override
 	protected void _init(JsonRegistry registry, ClassAdapter parent) {
+		this.registry = registry;
 		Class<?> context = parent!=null ? parent.getAdaptedClazz() : null;
 		resolvedType = GenericTypeResolver.resolve(field.getGenericType(), context, registry);
 	}
@@ -66,7 +69,7 @@ public class TypedFieldAdapter extends ReflectionFieldAdapter {
 		try {
 			Object value = field.get(_this);
 			if(value!=null) {
-				Object v = resolvedType.resolve(genericParams).serialize(value);
+				Object v = RuntimeAdapters.forValue(registry, resolvedType.resolve(genericParams), value).serialize(value);
 				return v;
 			}
 			return null;

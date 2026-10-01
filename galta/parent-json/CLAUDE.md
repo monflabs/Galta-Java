@@ -42,7 +42,7 @@ Package root: `org.monflabs.json`
 
 ## `json-serialization`
 
-Serializes plain Java objects to/from `JsonObject`. Constraints: classes need a no-arg constructor; circular references are not supported. Uses reflection; field names map directly to JSON keys.
+Serializes plain Java objects and records to/from `JsonObject`. Constraints: classes need a no-arg constructor (records use their canonical constructor); circular references are not supported. Uses reflection; field (or record component) names map directly to JSON keys. The scalar types share `ScalarClassAdapter`/`ScalarFieldAdapter` and the primitive arrays `PrimitiveArrayClassAdapter`.
 
 ## `json-config`
 

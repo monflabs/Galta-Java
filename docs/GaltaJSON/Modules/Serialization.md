@@ -128,14 +128,18 @@ A new registry already contains adapters for:
 |---|---|
 | `boolean`, `byte`, `short`, `int`, `long`, `float`, `double` and their boxed types | boolean / number; reading a number into an integral type is exact: `1.5` or a value out of range throws a `JsonException` instead of being truncated |
 | `String` | string |
+| `char`, `Character` | one character string |
 | `BigInteger`, `BigDecimal` | number (the instance is kept as is) |
 | `boolean[]`, `byte[]`, `short[]`, `int[]`, `long[]`, `float[]`, `double[]` | array of numbers / booleans |
+| `char[]` | string (also read from an array of one character strings) |
 | Any other array, multi-dimensional included (`String[][]`, `Item[]`) | array; the component type is preserved when reading back |
 | Enums | string: the constant name |
 | `List<T>`, `Set<T>`, and their implementations (`ArrayList<T>`...) | array (read back as `ArrayList` / `LinkedHashSet`, or as the declared class when it has a public no-arg constructor) |
+| `Collection<T>`, `Iterable<T>` | array (read back as an `ArrayList`) |
 | `Map<K,V>`, and its implementations | object (read back as `LinkedHashMap`, or as the declared class). String keys are kept; number, boolean, character and enum keys use their string form and are parsed back to the key type; other keys must serialize to strings |
-| `JsonObject`, `JsonArray`, `Object` | passed through unchanged |
+| `JsonObject`, `JsonArray`, `Object` | passed through unchanged; a value declared as `Object` (in a raw `List`, a `Map<String,Object>`...) that is not a JSON value is serialized with the adapter of its class when the registry has one |
 | Registered classes | object |
+| Registered records | object, through the accessors; read back with the canonical constructor (a missing component is `null`, or `0`/`false` for a primitive) |
 
 Type arguments are followed at any depth, so `Map<String, List<Item>>` or `List<Map<String,Foo>>` work. A raw `List` or a wildcard `List<?>` behaves like `List<Object>`: the values are kept as they are, and `List<? extends Foo>` uses the `Foo` adapter.
 
@@ -283,11 +287,11 @@ Restricting the factory to your own packages keeps the registry from reflecting 
 
 | Limitation | Details |
 |---|---|
-| No-arg constructor | Reading needs a no-arg constructor or a `factory`; otherwise a `JsonException` wraps the `NoSuchMethodException`. Serializing does not need one. |
+| No-arg constructor | Reading needs a no-arg constructor or a `factory` (a record uses its canonical constructor); otherwise a `JsonException` wraps the `NoSuchMethodException`. Serializing does not need one. |
 | No cycles | An object graph with a cycle cannot be serialized: it throws a `JsonException`. Shared references, without a cycle, are serialized once per occurrence and read back as distinct objects. |
 | Exact class lookup | Registered adapters are looked up by the exact class: an instance of an unregistered subclass is not found under its parent, register it. Collections, maps and enums are found under their interface; at the top level, pass the adapters of the type arguments to get typed elements, e.g. `registry.findAdapter(List.class).serialize(list, params)`. |
-| Declared types | A field is serialized with the adapter of its *declared* type: a subclass instance stored in a field typed with its parent loses its extra fields. |
-| No `char`, dates | No built-in adapter for `char`/`Character` or `java.time` types: provide a class adapter, or exclude the field. |
+| Declared types | A subclass instance stored in a field typed with its parent is serialized with the adapter of its own class when the registry has one (registered, or created by the class factory); otherwise with the adapter of the declared type, and its extra fields are lost. The JSON carries no type: it is always read back as the declared type. |
+| No dates | No built-in adapter for the `java.time` types: provide a class adapter, or exclude the field. |
 | Default registry | `defaultRegistry(true)` publishes the registry as `SimpleRegistry.get()`; only one such registry may be defined at a time, `SimpleRegistry.clearDefault()` forgets it. |
 | One registry per adapter | A class adapter is bound to the first registry that uses it; adding the same adapter instance to another registry throws a `JsonException`. Build one adapter per registry. |
 

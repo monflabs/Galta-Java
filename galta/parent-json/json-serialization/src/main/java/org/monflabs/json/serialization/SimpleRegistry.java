@@ -16,6 +16,7 @@
 package org.monflabs.json.serialization;
 
 import java.lang.reflect.Modifier;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -30,31 +31,16 @@ import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.serialization.classes.BaseClassAdapter;
 import org.monflabs.json.serialization.classes.SimpleClassAdapter;
-import org.monflabs.json.serialization.classes.arrays.BooleanArrayClassAdapter;
-import org.monflabs.json.serialization.classes.arrays.ByteArrayClassAdapter;
-import org.monflabs.json.serialization.classes.arrays.DoubleArrayClassAdapter;
-import org.monflabs.json.serialization.classes.arrays.FloatArrayClassAdapter;
-import org.monflabs.json.serialization.classes.arrays.IntegerClassAdapter;
-import org.monflabs.json.serialization.classes.arrays.LongArrayClassAdapter;
 import org.monflabs.json.serialization.classes.arrays.ObjectArrayClassAdapter;
-import org.monflabs.json.serialization.classes.arrays.ShortArrayClassAdapter;
+import org.monflabs.json.serialization.classes.arrays.PrimitiveArrayClassAdapter;
 import org.monflabs.json.serialization.classes.collections.ListClassAdapter;
 import org.monflabs.json.serialization.classes.collections.MapClassAdapter;
 import org.monflabs.json.serialization.classes.collections.SetClassAdapter;
 import org.monflabs.json.serialization.classes.json.JsonArrayClassAdapter;
 import org.monflabs.json.serialization.classes.json.JsonObjectClassAdapter;
 import org.monflabs.json.serialization.classes.json.ObjectClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.BigDecimalClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.BigIntegerClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.BooleanClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.ByteClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.DoubleClassAdapter;
 import org.monflabs.json.serialization.classes.primitives.EnumClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.FloatClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.IntArrayClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.LongClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.ShortClassAdapter;
-import org.monflabs.json.serialization.classes.primitives.StringClassAdapter;
+import org.monflabs.json.serialization.classes.primitives.ScalarClassAdapter;
 import org.monflabs.util.ObjectBuilder;
 
 /**
@@ -89,24 +75,10 @@ public class SimpleRegistry implements JsonRegistry {
 			add(new JsonObjectClassAdapter());
 			add(new JsonArrayClassAdapter());
 
-			add(new BooleanClassAdapter());
-			add(new ByteClassAdapter());
-			add(new ShortClassAdapter());
-			add(new IntegerClassAdapter());
-			add(new LongClassAdapter());
-			add(new FloatClassAdapter());
-			add(new DoubleClassAdapter());
-			add(new BigIntegerClassAdapter());
-			add(new BigDecimalClassAdapter());
-			add(new StringClassAdapter());
-			
-			add(new BooleanArrayClassAdapter());
-			add(new ByteArrayClassAdapter());
-			add(new ShortArrayClassAdapter());
-			add(new IntArrayClassAdapter());
-			add(new LongArrayClassAdapter());
-			add(new FloatArrayClassAdapter());
-			add(new DoubleArrayClassAdapter());
+			// Boxed primitives, Character, BigInteger, BigDecimal, String
+			ScalarClassAdapter.standardAdapters().forEach(this::add);
+			// Arrays of primitives (int[]...), char[] being a string
+			PrimitiveArrayClassAdapter.standardAdapters().forEach(this::add);
 			
 			add(new ListClassAdapter());
 			add(new MapClassAdapter());
@@ -191,6 +163,7 @@ public class SimpleRegistry implements JsonRegistry {
 	 *   <li>an enum is serialized as the name of the constant</li>
 	 *   <li>a <code>List</code>, <code>Set</code> or <code>Map</code> implementation uses the
 	 *       adapter of the interface (read back as the class itself when it can be instantiated)</li>
+	 *   <li>a <code>Collection</code> or an <code>Iterable</code> uses the <code>List</code> adapter</li>
 	 *   <li>otherwise, the class factory, if any, is asked for an adapter</li>
 	 * </ul>
 	 * An adapter is initialized once for this registry, the first time it is found.
@@ -260,6 +233,10 @@ public class SimpleRegistry implements JsonRegistry {
 		}
 		if(List.class.isAssignableFrom(clazz)) {
 			return new ListClassAdapter(isInstantiable(clazz) ? (Class)clazz : null);
+		}
+		if(clazz==Collection.class || clazz==Iterable.class) {
+			// Read back as a List
+			return new ListClassAdapter();
 		}
 		if(Set.class.isAssignableFrom(clazz)) {
 			return new SetClassAdapter(isInstantiable(clazz) ? (Class)clazz : null);

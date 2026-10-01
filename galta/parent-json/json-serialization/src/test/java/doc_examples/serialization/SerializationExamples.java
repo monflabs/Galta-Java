@@ -458,7 +458,7 @@ public class SerializationExamples extends ProjectTestCase {
 		h.a = h.b = new Item("shared");
 
 		JsonObject json = registry.serialize(h);
-		assertEquals(JsonObject.of("id", "A"), json.getObject("ref"));   // 'balance' is lost
+		assertEquals(JsonObject.of("id", "A"), json.getObject("ref"));   // 'balance' is lost: Account has no adapter
 		Holder back = registry.deserialize(Holder.class, json);
 		assertEquals(Base.class, back.ref.getClass());
 		assertNotSame(back.a, back.b);                    // shared reference read back twice

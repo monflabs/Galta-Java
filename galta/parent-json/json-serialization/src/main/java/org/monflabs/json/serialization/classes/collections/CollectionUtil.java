@@ -41,9 +41,24 @@ final class CollectionUtil {
 		return p;
 	}
 	
+	// The no-arg constructors, looked up once per class (null if there is none)
+	private static final ClassValue<Constructor<?>> CONSTRUCTORS = new ClassValue<>() {
+		@Override
+		protected Constructor<?> computeValue(Class<?> type) {
+			try {
+				return type.getDeclaredConstructor();
+			} catch(NoSuchMethodException ex) {
+				return null;
+			}
+		}
+	};
+
 	static <T> T newInstance(Class<?> clazz) throws InstantiationException, IllegalAccessException {
 		try {
-			Constructor<?> c = clazz.getDeclaredConstructor();
+			Constructor<?> c = CONSTRUCTORS.get(clazz);
+			if(c==null) {
+				throw new NoSuchMethodException(clazz.getName()+".<init>()");
+			}
 			@SuppressWarnings("unchecked")
 			T t = (T)c.newInstance();
 			return t;

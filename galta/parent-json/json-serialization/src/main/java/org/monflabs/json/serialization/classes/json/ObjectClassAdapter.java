@@ -15,19 +15,54 @@
  */
 package org.monflabs.json.serialization.classes.json;
 
+import org.monflabs.json.JsonArray;
+import org.monflabs.json.JsonException;
+import org.monflabs.json.JsonObject;
 import org.monflabs.json.serialization.ClassAdapter;
+import org.monflabs.json.serialization.JsonRegistry;
 import org.monflabs.json.serialization.classes.BaseClassAdapter;
 
+/**
+ * Adapter of the values declared as <code>Object</code> (a raw <code>List</code>, a
+ * <code>Map&lt;String,Object&gt;</code>...).
+ * <p>
+ * A JSON value (null, string, boolean, number, JSON object or array) is kept as is. Another
+ * value (a POJO, a Java collection...) is serialized with the adapter of its class, when the
+ * registry has one, rather than being passed as is (and later written with its
+ * <code>toString()</code>). A JSON value is read back as is.
+ */
 public class ObjectClassAdapter extends BaseClassAdapter {
-	
+
+	private JsonRegistry registry;
+
 	public ObjectClassAdapter() {
 		super(Object.class);
 	}
-	
+
+	@Override
+	public void init(JsonRegistry registry) {
+		super.init(registry);
+		this.registry = registry;
+	}
+
 	@Override
 	public Object serialize(Object value, ClassAdapter[] genericParams) {
-		// No conversion to JSON is necessary here.
-		return value;
+		if(value==null || registry==null || isJsonValue(value)) {
+			return value;
+		}
+		ClassAdapter a;
+		try {
+			a = registry.findAdapter(value.getClass());
+		} catch(JsonException ex) {
+			// No adapter for this class: kept as is
+			return value;
+		}
+		return a==this ? value : a.serialize(value);
+	}
+
+	private static boolean isJsonValue(Object value) {
+		return value instanceof String || value instanceof Number || value instanceof Boolean
+			|| value instanceof JsonObject || value instanceof JsonArray;
 	}
 
 	@Override

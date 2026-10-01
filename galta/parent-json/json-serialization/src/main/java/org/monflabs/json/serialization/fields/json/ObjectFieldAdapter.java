@@ -23,10 +23,12 @@ import org.monflabs.json.JsonException;
 import org.monflabs.json.serialization.ClassAdapter;
 import org.monflabs.json.serialization.JsonRegistry;
 import org.monflabs.json.serialization.fields.ReflectionFieldAdapter;
+import org.monflabs.json.serialization.fields.RuntimeAdapters;
 
 public class ObjectFieldAdapter extends ReflectionFieldAdapter {
 	
 	private ClassAdapter adapter;
+	private JsonRegistry registry;
 	
 	public ObjectFieldAdapter(Field field) {
 		super(field);
@@ -34,6 +36,7 @@ public class ObjectFieldAdapter extends ReflectionFieldAdapter {
 	
 	@Override
 	protected void _init(JsonRegistry registry, ClassAdapter parent) {
+		this.registry = registry;
 		this.adapter = registry.findAdapter(field.getType());
 	}
 	
@@ -58,7 +61,8 @@ public class ObjectFieldAdapter extends ReflectionFieldAdapter {
 		try {
 			Object value = field.get(_this);
 			if(value!=null) {
-				Object v = adapter.serialize(value, genericParams);
+				// A subclass of the declared type is serialized with its own adapter
+				Object v = RuntimeAdapters.forValue(registry, adapter, value).serialize(value, genericParams);
 				return v;
 			}
 			return null;

@@ -472,4 +472,161 @@ public class SerializationRegressionTest extends ProjectTestCase {
 		assertThrows(JsonException.class, () -> reg.deserialize(Map.class, JsonArray.of(1)));
 		assertThrows(JsonException.class, () -> reg.deserialize(List.class, JsonObject.of("a", 1)));
 	}
+
+	// ------------------------------------------------------------------
+	// Second review
+	// ------------------------------------------------------------------
+
+	public record Address(String city, int zip) {}
+	public record Person(String name, int age, boolean active, Address address, List<Address> previous, Map<String,Integer> scores, char initial) {}
+	public record Box<T>(T value, List<T> values) {}
+	public static class BoxHolder {
+		Box<Address> box;
+		public BoxHolder() {
+		}
+	}
+
+	public void testRecords() throws Exception {
+		SimpleRegistry reg = registry(Address.class, Person.class);
+		Person p = new Person("Ada", 36, true, new Address("London", 1), List.of(new Address("Paris", 2)), Map.of("x", 3), 'A');
+		JsonObject json = reg.serialize(p);
+		assertEquals(List.of("name","age","active","address","previous","scores","initial"), new ArrayList<>(json.keySet()));
+		assertEquals("London", json.getObject("address").getString("city"));
+		assertEquals("A", json.get("initial"));
+		Person back = reg.deserialize(Person.class, json);
+		assertEquals(p, back);
+
+		// Missing components: null, or the primitive default
+		Person partial = reg.deserialize(Person.class, JsonObject.of("name", "Bob"));
+		assertEquals(new Person("Bob", 0, false, null, null, null, '\0'), partial);
+
+		// Generic record, bound through the field type
+		SimpleRegistry reg2 = registry(Address.class, Box.class, BoxHolder.class);
+		BoxHolder h = new BoxHolder();
+		h.box = new Box<>(new Address("Rome", 3), List.of(new Address("Oslo", 4)));
+		JsonObject hj = reg2.serialize(h);
+		BoxHolder hb = reg2.deserialize(BoxHolder.class, hj);
+		assertEquals(h.box, hb.box);
+		assertEquals("Oslo", hb.box.values().get(0).city());
+	}
+
+	public static class Chars {
+		char c;
+		Character boxed;
+		char[] text;
+		Character[] boxes;
+		public Chars() {
+		}
+	}
+
+	public void testCharacters() throws Exception {
+		SimpleRegistry reg = registry(Chars.class);
+		Chars c = new Chars();
+		c.c = 'x';
+		c.boxed = 'y';
+		c.text = "hello".toCharArray();
+		c.boxes = new Character[] {'a','b'};
+		JsonObject json = reg.serialize(c);
+		assertEquals("{\"c\":\"x\",\"boxed\":\"y\",\"text\":\"hello\",\"boxes\":[\"a\",\"b\"]}", json.stringify());
+		Chars back = reg.deserialize(Chars.class, json);
+		assertEquals('x', back.c);
+		assertEquals(Character.valueOf('y'), back.boxed);
+		assertEquals("hello", new String(back.text));
+		assertEquals(List.of('a','b'), List.of(back.boxes));
+		assertThrows(JsonException.class, () -> reg.deserialize(Chars.class, JsonObject.of("c", "too long")));
+		// A char[] can also be read from an array of characters
+		assertEquals("ab", new String(reg.deserialize(char[].class, JsonArray.of("a","b"))));
+	}
+
+	public static class Collections2 {
+		java.util.Collection<String> col;
+		Iterable<Integer> it;
+		public Collections2() {
+		}
+	}
+
+	public void testCollectionAndIterableFields() throws Exception {
+		SimpleRegistry reg = registry(Collections2.class);
+		Collections2 c = new Collections2();
+		c.col = new LinkedHashSet<>(List.of("a","b"));
+		c.it = List.of(1,2);
+		JsonObject json = reg.serialize(c);
+		assertEquals("{\"col\":[\"a\",\"b\"],\"it\":[1,2]}", json.stringify());
+		Collections2 back = reg.deserialize(Collections2.class, json);
+		assertEquals(List.of("a","b"), new ArrayList<>(back.col));
+		assertEquals(List.of(1,2), back.it);
+	}
+
+	public static class Pojo {
+		String name;
+		public Pojo() {
+		}
+		Pojo(String name) {
+			this.name = name;
+		}
+		@Override
+		public String toString() {
+			return "POJO!";
+		}
+	}
+	public static class Loose {
+		Object any;
+		@SuppressWarnings("rawtypes")
+		List raw;
+		Map<String,Object> map;
+		public Loose() {
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	public void testPojoInsideObjectValues() throws Exception {
+		SimpleRegistry reg = registry(Pojo.class, Loose.class);
+		Loose l = new Loose();
+		l.any = new Pojo("a");
+		l.raw = new ArrayList<>(List.of(new Pojo("b"), 1));
+		l.map = new LinkedHashMap<>();
+		l.map.put("p", new Pojo("c"));
+		l.map.put("list", List.of(new Pojo("d")));
+		JsonObject json = reg.serialize(l);
+		assertEquals("{\"any\":{\"name\":\"a\"},\"raw\":[{\"name\":\"b\"},1],\"map\":{\"p\":{\"name\":\"c\"},\"list\":[{\"name\":\"d\"}]}}", json.stringify());
+		// A class without an adapter is still kept as is
+		assertEquals("x", ((JsonObject)reg.serialize(new LinkedHashMap<>(Map.of("k", new StringBuilder("x"))))).get("k").toString());
+	}
+
+	public static class Shape {
+		String kind = "shape";
+		public Shape() {
+		}
+	}
+	public static class Circle extends Shape {
+		double radius = 2;
+		public Circle() {
+		}
+	}
+	public static class Drawing {
+		Shape main;
+		List<Shape> shapes;
+		public Drawing() {
+		}
+	}
+
+	public void testPolymorphicFieldsKeepSubclassData() throws Exception {
+		SimpleRegistry reg = registry(Shape.class, Circle.class, Drawing.class);
+		Drawing d = new Drawing();
+		d.main = new Circle();
+		d.shapes = List.of(new Shape(), new Circle());
+		JsonObject json = reg.serialize(d);
+		assertEquals(2.0, json.getObject("main").getDouble("radius"));
+		// Read back as the declared type: the JSON is not typed
+		Drawing back = reg.deserialize(Drawing.class, JsonObject.of("main", JsonObject.of("kind", "k")));
+		assertEquals(Shape.class, back.main.getClass());
+	}
+
+	public void testBuilderFieldsAreCopied() throws Exception {
+		SimpleClassAdapter.Builder<Pojo> b = SimpleClassAdapter.newBuilder(Pojo.class).reflection();
+		SimpleClassAdapter<Pojo> a1 = b.build();
+		b.add("extra", (o) -> "x", null);
+		SimpleRegistry reg = SimpleRegistry.newBuilder().add(a1).build();
+		assertEquals("{\"name\":\"n\"}", ((JsonObject)reg.serialize(new Pojo("n"))).stringify());
+	}
 }
