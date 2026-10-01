@@ -21,6 +21,7 @@ import tests.db.JsonDBSourceTest;
 import tests.db.JsonDBTargetTest;
 import tests.db.MemoryDbConsistencyTest;
 import tests.db.MemoryDBTest;
+import tests.db.MemoryDbTransactionTest;
 import tests.replication.MemoryReplicationTableTest;
 import tests.replication.ReplicationTest;
 
@@ -33,6 +34,7 @@ public class AllJsonMemDbTests extends TestSuite {
 		suite.addTestSuite(JsonDBTargetTest.class);
 		suite.addTestSuite(MemoryDBTest.class);
 		suite.addTestSuite(MemoryDbConsistencyTest.class);
+		suite.addTestSuite(MemoryDbTransactionTest.class);
 
 		suite.addTestSuite(MemoryReplicationTableTest.class);
 		suite.addTestSuite(ReplicationTest.class);

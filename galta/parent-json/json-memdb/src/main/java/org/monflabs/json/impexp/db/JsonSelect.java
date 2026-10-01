@@ -59,7 +59,7 @@ public class JsonSelect {
 	 * while the DB is locked.
 	 */
 	public int count() {
-		return db.countRecords(predicate());
+		return db.countRecords(collection, filter);
 	}
 
 	/**
@@ -67,7 +67,7 @@ public class JsonSelect {
 	 * while the DB is locked.
 	 */
 	public JsonDbRecord first() {
-		return db.firstRecord(predicate());
+		return db.firstRecord(collection, filter);
 	}
 
 	public List<JsonDbRecord> collect() {
@@ -88,21 +88,11 @@ public class JsonSelect {
 	}
 
 	public Iterator<JsonDbRecord> records() {
-		// Iterate a snapshot taken under the DB lock, so the DB can be modified while iterating
-		Predicate<JsonDbRecord> p = predicate();
-		Iterator<JsonDbRecord> it = db.snapshotRecords().iterator();
-		return p!=null ? Iterators.filter(it, p) : it;
-	}
-
-	// The collection and filter conditions, null when there is none
-	private Predicate<JsonDbRecord> predicate() {
-		String col = collection;
+		// Iterate a snapshot taken under the DB lock, so the DB can be modified while iterating.
+		// Only the records of the selected collection are copied.
 		Predicate<JsonDbRecord> f = filter;
-		if(col==null) {
-			return f;
-		}
-		Predicate<JsonDbRecord> byCol = (r) -> col.equals(r.getKey().getCollection());
-		return f!=null ? byCol.and(f) : byCol;
+		Iterator<JsonDbRecord> it = db.snapshotRecords(collection).iterator();
+		return f!=null ? Iterators.filter(it, f) : it;
 	}
 
 	public List<JsonKey> keys() {

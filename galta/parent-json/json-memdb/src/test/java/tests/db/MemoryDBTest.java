@@ -145,7 +145,9 @@ public class MemoryDBTest extends ProjectTestCase {
 		assertTrue (db.isDeleted(JsonKey.of("c1","k3")));
 
 		// The transaction was opened before the deletion, it cannot resurrect the records
+		t.upsert(JsonKey.of("c1","k2"), JsonObject.of("v",21));
 		assertThrows(JsonException.class, () -> t.commit() );
+		t.rollback();
 		assertEquals(1, db.count());
 		assertFalse(db.exists(JsonKey.of("c1","k2")));
 
@@ -257,27 +259,47 @@ public class MemoryDBTest extends ProjectTestCase {
 			assertFalse (db.exists(JsonKey.of("c1","k2")));
 		}
 
-		{ // Check for a conflict between the DB and a transaction
+		{ // Check for a conflict between the DB and a transaction: same record
 			Transaction t = db.beginTransaction();
-			db.insert(JsonKey.of("c1","k5"), JsonObject.of("v",50));
+			t.upsert(JsonKey.of("c1","k5"), JsonObject.of("v",55));
 			t.insert(JsonKey.of("c1","k6"), JsonObject.of("v",60));
+			db.insert(JsonKey.of("c1","k5"), JsonObject.of("v",50));
 
 			assertThrows(JsonException.class, () -> t.commit() );
-			assertTrue  (db.exists(JsonKey.of("c1","k5")));
+			assertEquals(50, ((JsonObject)db.select(JsonKey.of("c1","k5")).getJson()).getInt("v"));
 			assertFalse (db.exists(JsonKey.of("c1","k6")));
 		}
 
-		{ // Check for a conflict between the DB 2 transactions
+		{ // A change to another record is not a conflict
+			Transaction t = db.beginTransaction();
+			t.insert(JsonKey.of("c1","k7"), JsonObject.of("v",70));
+			db.insert(JsonKey.of("c1","k8"), JsonObject.of("v",80));
+			t.commit();
+			assertTrue  (db.exists(JsonKey.of("c1","k7")));
+			assertTrue  (db.exists(JsonKey.of("c1","k8")));
+		}
+
+		{ // Check for a conflict between 2 transactions writing the same record
+			Transaction t1 = db.beginTransaction();
+			Transaction t2 = db.beginTransaction();
+			t1.upsert(JsonKey.of("c1","t"), JsonObject.of("v",11));
+			t2.upsert(JsonKey.of("c1","t"), JsonObject.of("v",22));
+
+			t1.commit();
+			assertThrows(JsonException.class, () -> t2.commit() );
+
+			assertEquals(11, ((JsonObject)db.select(JsonKey.of("c1","t")).getJson()).getInt("v"));
+		}
+
+		{ // 2 transactions writing different records both commit
 			Transaction t1 = db.beginTransaction();
 			Transaction t2 = db.beginTransaction();
 			t1.insert(JsonKey.of("c1","t1"), JsonObject.of("v",11));
 			t2.insert(JsonKey.of("c1","t2"), JsonObject.of("v",22));
-
 			t1.commit();
-			assertThrows(JsonException.class, () -> t2.commit() );
-			
+			t2.commit();
 			assertTrue  (db.exists(JsonKey.of("c1","t1")));
-			assertFalse (db.exists(JsonKey.of("c1","t2")));
+			assertTrue  (db.exists(JsonKey.of("c1","t2")));
 		}
 
 

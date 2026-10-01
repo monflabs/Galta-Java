@@ -149,13 +149,15 @@ public class MemoryDbConsistencyTest extends ProjectTestCase {
 		MemoryJsonDb db = db(2);
 		Transaction t = db.beginTransaction();
 		t.insert(JsonKey.of("t","k"), JsonObject.of("v",1));
-		db.insert(JsonKey.of("x","k"), JsonObject.of("v",1));
+		db.insert(JsonKey.of("t","k"), JsonObject.of("v",2));
 		try {
 			t.commit();
 			fail();
 		} catch(JsonException ex) {
 		}
-		assertFalse(db.exists(JsonKey.of("t","k")));
+		assertEquals(2, ((JsonObject)db.select(JsonKey.of("t","k")).getJson()).getInt("v"));
+		t.rollback();
+		db.delete(JsonKey.of("t","k"));
 
 		Transaction t2 = db.beginTransaction();
 		t2.insert(JsonKey.of("t","k"), JsonObject.of("v",1));

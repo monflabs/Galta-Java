@@ -126,17 +126,17 @@ public class MemoryDbExamples extends ProjectTestCase {
 		tx2.rollback();
 		assertFalse(db.exists(JsonKey.of("c", "k3")));
 
-		// Optimistic: a commit fails if the DB changed since the transaction began
+		// Optimistic: a commit fails if a record it writes changed since the transaction began
 		MemoryJsonDb.Transaction tx3 = db.beginTransaction();
-		tx3.insert(JsonKey.of("c", "k4"), JsonObject.of("v", 4));
-		db.insert(JsonKey.of("c", "k5"), JsonObject.of("v", 5));
+		tx3.upsert(JsonKey.of("c", "k4"), JsonObject.of("v", 4));
+		db.insert(JsonKey.of("c", "k4"), JsonObject.of("v", 40));
 		try {
 			tx3.commit();
 			fail();
 		} catch(JsonException e) {
-			// Database has been modified since the transaction started
+			// Database has been modified since the transaction started (record c:k4)
 		}
-		assertFalse(db.exists(JsonKey.of("c", "k4")));
+		assertEquals(40, ((JsonObject)db.select(JsonKey.of("c", "k4")).getJson()).getInt("v"));
 		tx3.rollback();                                           // a failed commit leaves it open
 		try {
 			tx3.count();                                          // a finished transaction cannot be used

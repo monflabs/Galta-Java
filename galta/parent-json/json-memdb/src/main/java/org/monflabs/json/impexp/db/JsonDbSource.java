@@ -16,14 +16,13 @@
 package org.monflabs.json.impexp.db;
 
 import java.time.Instant;
-import java.util.Iterator;
+import java.util.stream.Stream;
 
 import org.monflabs.json.impexp.JsonContent;
 import org.monflabs.json.impexp.impl.JsonSourceImpl;
 import org.monflabs.json.impexp.replication.RangeFilter;
 import org.monflabs.json.impexp.replication.ReplicationSource;
 import org.monflabs.util.ObjectBuilder;
-import org.monflabs.util.iterators.Iterators;
 
 public class JsonDbSource extends JsonSourceImpl implements ReplicationSource {
 
@@ -64,12 +63,19 @@ public class JsonDbSource extends JsonSourceImpl implements ReplicationSource {
 
 	/**
 	 * Number of contents this source produces: the records and deletions of the
-	 * selected collection, restricted to the range filter of the running stream (if
-	 * any).
+	 * selected collection, restricted to the range filter of the last stream (if any).
 	 */
 	@Override
 	public long estimatedCount() {
-		return db.snapshotForReplication().stream().filter(this::accept).count();
+		return estimatedCount(getRangeFilter());
+	}
+	
+	/**
+	 * Number of contents a stream with a range filter produces.
+	 */
+	@Override
+	public long estimatedCount(RangeFilter filter) {
+		return db.snapshotForReplication(collection).stream().filter((r) -> accept(r,filter)).count();
 	}
 	
 	@Override
@@ -77,35 +83,35 @@ public class JsonDbSource extends JsonSourceImpl implements ReplicationSource {
 		return db.getReplicationId();
 	}
 	
+	/**
+	 * The range filter applies to the date the contents were stored in the DB
+	 * ({@link JsonDbRecord#getDbAdded()}), not to their timestamp.
+	 */
 	@Override
-	protected Iterator<JsonContent> createJsonContentIterator() {
-		// Iterate a snapshot: the DB can be modified while the stream is consumed
-		Iterator<JsonDbRecord> it = Iterators.filter(db.snapshotForReplication().iterator(), this::accept);
-		return Iterators.map(it, (r) -> {
-			return (JsonContent)r; 
-		});
+	protected boolean handlesRangeFilter() {
+		return true;
 	}
 	
-	private boolean accept(JsonDbRecord r) {
-		if(collection!=null) {
-			if(!collection.equals(r.getKey().getCollection())) {
-				return false;
-			}
-		}
-		RangeFilter filter = getRangeFilter();
+	@Override
+	protected Stream<JsonContent> createJsonContentStream(RangeFilter filter) {
+		// Iterate a snapshot: the DB can be modified while the stream is consumed. The
+		// filter is the one of this stream, so several streams can run concurrently.
+		return db.snapshotForReplication(collection).stream()
+				.filter((r) -> accept(r,filter))
+				.map((r) -> (JsonContent)r);
+	}
+	
+	private static boolean accept(JsonDbRecord r, RangeFilter filter) {
 		if(filter!=null) {
 			Instant t = r.getDbAdded(); 
-			if(filter.getSince()!=null) {
-				// We use <= even though some exact time doc can be replicated twice
-				// This is ensure than last save entries are also picked up when the clock resolution is not high enough
-				if(t.compareTo(filter.getSince())<0) {
-					return false;
-				}
+			// Both ends are included: a content stored exactly at the date of the last
+			// replication can be replicated twice, but cannot be missed when the clock
+			// resolution is not high enough
+			if(filter.getSince()!=null && t.compareTo(filter.getSince())<0) {
+				return false;
 			}
-			if(filter.getUntil()!=null) {
-				if(t.compareTo(filter.getUntil())>0) {
-					return false;
-				}
+			if(filter.getUntil()!=null && t.compareTo(filter.getUntil())>0) {
+				return false;
 			}
 		}
 		return true;
