@@ -22,6 +22,39 @@ import tests.ProjectTestCase;
  */
 public class PlaygroundSwingTest extends ProjectTestCase {
 
+	public void testLoadedTextIsNotUndoable() throws Exception {
+		javax.swing.SwingUtilities.invokeAndWait(() -> {
+			org.monflabs.ui.swing.ide.syntax.SyntaxTextArea ta = new org.monflabs.ui.swing.ide.syntax.SyntaxTextArea();
+			com.monflabs.playground.swing.PlaygroundFrame.setInitialText(ta, "let a = 1;\n");
+			// undo right after loading used to empty the editor
+			assertFalse(ta.canUndo());
+			assertEquals(0, ta.getCaretPosition());
+			ta.insert("x", 0);
+			assertTrue(ta.canUndo());
+			ta.undoLastAction();
+			assertEquals("let a = 1;\n", ta.getText());
+			assertFalse(ta.canUndo());
+		});
+	}
+
+	public void testMarkdownTablesAndBase() throws Exception {
+		java.nio.file.Path folder = java.nio.file.Files.createTempDirectory("md-base");
+		javax.swing.SwingUtilities.invokeAndWait(() -> {
+			com.monflabs.swing.components.MarkdownRenderer md = new com.monflabs.swing.components.MarkdownRenderer();
+			md.setBaseFolder(folder);
+			assertNotNull(md.getBase());
+			md.setMarkdown("| a | b |\n|---|---|\n| 1 | 2 |\n\n![img](pic.png) [link](https://example.com)");
+			String html = md.getText().toLowerCase(java.util.Locale.ROOT);
+			assertTrue(html, html.contains("<table"));
+			assertTrue(html, html.contains("<td"));
+			javax.swing.text.html.HTMLDocument doc = (javax.swing.text.html.HTMLDocument)md.getDocument();
+			assertEquals("relative URLs resolve against the folder", md.getBase(), doc.getBase());
+			// a base outside of the default file system is ignored
+			md.setBaseFolder(null);
+			assertNull(md.getBase());
+		});
+	}
+
 	public void testJdkLibraryInfos() throws Exception {
 		java.io.File home = new java.io.File(System.getProperty("java.home"));
 		java.util.List<org.fife.rsta.ac.java.buildpath.LibraryInfo> infos = new java.util.ArrayList<>();

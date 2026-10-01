@@ -43,6 +43,10 @@
 			<artifactId>commonmark</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>org.commonmark</groupId>
+			<artifactId>commonmark-ext-gfm-tables</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>utilities</artifactId>
 		</dependency>

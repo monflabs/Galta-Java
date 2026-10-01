@@ -15,6 +15,16 @@
  */
 package org.monflabs.playground;
 
+/**
+ * Executes a snippet, once: an engine is created for each run by the
+ * {@link ExecutionEngineFactory}. {@link #execute()} runs {@link #_execute()}
+ * on the calling thread (READY, RUNNING, then COMPLETED).
+ * <p>
+ * An engine that can stop cooperatively returns true from
+ * {@link #isSoftInterruptable()} and implements {@link #softInterrupt()};
+ * the others are stopped by interrupting their thread, and abandoned when
+ * they do not stop (see {@link ExecutionController}).
+ */
 public abstract class ExecutionEngine {
 	
 	public static enum STATE {
@@ -55,8 +65,9 @@ public abstract class ExecutionEngine {
 		try {
 			return _execute();
 		} finally {
+			// The context is kept: code that outlives the run (asynchronous
+			// callbacks, a debugger, the result views) may still use it
 			this.state = STATE.COMPLETED;
-			this.executionContext = null;
 			executionThread = null;
 		}
 	}

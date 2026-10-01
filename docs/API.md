@@ -49,8 +49,8 @@ To use a module, import `galta-bom` and declare it without a version - see
 | `ui-commons` | [ui-commons](api/ui-commons/index.html ':ignore') | Toolkit-independent UI building blocks: converters, lookups, application support |
 | `ui-swing` | [ui-swing](api/ui-swing/index.html ':ignore') | Swing components, layouts, themes and utilities |
 | `ui-swing-ide` | [ui-swing-ide](api/ui-swing-ide/index.html ':ignore') | Syntax text areas, consoles and persisted UI settings |
-| `playground-core` | [playground-core](api/playground-core/index.html ':ignore') | Core of the scripting playground: snippets, execution engines, markdown |
-| `playground-ui-swing` | [playground-ui-swing](api/playground-ui-swing/index.html ':ignore') | Swing user interface of the playground |
+| `playground-core` | [playground-core](api/playground-core/index.html ':ignore') | Engine-agnostic core of the scripting playground: snippets and their in-memory file systems, execution engines and their lifecycle (`ExecutionController`) |
+| `playground-ui-swing` | [playground-ui-swing](api/playground-ui-swing/index.html ':ignore') | Swing user interface of the playground: editors, console, Markdown rendering (CommonMark) |
 | `js-playground` | [js-playground](api/js-playground/index.html ':ignore') | The GaltaJS playground application |
 
 The playground also runs in the browser: [open the playground](playground/ ':ignore').

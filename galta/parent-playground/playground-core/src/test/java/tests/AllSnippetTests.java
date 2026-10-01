@@ -26,6 +26,8 @@ public class AllSnippetTests extends TestSuite {
 	
 		suite.addTestSuite(FactoryTest.class);
 		suite.addTestSuite(SaveTest.class);
+		suite.addTestSuite(tests.snippets.StorageTest.class);
+		suite.addTestSuite(tests.execution.ExecutionControllerTest.class);
 
 		return suite;
 	}

@@ -27,6 +27,8 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -76,6 +78,7 @@ import org.monflabs.playground.PlaygroundConfiguration;
 import org.monflabs.ui.swing.dialogs.JTreeUtil;
 import org.monflabs.ui.swing.ide.IDEApplication;
 import org.monflabs.ui.swing.ide.syntax.SyntaxTextArea;
+import org.monflabs.ui.swing.util.SwingUtil;
 import org.monflabs.util.BaseException;
 import org.monflabs.util.Console;
 import org.monflabs.util.StringFormat;
@@ -132,6 +135,11 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 
 	public GaltaJSPlaygroundFrame() {
 		treeAstNodes = new JTree();
+		// An AST easily has thousands of nodes, all expanded: a fixed row
+		// height and a large model keep that fast (see JTreeUtil.expandAllNodes())
+		int rowHeight = treeAstNodes.getFontMetrics(treeAstNodes.getFont()).getHeight()+SwingUtil.scale(2);
+		treeAstNodes.setRowHeight(Math.max(rowHeight, javax.swing.UIManager.getInt("Tree.rowHeight")));
+		treeAstNodes.setLargeModel(true);
 		JScrollPane scrollPane1  = new JScrollPane();
 		scrollPane1.setViewportView(treeAstNodes);
 
@@ -303,8 +311,8 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
     }
 
     private static void setCode(SyntaxTextArea area, String code) {
-    	area.setText(code);
-    	area.setCaretPosition(0);
+    	// generated code: nothing to undo
+    	setInitialText(area, code);
     }
     
 	/**
@@ -313,6 +321,8 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 	 * both kinds of debug session started by {@link #startDebugSession(boolean)}.
 	 */
 	private DebuggerImpl newDebugger() {
+		// the debugger reads the snippet files: they must hold the editors' text
+		commitEditors();
 		GaltaJSExecutionEngine jsEngine = (GaltaJSExecutionEngine)PlaygroundConfiguration.get().getExecutionEngineFactory().createExecutionEngine(getExecutionContext());
 
 		JSEnvironment env = SnippetEnvironment.newBuilder(ckGaltaJS.isSelected(),ckStrictMode.isSelected())
@@ -355,10 +365,10 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 			// fail binding
 			InProcessCdpServer.Handle server = InProcessCdpServer.open(debugger, DebugOptions.parse("", false));
 
-			DebuggerPanel panel = new DebuggerPanel(new Font(Font.MONOSPACED, Font.PLAIN, 12), isDarkTheme());
+			DebuggerPanel panel = new DebuggerPanel(new Font(Font.MONOSPACED, Font.PLAIN, SwingUtil.scale(12)), isDarkTheme());
 			JFrame frame = new JFrame("GaltaJS Debugger");
 			frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-			frame.setSize(1200, 850);
+			frame.setSize(SwingUtil.scale(1200), SwingUtil.scale(850));
 			frame.getContentPane().add(panel, BorderLayout.CENTER);
 
 			activeDebugger = debugger;
@@ -520,6 +530,16 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
     // snippet, so cancelling the active debug session here covers both
     // "selecting another snippet cancels any existing debugging session"
     // and the window-close case in one place.
+    /**
+     * Ends the debug session and the analysis thread with the frame.
+     */
+    @Override
+    public void dispose() {
+    	cancelDebugSession();
+    	analysisExecutor.shutdownNow();
+    	super.dispose();
+    }
+
     @Override
     public boolean canClose() {
     	if(!super.canClose()) {
@@ -740,7 +760,38 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 		}
 		return true;
 	}
-	private static boolean acceptField(Field f) {
+	/**
+	 * Whether a list element type is an AST node: a class, a parameterized
+	 * type, or the upper bound of a wildcard ({@code List<? extends ASTNode>})
+	 * or of a type variable - not only a plain class (a cast used to throw on
+	 * the others).
+	 */
+	static boolean isASTNodeType(java.lang.reflect.Type t) {
+		if(t instanceof Class<?> c) {
+			return ASTNode.class.isAssignableFrom(c);
+		}
+		if(t instanceof ParameterizedType pt) {
+			return isASTNodeType(pt.getRawType());
+		}
+		if(t instanceof WildcardType wt) {
+			for(java.lang.reflect.Type b: wt.getUpperBounds()) {
+				if(isASTNodeType(b)) {
+					return true;
+				}
+			}
+			return false;
+		}
+		if(t instanceof TypeVariable<?> tv) {
+			for(java.lang.reflect.Type b: tv.getBounds()) {
+				if(isASTNodeType(b)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	static boolean acceptField(Field f) {
 		if(Modifier.isStatic(f.getModifiers())) {
 			return false;
 		}
@@ -752,11 +803,8 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 			return false;
 		}
 		if(List.class.isAssignableFrom(f.getType())) {
-		    if (f.getGenericType() instanceof ParameterizedType pt) {
-		    	Class<?> gt = (Class<?>)pt.getActualTypeArguments()[0];
-				if(ASTNode.class.isAssignableFrom(gt)) {
-					return false;
-				}
+		    if (f.getGenericType() instanceof ParameterizedType pt && isASTNodeType(pt.getActualTypeArguments()[0])) {
+				return false;
 		    }
 		}
 		if(f.getName().contains("$")) { // No outer class fields

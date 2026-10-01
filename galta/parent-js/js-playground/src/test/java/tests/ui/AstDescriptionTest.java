@@ -33,6 +33,22 @@ public class AstDescriptionTest extends ProjectTestCase {
 		Node(String name) { this.name = name; }
 	}
 
+	static class Generic<T> {
+		java.util.List<? extends Number> numbers = java.util.List.of(1, 2);
+		java.util.List<T> items = new java.util.ArrayList<>();
+		java.util.List<? extends org.monflabs.galtajs.node.ASTNode> children = new java.util.ArrayList<>();
+	}
+
+	public void testWildcardAndTypeVariableLists() {
+		// used to throw a ClassCastException (a wildcard is not a Class)
+		org.monflabs.util.TextBuilder tb = new org.monflabs.util.TextBuilder();
+		playground.impl.GaltaJSPlaygroundFrame.readObject(tb, new Generic<String>());
+		String s = tb.toString();
+		assertTrue(s, s.contains("numbers"));
+		assertTrue(s, s.contains("items"));
+		assertFalse("lists of AST nodes are children, not fields", s.contains("children"));
+	}
+
 	public void testAstDescriptionCyclesAndOpaqueTypes() {
 		Node a = new Node("a"), b = new Node("b");
 		a.next = b;

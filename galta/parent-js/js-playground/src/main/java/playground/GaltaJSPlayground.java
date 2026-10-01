@@ -34,8 +34,11 @@ import org.monflabs.playground.ExecutionEngineFactory;
 import org.monflabs.playground.PlaygroundConfiguration;
 import org.monflabs.playground.PlaygroundException;
 import org.monflabs.playground.SnippetFactory;
+import org.monflabs.json.config.JsonFileConfig;
 import org.monflabs.ui.swing.ide.IDEApplication;
+import org.monflabs.ui.swing.settings.UiPersistentSettings;
 import org.monflabs.util.Console;
+import org.monflabs.util.UserPath;
 
 import com.monflabs.playground.galtajs.GaltaJSExecutionEngine;
 import com.monflabs.playground.swing.PlaygroundFrame;
@@ -59,7 +62,9 @@ public class GaltaJSPlayground {
     	// must not hold the event dispatch thread
 		IDEApplication.newBuilder()
 			.config(null)
+			.applicationName("GaltaJS Playground")
 			.build();
+		installSettings();
     	SwingUtilities.invokeLater( () -> {
             setTaskbarIcon();
             configure();
@@ -87,6 +92,26 @@ public class GaltaJSPlayground {
     		Image img = Toolkit.getDefaultToolkit().createImage(logoUrl);
     		taskbar.setIconImage(img);
     	} catch(UnsupportedOperationException | SecurityException e) {
+    		Console.log(e);
+    	}
+    }
+
+    /**
+     * Persists the playground's UI state (options, window bounds, last
+     * snippet) in {@code ~/.monflabs/playground-galtajs/settings.json}, unless
+     * a store is already set.
+     */
+    protected static void installSettings() {
+    	if(UiPersistentSettings.isAvailable()) {
+    		return;
+    	}
+    	try {
+    		UiPersistentSettings.set(JsonFileConfig.newBuilder()
+    				.folder(UserPath.getMonflabsFolder().resolve("playground-galtajs"))
+    				.fileName("settings.json")
+    				.build());
+    	} catch(RuntimeException e) {
+    		// the playground works without persisted settings
     		Console.log(e);
     	}
     }

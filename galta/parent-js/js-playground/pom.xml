@@ -59,6 +59,10 @@
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
+			<artifactId>json-config</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
 			<artifactId>ui-commons</artifactId>
 		</dependency>
 		<dependency>

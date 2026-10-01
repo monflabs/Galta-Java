@@ -22,7 +22,20 @@ public interface ExecutionEngineFactory {
 	
 	public ExecutionEngine createExecutionEngine(ExecutionContext context);
 
+	/**
+	 * The names of the files that make a snippet executable, the preferred
+	 * one first (e.g. {@code main.js}).
+	 */
 	public String[] getMainExecutableFileNames();
+
+	/**
+	 * The preferred main file name - the first of
+	 * {@link #getMainExecutableFileNames()} - or null when there is none.
+	 */
+	public default String getMainFileName() {
+		String[] fn = getMainExecutableFileNames();
+		return fn!=null && fn.length>0 ? fn[0] : null;
+	}
 	
 	public default boolean isExecutable(Snippet snippet) {
 		String[] fn = getMainExecutableFileNames();

@@ -50,8 +50,9 @@ public class Snippet {
 			    stream.filter(Files::isRegularFile).forEach( (p) -> {
 					if(Snippet.isVisible(p)) {
 						Path memFile = fs.getPath(p.getFileName().toString()); 
-						FilesUtil.write(memFile,FilesUtil.readAllBytes(p));
-						fs.setPhysicalFile(memFile, p);
+						byte[] content = FilesUtil.readAllBytes(p);
+						FilesUtil.write(memFile,content);
+						fs.setPhysicalFile(memFile, p, content);
 					}
 				});
 			} catch(IOException ex) {
@@ -73,8 +74,9 @@ public class Snippet {
 					Path p = folder.resolve(path).normalize();
 					if(Files.isRegularFile(p)) {
 						Path memFile = fs.getPath(name); 
-						FilesUtil.write(memFile,FilesUtil.readAllBytes(p));
-						fs.setPhysicalFile(memFile, p);
+						byte[] content = FilesUtil.readAllBytes(p);
+						FilesUtil.write(memFile,content);
+						fs.setPhysicalFile(memFile, p, content);
 					}
 				}
 			}
@@ -82,8 +84,19 @@ public class Snippet {
 		return fs;
 	}
 
+	/**
+	 * Whether a file or folder is part of the snippet: not the ones whose name
+	 * starts with {@code _} (snippet resources, {@code _links.properties}) or
+	 * {@code .} (hidden files: {@code .gitattributes}, {@code .DS_Store},
+	 * editor backups...).
+	 */
 	public static boolean isVisible(Path path) {
-		return !path.getFileName().toString().startsWith("_");
+		Path name = path.getFileName();
+		if(name==null) {
+			return true;	// a root
+		}
+		String s = name.toString();
+		return !s.startsWith("_") && !s.startsWith(".");
 	}
 }
 	

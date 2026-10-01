@@ -55,14 +55,14 @@ public class GaltaJSExecutionEngine extends ExecutionEngine {
 		if(mainSource==null || StringUtil.isEmpty(mainSource.trim())) {
 			return null;
 		}
-		boolean galtaJS = (Boolean)context.getExecutionOption(OPTION_GALTAJS,false);
-		boolean strictMode = (Boolean)context.getExecutionOption(OPTION_STRICTMODE,true);
+		boolean galtaJS = context.getBooleanOption(OPTION_GALTAJS,false);
+		boolean strictMode = context.getBooleanOption(OPTION_STRICTMODE,true);
 		
 		JSEnvironment env = SnippetEnvironment.newBuilder(galtaJS,strictMode)
 				.addModuleResolver(new JSPathModuleResolver(context.getSnippetFs()))
 				.addModuleResolver(new NodeModuleResolver(context.getSnippetFs()))
 				.configure( (b) -> {
-					if((Boolean)context.getExecutionOption(OPTION_OPTIMIZE,false)) {
+					if(context.getBooleanOption(OPTION_OPTIMIZE,false)) {
 				    	b.scriptOptimizer(ScriptOptimizer.defaultOptimizer());
 					}
 				})
