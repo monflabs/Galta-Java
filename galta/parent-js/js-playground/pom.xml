@@ -14,6 +14,9 @@
         <!-- Main-Class of the executable jar built by the shade plugin (target/jsplayground.jar) -->
         <main.class>playground.GaltaJSPlayground</main.class>
         <app.version>1.0.0</app.version>
+        <!-- Empty fallback for the surefire @{argLine} below: JaCoCo's prepare-agent
+             appends its agent to it, and it stays defined when JaCoCo is skipped -->
+        <argLine></argLine>
 	</properties>
 
 
@@ -94,8 +97,9 @@
 					     hazard confirmed via direct reproduction, not a
 					     hypothetical. A larger stack gives normal recursion
 					     depths (a few thousand levels) enough headroom to never
-					     approach that danger zone in the first place. -->
-					<argLine>-Xss64m</argLine>
+					     approach that danger zone in the first place.
+					     @{argLine} keeps the JaCoCo agent set by prepare-agent. -->
+					<argLine>@{argLine} -Xss64m</argLine>
 				</configuration>
 			</plugin>
 			<plugin>

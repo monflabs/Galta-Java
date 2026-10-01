@@ -107,6 +107,14 @@
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
+					<!--
+						No fork wall-clock budget for this module (0 = none). The
+						shared parent's 900 s default would kill every real run
+						here: an ad-hoc -Dtest=Test262AllTest or a transpiled
+						directory probe takes ~10-70 min, and All262Tests (the
+						test262 profile) runs for hours in ONE fork.
+					-->
+					<forkedProcessTimeoutInSeconds>0</forkedProcessTimeoutInSeconds>
 					<includes>
 						<include>**/AllBuildNoTest.class</include>
 					</includes>
