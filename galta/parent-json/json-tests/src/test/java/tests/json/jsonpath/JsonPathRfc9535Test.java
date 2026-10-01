@@ -117,6 +117,17 @@ public class JsonPathRfc9535Test extends ProjectTestCase {
 		assertEquals(3, JsonPathFactory.get().getJsonPath("$..*").read(o)._size());
 		// With pointers too
 		assertEquals(1, JsonPathFactory.get().getJsonPath("$..name").read(o, true)._size());
+		// A deep cycle (the ancestors are then tracked by a set)
+		JsonObject first = JsonObject.of("v", 0);
+		JsonObject cur = first;
+		for(int i=1; i<100; i++) {
+			JsonObject n = JsonObject.of("v", i);
+			cur.put("next", n);
+			cur = n;
+		}
+		cur.put("next", first);
+		assertEquals(100, JsonPathFactory.get().getJsonPath("$..v").read(first)._size());
+		assertEquals(100, JsonPathFactory.get().getJsonPath("$..v").read(first, true)._size());
 		// A shared, non cyclic container is reported at each location
 		JsonObject shared = JsonObject.of("v", 1);
 		JsonObject dag = JsonObject.of("a", shared, "b", shared);

@@ -47,7 +47,53 @@ public class PathDeepScan extends PathNode {
 	
 	@Override
 	public void execute(JsonValues r, Object root, Object source, JsonPointer sourcePointer) {
-		scan(r, source, sourcePointer, null);
+		scan(r, source, sourcePointer, new Ancestors());
+	}
+	
+	/**
+	 * The containers being scanned, from the root: a stack searched by identity (the
+	 * documents are rarely deep), backed by a set when it gets deep.
+	 */
+	private static final class Ancestors {
+		private static final int MAX_LINEAR = 32;
+		private Object[] stack = new Object[16];
+		private int size;
+		private Set<Object> set;
+		boolean push(Object o) {
+			if(set!=null) {
+				if(!set.add(o)) {
+					return false;
+				}
+			} else {
+				for(int i=0; i<size; i++) {
+					if(stack[i]==o) {
+						return false;
+					}
+				}
+				if(size>=MAX_LINEAR) {
+					set = Collections.newSetFromMap(new IdentityHashMap<>());
+					for(int i=0; i<size; i++) {
+						set.add(stack[i]);
+					}
+					set.add(o);
+				}
+			}
+			if(size==stack.length) {
+				stack = java.util.Arrays.copyOf(stack, size*2);
+			}
+			stack[size++] = o;
+			return true;
+		}
+		void pop() {
+			Object o = stack[--size];
+			stack[size] = null;
+			if(set!=null) {
+				set.remove(o);
+				if(size<MAX_LINEAR/2) {
+					set = null;
+				}
+			}
+		}
 	}
 	
 	/**
@@ -56,15 +102,10 @@ public class PathDeepScan extends PathNode {
 	 * followed. Shared, non cyclic containers are visited at each location, as they are
 	 * distinct nodes for JSON Path.
 	 */
-	private void scan(JsonValues r, Object source, JsonPointer sourcePointer, Set<Object> ancestors) {
+	private void scan(JsonValues r, Object source, JsonPointer sourcePointer, Ancestors ancestors) {
 		boolean container = source instanceof JsonObject || source instanceof JsonArray;
-		if(container) {
-			if(ancestors==null) {
-				ancestors = Collections.newSetFromMap(new IdentityHashMap<>());
-			}
-			if(!ancestors.add(source)) {
-				return;
-			}
+		if(container && !ancestors.push(source)) {
+			return;
 		}
 		if(sourcePointer!=null) {
 			r._add(source, sourcePointer);
@@ -82,7 +123,7 @@ public class PathDeepScan extends PathNode {
 			}
 		}
 		if(container) {
-			ancestors.remove(source);
+			ancestors.pop();
 		}
 	}
 }
