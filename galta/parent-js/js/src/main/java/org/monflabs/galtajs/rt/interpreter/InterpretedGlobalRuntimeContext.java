@@ -544,19 +544,7 @@ public class InterpretedGlobalRuntimeContext extends InterpretedUnitRuntimeConte
 				return m;
 			}
 		}
-		org.monflabs.galtajs.JSModuleDescriptor descriptor = null;
-		List<JSModuleResolver> moduleResolvers = getEnvironment().getModuleResolvers();
-		if(moduleResolvers!=null) {
-			for(JSModuleResolver moduleResolver: moduleResolvers) {
-				descriptor = moduleResolver.getModule(resolvedName);
-				if(descriptor!=null) {
-					break;
-				}
-			}
-		}
-		if(descriptor==null) {
-			throw RuntimeUtil.typeError("Cannot find module {0}", resolvedName);
-		}
+		org.monflabs.galtajs.JSModuleDescriptor descriptor = findModuleDescriptor(resolvedName);
 		Object defaultValue = RuntimeUtil.parseAttributedModuleContent(getEnvironment(), type, descriptor, resolvedName);
 		JSModule m = new org.monflabs.galtajs.modules.JSNativeModule(getEnvironment(), descriptor, defaultValue, null);
 		if(modules==null) {
@@ -621,19 +609,7 @@ public class InterpretedGlobalRuntimeContext extends InterpretedUnitRuntimeConte
 			// import statement's own position - test262 import-defer/
 			// errors/syntax-error.js), but do NOT call initModule() -
 			// leaving the body unevaluated is the entire point.
-			org.monflabs.galtajs.JSModuleDescriptor descriptor = null;
-			List<JSModuleResolver> resolvers = getEnvironment().getModuleResolvers();
-			if(resolvers!=null) {
-				for(JSModuleResolver r: resolvers) {
-					descriptor = r.getModule(resolvedName);
-					if(descriptor!=null) {
-						break;
-					}
-				}
-			}
-			if(descriptor==null) {
-				throw RuntimeUtil.typeError("Cannot find module {0}", resolvedName);
-			}
+			org.monflabs.galtajs.JSModuleDescriptor descriptor = findModuleDescriptor(resolvedName);
 			unit = getEnvironment().createScript(descriptor.getScript(), resolvedName, JSEnvironment.SCRIPT_MODULE);
 			unit.markPendingDeferredEvaluation();
 			if(modules==null) {
@@ -655,6 +631,7 @@ public class InterpretedGlobalRuntimeContext extends InterpretedUnitRuntimeConte
 					continue;
 				}
 				boolean found = false;
+				List<JSModuleResolver> resolvers = getEnvironment().getModuleResolvers();
 				if(resolvers!=null) {
 					for(JSModuleResolver r: resolvers) {
 						if(r.getModule(depResolvedName)!=null) {
@@ -737,19 +714,7 @@ public class InterpretedGlobalRuntimeContext extends InterpretedUnitRuntimeConte
 			// asynchronous.
 			return;
 		} else {
-			org.monflabs.galtajs.JSModuleDescriptor descriptor = null;
-			List<JSModuleResolver> resolvers = getEnvironment().getModuleResolvers();
-			if(resolvers!=null) {
-				for(JSModuleResolver r: resolvers) {
-					descriptor = r.getModule(resolvedName);
-					if(descriptor!=null) {
-						break;
-					}
-				}
-			}
-			if(descriptor==null) {
-				throw RuntimeUtil.typeError("Cannot find module {0}", resolvedName);
-			}
+			org.monflabs.galtajs.JSModuleDescriptor descriptor = findModuleDescriptor(resolvedName);
 			unit = getEnvironment().createScript(descriptor.getScript(), resolvedName, JSEnvironment.SCRIPT_MODULE);
 			// Same "cache it but leave it unevaluated" marking
 			// importDeferredNamespace() gives the TOP-level target - a
@@ -918,5 +883,19 @@ public class InterpretedGlobalRuntimeContext extends InterpretedUnitRuntimeConte
 	public JSModule peekModule(JSModule self, String name) {
 		String resolvedName = ModuleUtil.resolvePath(self.getDescriptor().getName(), name);
 		return modules==null ? null : modules.get(resolvedName);
+	}
+
+	// The descriptor of a module, from the first resolver that knows it
+	private org.monflabs.galtajs.JSModuleDescriptor findModuleDescriptor(String resolvedName) {
+		List<JSModuleResolver> resolvers = getEnvironment().getModuleResolvers();
+		if(resolvers!=null) {
+			for(JSModuleResolver r: resolvers) {
+				org.monflabs.galtajs.JSModuleDescriptor descriptor = r.getModule(resolvedName);
+				if(descriptor!=null) {
+					return descriptor;
+				}
+			}
+		}
+		throw RuntimeUtil.typeError("Cannot find module {0}", resolvedName);
 	}
 }

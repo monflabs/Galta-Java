@@ -22,7 +22,6 @@ import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -220,7 +219,6 @@ public final class JSEnvironment implements JSConfiguration {
 
 		private ConfigurationImpl configuration = new ConfigurationImpl();
 		private SharedData sharedData;
-		private JSEnvironment sharedEnvironment;
 		
 		protected Builder() {}
 		
@@ -457,14 +455,7 @@ public final class JSEnvironment implements JSConfiguration {
 				}
 				this.sharedData = sharedData;
 			}
-			if(configuration.isSharedStandardObjects()) {
-				if(sharedEnvironment==null) {
-					sharedEnvironment = new JSEnvironment(sharedData);
-				}
-				return sharedEnvironment;
-			} else {
-				return new JSEnvironment(sharedData);
-			}
+			return new JSEnvironment(sharedData);
 		}
 	}
 	
@@ -497,19 +488,19 @@ public final class JSEnvironment implements JSConfiguration {
 			return configuration;
 		}
 		
-		public LRUCache<String,ASTProgram> getScriptCache() {
+		public synchronized LRUCache<String,ASTProgram> getScriptCache() {
 			if(scriptCache==null && configuration.getScriptCacheSize()>0) {
 				scriptCache = new LRUCache<>(configuration.getScriptCacheSize());
 			}
 			return scriptCache;
 		}
-		public LRUCache<String,ASTProgram> getEvalCache() {
+		public synchronized LRUCache<String,ASTProgram> getEvalCache() {
 			if(evalCache==null && configuration.getEvalCacheSize()>0) {
 				evalCache = new LRUCache<>(configuration.getEvalCacheSize());
 			}
 			return evalCache;
 		}
-		public LRUCache<String,Pattern> getRegExpCache() {
+		public synchronized LRUCache<String,Pattern> getRegExpCache() {
 			if(regExpCache==null && configuration.getRegExpCacheSize()>0) {
 				regExpCache = new LRUCache<>(configuration.getRegExpCacheSize());
 			}
@@ -518,9 +509,6 @@ public final class JSEnvironment implements JSConfiguration {
 		
 		public boolean supportBigDecimal() {
 			return configuration.supportBigDecimal();
-		}
-		public boolean isSharedStandardObjects() {
-			return configuration.isSharedStandardObjects();
 		}
 	}
 	
@@ -536,7 +524,8 @@ public final class JSEnvironment implements JSConfiguration {
 	private NullAccessor nullAccessor;
 	private Map<Class<?>,JSAccessor> accessorsCache = new ConcurrentHashMap<>(); // No Null keys
 	private StandardObjects standardObjects;
-	private Map<Class<? extends Object>,Object> prototypes = new IdentityHashMap<>();
+	// Filled lazily, possibly by several threads sharing the environment
+	private Map<Class<? extends Object>,Object> prototypes = new ConcurrentHashMap<>();
 	// Expando side tables: properties (and prototype/extensibility state)
 	// attached to values that have no storage of their own - boxed primitives
 	// (`new Number(5)`, `Object("x")`, sloppy-mode `this` coercion) and Java
@@ -682,7 +671,8 @@ public final class JSEnvironment implements JSConfiguration {
 		}
 		return o;
 	}
-	private synchronized JSAccessor findAccessor(@NonNull Object instance) {
+	// Called by getAccessor(), under its lock
+	private JSAccessor findAccessor(@NonNull Object instance) {
 		if(instance instanceof AccessorFactory f)  {
 	        return f.createAccessor(this);
 		}
@@ -711,9 +701,6 @@ public final class JSEnvironment implements JSConfiguration {
 		}
 		if(instance instanceof Symbol) {
 	        return new SymbolAccessor(this);
-		}
-		if(instance instanceof Boolean) {
-	        return new BooleanAccessor(this);
 		}
 
 		if(instance instanceof JSObject) {
@@ -773,10 +760,6 @@ public final class JSEnvironment implements JSConfiguration {
 	}
 	public void registerPrototype(Class<? extends Object> clazz, Object proto) {
 		prototypes.put(clazz,proto);
-		if(isSharedStandardObjects()) {
-			JSAccessor acc = getAccessor(proto);
-			acc.freeze(proto);
-		}
 	}
 	
 	// See the field declarations above for why these are split by key type.
@@ -786,22 +769,16 @@ public final class JSEnvironment implements JSConfiguration {
 	// Java objects with no storage of their own (java.util.Date, HashMap, any
 	// host object) - written by ObjectWrapperAccessor, and by far the most
 	// frequently populated of the five.
+	// Java objects with no storage of their own (java.util.Date, HashMap, any
+	// host object) - written by ObjectWrapperAccessor, and by far the most
+	// frequently populated of the five.
 	public PrimitivePropertyMap getObjectProperties() {
 		// Linked realms: the map is needed to find their entries
 		return realmGroup!=null ? getObjectProperties(true) : objectProperties;
 	}
 	public PrimitivePropertyMap getObjectProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = objectProperties;
-		// Linked realms: the map is needed to find their entries
-		if(m==null && (autoCreate || realmGroup!=null)) {
-			synchronized(this) {
-				m = objectProperties;
-				if(m==null) {
-					objectProperties = m = new PrimitivePropertyMap(this, PROPERTIES_OBJECT);
-				}
-			}
-		}
-		return m;
+		return m!=null || !(autoCreate || realmGroup!=null) ? m : createPropertyMap(PROPERTIES_OBJECT);
 	}
 
 	// Boxed Strings. Only a real java.lang.String is ever a key - a ConsString
@@ -813,16 +790,7 @@ public final class JSEnvironment implements JSConfiguration {
 	}
 	public PrimitivePropertyMap getStringProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = stringProperties;
-		// Linked realms: the map is needed to find their entries
-		if(m==null && (autoCreate || realmGroup!=null)) {
-			synchronized(this) {
-				m = stringProperties;
-				if(m==null) {
-					stringProperties = m = new PrimitivePropertyMap(this, PROPERTIES_STRING);
-				}
-			}
-		}
-		return m;
+		return m!=null || !(autoCreate || realmGroup!=null) ? m : createPropertyMap(PROPERTIES_STRING);
 	}
 
 	// Boxed Numbers - every Number subtype (Integer, Double, Long, Byte,
@@ -834,16 +802,7 @@ public final class JSEnvironment implements JSConfiguration {
 	}
 	public PrimitivePropertyMap getNumberProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = numberProperties;
-		// Linked realms: the map is needed to find their entries
-		if(m==null && (autoCreate || realmGroup!=null)) {
-			synchronized(this) {
-				m = numberProperties;
-				if(m==null) {
-					numberProperties = m = new PrimitivePropertyMap(this, PROPERTIES_NUMBER);
-				}
-			}
-		}
-		return m;
+		return m!=null || !(autoCreate || realmGroup!=null) ? m : createPropertyMap(PROPERTIES_NUMBER);
 	}
 
 	// Boxed Booleans - `new Boolean(false)`/`Object(true)`. Almost never
@@ -854,16 +813,7 @@ public final class JSEnvironment implements JSConfiguration {
 	}
 	public PrimitivePropertyMap getBooleanProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = booleanProperties;
-		// Linked realms: the map is needed to find their entries
-		if(m==null && (autoCreate || realmGroup!=null)) {
-			synchronized(this) {
-				m = booleanProperties;
-				if(m==null) {
-					booleanProperties = m = new PrimitivePropertyMap(this, PROPERTIES_BOOLEAN);
-				}
-			}
-		}
-		return m;
+		return m!=null || !(autoCreate || realmGroup!=null) ? m : createPropertyMap(PROPERTIES_BOOLEAN);
 	}
 
 	// Boxed Symbols - `Object(sym)`. Almost never populated in practice.
@@ -873,18 +823,36 @@ public final class JSEnvironment implements JSConfiguration {
 	}
 	public PrimitivePropertyMap getSymbolProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = symbolProperties;
-		// Linked realms: the map is needed to find their entries
-		if(m==null && (autoCreate || realmGroup!=null)) {
-			synchronized(this) {
-				m = symbolProperties;
-				if(m==null) {
-					symbolProperties = m = new PrimitivePropertyMap(this, PROPERTIES_SYMBOL);
-				}
+		return m!=null || !(autoCreate || realmGroup!=null) ? m : createPropertyMap(PROPERTIES_SYMBOL);
+	}
+
+	// The map of the given kind (PROPERTIES_*), null if not created yet
+	private PrimitivePropertyMap propertyMap(int kind) {
+		return switch(kind) {
+			case PROPERTIES_OBJECT -> objectProperties;
+			case PROPERTIES_STRING -> stringProperties;
+			case PROPERTIES_NUMBER -> numberProperties;
+			case PROPERTIES_BOOLEAN -> booleanProperties;
+			case PROPERTIES_SYMBOL -> symbolProperties;
+			default -> throw new IllegalArgumentException("Invalid property map kind "+kind);
+		};
+	}
+	// The map of the given kind, created if needed
+	private synchronized PrimitivePropertyMap createPropertyMap(int kind) {
+		PrimitivePropertyMap m = propertyMap(kind);
+		if(m==null) {
+			m = new PrimitivePropertyMap(this, kind);
+			switch(kind) {
+				case PROPERTIES_OBJECT -> objectProperties = m;
+				case PROPERTIES_STRING -> stringProperties = m;
+				case PROPERTIES_NUMBER -> numberProperties = m;
+				case PROPERTIES_BOOLEAN -> booleanProperties = m;
+				default -> symbolProperties = m;
 			}
 		}
 		return m;
 	}
-	
+
 	@Override
 	public ClassLoader getClassLoader() {
 		return configuration.classLoader;
@@ -898,10 +866,6 @@ public final class JSEnvironment implements JSConfiguration {
 	@Override
 	public final boolean isStrictMode() {
 		return configuration.isStrictMode();
-	}
-	@Override
-	public int hashCode() {
-		return configuration.hashCode();
 	}
 	@Override
 	public final boolean isDebugEnabled() {
@@ -938,10 +902,6 @@ public final class JSEnvironment implements JSConfiguration {
 	@Override
 	public final boolean supportFloat16Array() {
 		return configuration.supportFloat16Array();
-	}
-	@Override
-	public boolean equals(Object obj) {
-		return configuration.equals(obj);
 	}
 	@Override
 	public final boolean supportGlobalAlias() {
@@ -1048,10 +1008,9 @@ public final class JSEnvironment implements JSConfiguration {
 		return getProperty(key,null);
 	}
 	public Object getProperty(String key, Object def) {
-		if(configuration.properties!=null) {
-			return configuration.properties.get(key);
-		}
-		return def;
+		Map<String,Object> properties = configuration.properties;
+		Object v = properties!=null ? properties.get(key) : null;
+		return v!=null ? v : def;
 	}
 
 	public boolean getPropertyBoolean(String key) {
@@ -1096,7 +1055,8 @@ public final class JSEnvironment implements JSConfiguration {
 	// Regular Expression
 	/////////////////////////////////////////////////////////////////////////
 
-	public synchronized Pattern getRegExp(String expr, Function<String,Pattern> factory) {
+	// The cache has its own lock (and compiles outside of it)
+	public Pattern getRegExp(String expr, Function<String,Pattern> factory) {
 		CacheProvider<String,Pattern> regExpCache = sharedData.getRegExpCache();
 		if(regExpCache!=null) {
 			return regExpCache.get(expr, factory);
@@ -1200,7 +1160,7 @@ public final class JSEnvironment implements JSConfiguration {
 		// context, and the cache has no way to distinguish the two - so bypass it
 		// in that case.
 		if(addToCache && !commonJS && !forceStrict && callerFactsPermissive) {
-			CacheProvider<String,ASTProgram> cache = sharedData.getScriptCache();
+			CacheProvider<String,ASTProgram> cache = getProgramCache(flags);
 			if(cache!=null) {
 				ASTProgram program = cache.get(text, (t) -> compileProgram(t,moduleName,flags));
 				return createUnit(program,moduleName);
@@ -1210,6 +1170,15 @@ public final class JSEnvironment implements JSConfiguration {
 		return createUnit(program,moduleName);
 	}
 
+
+	// The program compiled from a text depends on the flags, not only on the
+	// text: eval code has its own cache, module code is never cached.
+	private CacheProvider<String,ASTProgram> getProgramCache(int flags) {
+		if((flags & SCRIPT_MODULE)!=0) {
+			return null;
+		}
+		return (flags & SCRIPT_EVAL)!=0 ? sharedData.getEvalCache() : sharedData.getScriptCache();
+	}
 
 	////
 	// That should be protected
@@ -1238,16 +1207,7 @@ public final class JSEnvironment implements JSConfiguration {
 		return createScript(text, moduleName, SCRIPT_ADDTOCACHE | SCRIPT_EVAL, forceStrict, callerHasNewTarget, callerIsMethod, callerIsDerivedCtor, callerInParameterExpressionScope, callerInFieldInitializer, callerPrivateNames);
 	}
 	public JSInterpretedUnit createEvalScript(String text, String moduleName, int flags) {
-		boolean addToCache = (flags & SCRIPT_ADDTOCACHE)!=0;
-		if(addToCache) {
-			CacheProvider<String,ASTProgram> cache = sharedData.getEvalCache();
-			if(cache!=null) {
-				ASTProgram program = cache.get(text, (t) -> compileProgram(t,moduleName,flags));
-				return createUnit(program,moduleName);
-			}
-		}
-		ASTProgram program = compileProgram(text,moduleName,flags);
-		return createUnit(program,moduleName);
+		return createScript(text, moduleName, flags | SCRIPT_EVAL);
 	}
 	public ASTFunctionDecl createFunction(String text) {
 		return compileFunction(text);
@@ -1478,6 +1438,8 @@ public final class JSEnvironment implements JSConfiguration {
 	}
 
 	private static void addToGroup(java.util.List<java.lang.ref.WeakReference<JSEnvironment>> group, JSEnvironment e) {
+		// Drop the realms that were garbage collected
+		group.removeIf(r -> r.get()==null);
 		for(java.lang.ref.WeakReference<JSEnvironment> r: group) {
 			if(r.get()==e) {
 				return;
@@ -1494,13 +1456,7 @@ public final class JSEnvironment implements JSConfiguration {
 		for(java.lang.ref.WeakReference<JSEnvironment> r: group) {
 			JSEnvironment other = r.get();
 			if(other!=null && other!=this) {
-				PrimitivePropertyMap m = switch(kind) {
-					case PROPERTIES_OBJECT -> other.objectProperties;
-					case PROPERTIES_STRING -> other.stringProperties;
-					case PROPERTIES_NUMBER -> other.numberProperties;
-					case PROPERTIES_BOOLEAN -> other.booleanProperties;
-					default -> other.symbolProperties;
-				};
+				PrimitivePropertyMap m = other.propertyMap(kind);
 				if(m!=null) {
 					org.monflabs.galtajs.jsonfactory.JSObjectImpl v = m.getLocal(key);
 					if(v!=null) {
