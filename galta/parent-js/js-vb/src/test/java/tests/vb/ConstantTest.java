@@ -48,4 +48,13 @@ public class ConstantTest extends ValueBindingTestCase {
 		ctx.createVariable("abc",345,VAR_TYPE.CONST);
 		assertEquals(345,e.evaluate(ctx));
 	}
+
+	public void testInterpolationUsesJsToString() throws Exception {
+		JSEnvironment env = TestEnvironment.create();
+		InterpretedGlobalRuntimeContext ctx = new InterpretedGlobalRuntimeContext(env,env.createProgramExecutor());
+		ctx.createVariable("d",3.0,VAR_TYPE.CONST);
+		// JS ToString, not Java's: "3" not "3.0", "1e+21" not "1.0E21"
+		ValueBinding e = expressionFactory.createValueBinding("d=${d} half=${1/2} big=${1e21} b=${true}");
+		assertEquals("d=3 half=0.5 big=1e+21 b=true", e.evaluate(ctx));
+	}
 }

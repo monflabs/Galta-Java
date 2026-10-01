@@ -21,6 +21,7 @@ import java.util.List;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.JSException;
 import org.monflabs.galtajs.modules.JSInterpretedUnit;
+import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.interpreter.InterpretedGlobalRuntimeContext;
 import org.monflabs.galtajs.vb.impl.GaltaJSValueBinding;
 import org.monflabs.galtajs.vb.impl.IdentityValueBinding;
@@ -31,9 +32,11 @@ public class ValueBindingFactory {
 	public static final String DEFAULT_EL_END			= "}";
 
 	public static class MultiPartScriptExpression extends ValueBinding {
+		private final JSEnvironment env;
 		List<ValueBinding> expressions;
-		private MultiPartScriptExpression(String expression, List<ValueBinding>  expressions) {
+		private MultiPartScriptExpression(JSEnvironment env, String expression, List<ValueBinding>  expressions) {
 			super(expression);
+			this.env = env;
 			this.expressions = expressions;
 		}
 		@Override
@@ -51,8 +54,8 @@ public class ValueBindingFactory {
 			for(int i=0; i<expressions.size(); i++) {
 				Object v = expressions.get(i).evaluate(context);
 				if(v!=null) {
-					String s = v.toString();
-					builder.append(s);
+					// JS ToString, not Java's: 3 renders "3", not "3.0"
+					builder.append(RuntimeUtil.toString(env, v));
 				}
 			}
 			return builder.toString();
@@ -167,7 +170,7 @@ public class ValueBindingFactory {
 			if(exprs.size()==1) {
 				return exprs.get(0);
 			}
-			return new MultiPartScriptExpression(expression,exprs);
+			return new MultiPartScriptExpression(env,expression,exprs);
 		}
 
 		return new IdentityValueBinding(expression);

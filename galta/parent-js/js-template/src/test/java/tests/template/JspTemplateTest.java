@@ -16,6 +16,8 @@
 package tests.template;
 
 import org.monflabs.galtajs.JSEnvironment;
+import org.monflabs.galtajs.rt.builtins.Callable;
+import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext.VAR_TYPE;
 import org.monflabs.galtajs.rt.interpreter.InterpretedGlobalRuntimeContext;
 import org.monflabs.galtajs.template.TemplateEngine;
 import org.monflabs.galtajs.template.engines.JspTemplateEngine;
@@ -70,6 +72,31 @@ public class JspTemplateTest extends ProjectTestCase {
 		TemplateEngine engine = createEngine();
 		String txt = engine.execute(createContext(),"a', b\", c\\, d\n, e\r, f\u0001, g\u1234");
 		support.assertTextResult(txt, "escape.txt");
+	}
+
+	public void testTwiceOnTheSameContext() throws Exception {
+		TemplateEngine engine = createEngine();
+		InterpretedGlobalRuntimeContext context = createContext();
+		// __emit__ is a const of the context: the second execution used to
+		// fail redeclaring it
+		assertEquals("a=2", engine.execute(context,"a=<%=1+1%>"));
+		assertEquals("b=4", engine.execute(context,"b=<%=2+2%>"));
+	}
+
+	public void testNestedOnTheSameContext() throws Exception {
+		TemplateEngine engine = createEngine();
+		InterpretedGlobalRuntimeContext context = createContext();
+		assertEquals("outer", engine.execute(context,"outer"));
+		// A template run from within another one writes to its own output
+		Callable inner = (thisObj, args) -> engine.execute(context, "[inner]");
+		context.createVariable("runInner", inner, VAR_TYPE.CONST);
+		assertEquals("x[inner]y", engine.execute(context,"x<%=runInner()%>y"));
+	}
+
+	public void testJsToString() throws Exception {
+		TemplateEngine engine = createEngine();
+		// JS ToString, not Java's: "3" not "3.0", "0" for -0, "1e+21" not "1.0E21"
+		assertEquals("3 0.5 0 1e+21 true", engine.execute(createContext(),"<%=3.0%> <%=1/2%> <%=-0%> <%=1e21%> <%=true%>"));
 	}
 
 	public void testStatementLineBreaks() throws Exception {
