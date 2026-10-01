@@ -169,11 +169,9 @@ public interface JSArray extends JSObjectDelegate {
 	public default JSObject getOwnPropertyDescriptors(JSObject descriptors) {
 		// Must not go through getProperty()/arrayForEach - that would invoke
 		// index accessor getters merely to report their descriptor shape.
-		int size = (int)arrayLength();
-		for(int i=0; i<size; i++) {
-			if(arrayHas(i)) {
-				descriptors.setOwnProperty(Long.toString(i),getOwnPropertyDescriptor(i));
-			}
+		for(LongIterator it=nonHoleIndices(); it.hasNext(); ) {
+			long i = it.next();
+			descriptors.setOwnProperty(Long.toString(i),getOwnPropertyDescriptor(i));
 		}
 		descriptors.setOwnProperty("length",arrayLengthDescriptor());
 		return JSObjectDelegate.super.getOwnPropertyDescriptors(descriptors);
@@ -777,9 +775,6 @@ public interface JSArray extends JSObjectDelegate {
 		return true;
 	}
 
-	public default void arrayForEachReverse(EntryConsumer c, boolean emptyItems, Object emptyValue) {
-		arrayForEachWhileReverse( (i,v) -> {c.process(i,v); return true;}, 0, emptyItems, emptyValue);
-	}
 	public default boolean arrayForEachWhileReverse(EntryConsumerWhile c, long start, boolean emptyItems, Object emptyValue) {
 		return arrayForEachWhileReverse(c, start, emptyItems, emptyValue, arrayLength());
 	}

@@ -287,6 +287,26 @@ public abstract class JSObjectImpl extends JsonObjectAsScriptMap implements Priv
 		return symbols.put(key,value,descriptor,check,receiver);
 	}
 
+	// Copies the own string- and symbol-keyed properties of `source`, with
+	// their descriptors and integrity level, into this (empty) object - used
+	// to deep-copy an array's non-index members on clone().
+	void copyOwnPropertiesFrom(JSObjectImpl source) {
+		putAll(source);
+		if(source.symbols!=null) {
+			if(symbols==null) {
+				symbols = new SymbolPropertyMap(this);
+			}
+			symbols.putAll(source.symbols);
+		}
+		if(source.isFrozen()) {
+			freeze();
+		} else if(source.isSealed()) {
+			seal();
+		} else if(!source.isExtensible()) {
+			preventExtensions();
+		}
+	}
+
 	@Override
 	public boolean deleteProperty(String key, DESC_CHECK check) {
 		return remove(key,check);

@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 
 import org.monflabs.galtajs.jsonfactory.JSObject.DESC_CHECK;
 import org.monflabs.galtajs.rt.RuntimeUtil;
@@ -60,8 +59,6 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 	// this exists) - null whenever no integer-key entry is currently
 	// present. Kept in sync on removal by unlinkFromList()'s own check.
 	private EntryImpl<K> lastIntegerKeyEntry;
-
-	private boolean hasSoftDeletions;
 
 	public static final class EntryImpl<K> implements Map.Entry<K, Object> {
 		private boolean removed;
@@ -213,26 +210,42 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 		}
 	}
 
+	/**
+	 * @deprecated iterators no longer need soft deletion (see
+	 *             {@link #liveSuccessor}); kept so subclasses overriding it
+	 *             still compile. Never called.
+	 */
+	@Deprecated
 	protected boolean isShouldSoftDelete() {
 		return false;
 	}
 
+	/**
+	 * @deprecated see {@link #isShouldSoftDelete()}. Never called.
+	 */
+	@Deprecated
 	protected void setShouldSoftDelete(boolean shouldSoftDelete) {
 	}
 
-	private void clearSoftDeletions() {
-		if (!hasSoftDeletions) {
-			return;
+	// Entry that follows `pos` in the current list, `pos` being the last entry
+	// an iterator returned (null: none yet). Entries are unlinked as soon as
+	// they are removed, but a removed entry keeps its own listPrev/listNext
+	// pointers, so an iterator positioned on one can still find its way back:
+	// walk listPrev back to the nearest entry still in the list (necessarily
+	// already visited) and continue from its successor - or from the head when
+	// everything before was removed too. Going back rather than forward
+	// matters: a removed tail's listNext stays null even after new entries are
+	// appended to the list, which the spec requires Map/Set iteration to visit.
+	// No tombstones are left behind, so abandoned or concurrent iterators cost
+	// nothing.
+	private EntryImpl<K> liveSuccessor(EntryImpl<K> pos) {
+		while (pos != null && pos.removed) {
+			pos = pos.listPrev;
 		}
-		for (EntryImpl<K> e = listFirst; e != null; e = e.listNext) {
-			if (e.removed) {
-				unlinkFromList(e);
-			}
-		}
-		hasSoftDeletions = false;
+		return pos == null ? listFirst : pos.listNext;
 	}
 
-	// Shared by every removal path (clearSoftDeletions() above, remove(Object),
+	// Shared by every removal path (remove(Object),
 	// remove(K,DESC_CHECK), removeEntry() below) - factored out so the
 	// lastIntegerKeyEntry bookkeeping insertInLinkedList()'s fast path
 	// relies on only has to be kept correct in ONE place instead of once
@@ -703,11 +716,7 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 					elementCount--;
 
 					entry.removed = true;
-					if (!isShouldSoftDelete()) {
-						unlinkFromList(entry);
-					} else {
-						hasSoftDeletions = true;
-					}
+					unlinkFromList(entry);
 					return entry.value;
 				}
 				lastEntry = entry;
@@ -745,11 +754,7 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 					elementCount--;
 
 					entry.removed = true;
-					if (!isShouldSoftDelete()) {
-						unlinkFromList(entry);
-					} else {
-						hasSoftDeletions = true;
-					}
+					unlinkFromList(entry);
 					return true;
 				}
 				lastEntry = entry;
@@ -792,11 +797,7 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 					elementCount--;
 
 					entry.removed = true;
-					if (!isShouldSoftDelete()) {
-						unlinkFromList(entry);
-					} else {
-						hasSoftDeletions = true;
-					}
+					unlinkFromList(entry);
 					return true;
 				}
 				lastEntry = entry;
@@ -809,87 +810,66 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 	@Override
 	public void clear() {
 		if(elementCount>0) {
-			// Reset regardless of soft/hard delete below: even on the soft
-			// path, insertInLinkedList()'s fast path must not go on
-			// splicing new entries next to what's about to become a
-			// removed, soon-to-be-unlinked node - falling back to its slow
-			// scan once (safe, just not the fast path that one time) is
-			// preferable to relying on clearSoftDeletions() to untangle it
-			// correctly later.
-			this.lastIntegerKeyEntry = null;
-			if(!isShouldSoftDelete()) {
-				this.listFirst = this.listLast = null;
-			} else {
-				for (EntryImpl<K> e = listFirst; e != null; e = e.listNext) {
-					e.removed = true;
-				}
-				hasSoftDeletions = true;
+			// Every entry is flagged removed (live iterators then restart from
+			// the - new - head, see liveSuccessor(), and cached entries such as
+			// ASTMember's PropIC see them as stale); the entries' own list
+			// pointers are left intact.
+			for (EntryImpl<K> e = listFirst; e != null; e = e.listNext) {
+				e.removed = true;
 			}
+			this.listFirst = this.listLast = null;
+			this.lastIntegerKeyEntry = null;
 			elementCount = 0;
 			elementData = null;
 			threshold = 0;
 		}
 	}
 
-	private EntryImpl<K> first(boolean enumerableOnly) {
-		EntryImpl<K> next = listFirst;
-		while (next != null && (next.removed || (enumerableOnly && !next.descriptor.isEnumerable()))) {
-			next = next.listNext;
-		}
-		return next;
-	}
-
-	// Iterator that supports concurrent updates
-	// This is necessary for JavaScript object like Map or Set
+	// Iterator that supports concurrent updates, as JavaScript requires for
+	// Map, Set and property enumeration: entries added before the iteration
+	// reaches them are visited, removed ones are not.
 	private abstract class CollectionIterator<IT> implements Iterator<IT> {
 
-		private boolean enumerableOnly;
-		private EntryImpl<K> next;
+		private final boolean enumerableOnly;
+		// Last entry returned (null: none yet)
+		private EntryImpl<K> current;
+		// Look-ahead computed by hasNext(), valid while pendingRead is true
+		private EntryImpl<K> pending;
+		private boolean pendingRead;
 		private EntryImpl<K> toDelete;
-
-		// Defer read next to support concurrent update
-		private boolean shouldReadNext;
 
 		protected CollectionIterator(boolean enumerableOnly) {
 			this.enumerableOnly = enumerableOnly;
-			this.shouldReadNext = true;
-			setShouldSoftDelete(true);
 		}
 
 		private void readNext() {
-			if (next == null) {
-				toDelete = next = first(enumerableOnly);
-			} else {
-				do {
-					next = next.listNext;
-				} while (next != null && (next.removed || (enumerableOnly && !next.descriptor.isEnumerable())));
-				toDelete = next;
+			// Recomputed when the look-ahead got removed since. Reaching the
+			// end is final, as for a JS Map/Set iterator ([[Done]])
+			if (pendingRead && (pending == null || !pending.removed)) {
+				return;
 			}
-			this.shouldReadNext = false;
-			// In case we reached the end.
-			if (next == null) {
-				setShouldSoftDelete(false);
-				clearSoftDeletions();
+			EntryImpl<K> e = liveSuccessor(current);
+			while (e != null && enumerableOnly && !e.descriptor.isEnumerable()) {
+				e = e.listNext;
 			}
+			pending = e;
+			pendingRead = true;
 		}
 
 		@Override
 		public boolean hasNext() {
-			if (shouldReadNext) {
-				readNext();
-			}
-			return next != null;
+			readNext();
+			return pending != null;
 		}
 
 		public EntryImpl<K> nextEntry() {
-			if (shouldReadNext) {
-				readNext();
+			readNext();
+			if (pending == null) {
+				throw new NoSuchElementException();
 			}
-			if (next != null) {
-				this.shouldReadNext = true;
-				return next;
-			}
-			throw new NoSuchElementException();
+			current = toDelete = pending;
+			pendingRead = false;
+			return current;
 		}
 
 		@Override
@@ -965,41 +945,6 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 		public boolean remove(Object key) {
 			return CustomLinkedMap.this.remove(key) != null;
 		}
-
-		@Override
-		public Object[] toArray() {
-			return toArray(new Object[elementCount]);
-		}
-
-		@SuppressWarnings("unchecked")
-		@Override
-		public Object[] toArray(Object[] a) {
-			int i = 0;
-			for (EntryImpl<K> e = listFirst; e != null; e = e.listNext) {
-				if (!e.removed) {
-					a[i++] = e.key;
-				}
-			}
-			return a;
-		}
-
-		@Override
-		public void forEach(Consumer<? super K> action) {
-			if (action == null) {
-				throw new NullPointerException();
-			}
-			setShouldSoftDelete(true);
-			try {
-				for (EntryImpl<K> e = listFirst; e != null; e = e.listNext) {
-					if (!e.removed) {
-						action.accept(e.key);
-					}
-				}
-			} finally {
-				setShouldSoftDelete(false);
-				clearSoftDeletions();
-			}
-		}
 	}
 
 	private Collection<Object> values;
@@ -1049,7 +994,7 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 
 		@Override
 		public boolean isEmpty() {
-			return elementCount != 0;
+			return elementCount == 0;
 		}
 
 		@Override
@@ -1133,56 +1078,34 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 		@SuppressWarnings("unchecked")
 		@Override
 		public boolean contains(Object o) {
-			if (!(o instanceof Map.Entry<?, ?> e)) {
-				return false;
-			}
-			Object key = e.getKey();
-			EntryImpl<K> candidate = getEntry((K) key);
-			return candidate != null && candidate.equals(e);
+			return findEntry(o) != null;
 		}
 
-		@Override
-		public boolean remove(Object key) {
-			return CustomLinkedMap.this.remove(key) != null;
-		}
-
-//        @Override
-//		public Spliterator<Map.EntryImpl<String,Object>> spliterator() {
-//            throw new NotImplementedException();
-//        }
-		@Override
-		public Object[] toArray() {
-			return toArray(new Object[elementCount]);
-		}
-
+		// The live entry matching the Map.Entry `o` (same key, equal value)
 		@SuppressWarnings("unchecked")
-		@Override
-		public Object[] toArray(Object[] a) {
-			int i = 0;
-			for (EntryImpl<K> e = listFirst; e != null; e = e.listNext) {
-				if (!e.removed) {
-					a[i++] = e;
-				}
+		private EntryImpl<K> findEntry(Object o) {
+			if (!(o instanceof Map.Entry<?, ?> e)) {
+				return null;
 			}
-			return a;
+			EntryImpl<K> candidate;
+			try {
+				candidate = getEntry((K) e.getKey());
+			} catch (ClassCastException ex) {
+				return null;
+			}
+			if (candidate == null || (enumerableOnly && !candidate.descriptor.isEnumerable())) {
+				return null;
+			}
+			if (candidate != e && !java.util.Objects.equals(candidate.resolveValue(CustomLinkedMap.this), e.getValue())) {
+				return null;
+			}
+			return candidate;
 		}
 
 		@Override
-		public void forEach(Consumer<? super Map.Entry<K, Object>> action) {
-			if (action == null) {
-				throw new NullPointerException();
-			}
-			setShouldSoftDelete(true);
-			try {
-				for (EntryImpl<K> e = listFirst; e != null; e = e.listNext) {
-					if (!e.removed) {
-						action.accept(e);
-					}
-				}
-			} finally {
-				setShouldSoftDelete(false);
-				clearSoftDeletions();
-			}
+		public boolean remove(Object o) {
+			EntryImpl<K> e = findEntry(o);
+			return e != null && CustomLinkedMap.this.remove(e.key, DESC_CHECK.NONE);
 		}
 	}
 

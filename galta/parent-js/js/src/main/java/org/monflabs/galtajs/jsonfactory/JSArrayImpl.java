@@ -254,7 +254,8 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 	@Override
 	public LongIterator nonHoleIndices() {
 		long length = arrayLength();
-		if(sparseArray!=null && length==sparseArray.size() && !prototypeChainMayHaveNumberProp()) {
+		// (Not with index accessors: an accessor-only index is not stored in sparseArray)
+		if(sparseArray!=null && indexAccessors==null && length==sparseArray.size() && !prototypeChainMayHaveNumberProp()) {
 			return sparseArray.keys(false);
 		}
 		// Duplicated from JSArray's own default (not reachable via
@@ -288,7 +289,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 	}
 	@Override
 	public boolean arrayForEachWhile(EntryConsumerWhile c, long start, boolean emptyItems, Object emptyValue, long len) {
-		if(!emptyItems && sparseArray!=null && len==sparseArray.size() && !prototypeChainMayHaveNumberProp()) {
+		if(!emptyItems && sparseArray!=null && indexAccessors==null && len==sparseArray.size() && !prototypeChainMayHaveNumberProp()) {
 			return sparseArray.forEachWhile(c, start, false, emptyValue);
 		}
 		// Duplicated from JSArray's own default (not reachable via
@@ -771,7 +772,11 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 					sparseArray.remove((int)index);
 				} else {
 					long listIndex = index - firstItem;
-					if(listIndex>=0 && listIndex<super.size()) {
+					if(listIndex<0) {
+						// Removing one of the leading holes: the stored
+						// elements all move down by one index
+						firstItem--;
+					} else if(listIndex<super.size()) {
 						_remove((int)listIndex);
 					}
 					// The JS length must shrink by one regardless of whether
@@ -880,6 +885,34 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 	// All list methods overridden
 	//
 
+	// The java.util.List view of the JavaScript array: index i is the JS
+	// index, a hole reads as undefined. The raw ArrayList storage is offset
+	// by firstItem and holds HOLE sentinels, so it must never be exposed.
+	private List<Object> listView() {
+		return new java.util.AbstractList<Object>() {
+			@Override
+			public Object get(int index) {
+				return JSArrayImpl.this.get(index);
+			}
+			@Override
+			public int size() {
+				return JSArrayImpl.this.size();
+			}
+			@Override
+			public Object set(int index, Object element) {
+				return JSArrayImpl.this.set(index, element);
+			}
+			@Override
+			public void add(int index, Object element) {
+				JSArrayImpl.this.add(index, element);
+			}
+			@Override
+			public Object remove(int index) {
+				return JSArrayImpl.this.remove(index);
+			}
+		};
+	}
+
 	@Override
 	public Object get(int index) {
 		// Consult a tracked getter/setter accessor (installed via
@@ -916,7 +949,13 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		}
 		long listIndex = (long)index - firstItem;
 		if(listIndex>=0 && listIndex<super.size()) {
-			return _set((int)listIndex, value);
+			Object old = _set((int)listIndex, value);
+			return old==HOLE ? RuntimeUtil.UNDEFINED : old;
+		}
+		if(index>=0 && index<arrayLength()) {
+			// A leading or trailing hole
+			arraySet(index, value, DESC_CHECK.NONE);
+			return RuntimeUtil.UNDEFINED;
 		}
 		throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size());
     }
@@ -947,13 +986,9 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.remove(index);
 		}
-		long listIndex = (long)index - firstItem;
-		if(listIndex>=0 && listIndex<super.size()) {
-			Object old = _remove((int)listIndex);
-			if(lastItem > 0) lastItem--;
-			return old;
-		}
-		return RuntimeUtil.UNDEFINED;
+		Object old = get(index);
+		arrayRemove(index, DESC_CHECK.NONE);
+		return old;
     }
 
 
@@ -963,7 +998,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 			sparseArray.forEach(action);
 			return;
 		}
-		super.forEach(v -> action.accept(v==HOLE ? RuntimeUtil.UNDEFINED : v));
+		listView().forEach(action);
 	}
 
 	@Override
@@ -971,7 +1006,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.hashCode();
 		}
-		return super.hashCode();
+		return listView().hashCode();
 	}
 
 	@Override
@@ -979,7 +1014,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.equals(obj);
 		}
-		return super.equals(obj);
+		return listView().equals(obj);
 	}
 
 	@Override
@@ -987,6 +1022,15 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		JSArrayImpl c = (JSArrayImpl)super.clone();
 		if(sparseArray!=null) {
 			c.sparseArray = sparseArray.clone();
+		}
+		// The clone must not share its non-index members or index accessors
+		// with the original
+		if(members!=null) {
+			c.members = JSObject.createWithPrototype(env, members.getPrototype());
+			c.members.copyOwnPropertiesFrom(members);
+		}
+		if(indexAccessors!=null) {
+			c.indexAccessors = new HashMap<>(indexAccessors);
 		}
 		return c;
 	}
@@ -1068,7 +1112,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.contains(o);
 		}
-		return super.contains(o);
+		return listView().contains(o);
 	}
 
 	@Override
@@ -1076,7 +1120,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.iterator();
 		}
-		return super.iterator();
+		return listView().iterator();
 	}
 
 	@Override
@@ -1116,7 +1160,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.containsAll(c);
 		}
-		return super.containsAll(c);
+		return listView().containsAll(c);
 	}
 
 	@Override
@@ -1136,8 +1180,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 			}
 			return (int)idx;
 		}
-		int idx = super.indexOf(value);
-		return idx < 0 ? -1 : (int)(idx + firstItem);
+		return listView().indexOf(value);
 	}
 
 	@Override
@@ -1149,8 +1192,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 			}
 			return (int)idx;
 		}
-		int idx = super.lastIndexOf(value);
-		return idx < 0 ? -1 : (int)(idx + firstItem);
+		return listView().lastIndexOf(value);
 	}
 
 	@Override
@@ -1158,7 +1200,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.listIterator();
 		}
-		return super.listIterator();
+		return listView().listIterator();
 	}
 
 	@Override
@@ -1166,7 +1208,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.listIterator(index);
 		}
-		return super.listIterator(index);
+		return listView().listIterator(index);
 	}
 
 	@Override
@@ -1174,7 +1216,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.subList(fromIndex,toIndex);
 		}
-		return super.subList(fromIndex,toIndex);
+		return listView().subList(fromIndex,toIndex);
 	}
 
 	@Override
@@ -1208,7 +1250,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.spliterator();
 		}
-		return super.spliterator();
+		return listView().spliterator();
 	}
 
 	@Override
@@ -1216,7 +1258,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.stream();
 		}
-		return super.stream();
+		return listView().stream();
 	}
 
 	@Override
@@ -1224,7 +1266,7 @@ public abstract class JSArrayImpl extends JsonArrayAsArrayList implements JSArra
 		if(sparseArray!=null) {
 			return sparseArray.parallelStream();
 		}
-		return super.parallelStream();
+		return listView().parallelStream();
 	}
 
 
