@@ -255,7 +255,7 @@ public class VariableMap {
 	public Object get(String varName) {
 		VariableEntry e = getEntry(varName);
 		if(e==null) {
-			throw RuntimeUtil.typeError("Variable {0} is not available");
+			throw RuntimeUtil.typeError("Variable {0} is not available", varName);
 		}
 		return e.getValue();
 	}

@@ -103,9 +103,9 @@ import org.monflabs.util.iterators.Iterators;
  */
 public class RuntimeUtil {
 	
-	public static Object[] EMPTY_PARAMS = new Object[0];
+	public static final Object[] EMPTY_PARAMS = new Object[0];
 	//public static final long _2_POWER_53 = 9007199254740992L;
-	public static BigInteger BIGINT_MAX_INT = BigInteger.valueOf(Integer.MAX_VALUE);
+	public static final BigInteger BIGINT_MAX_INT = BigInteger.valueOf(Integer.MAX_VALUE);
 
 	// So the class in named and identifiable when debugging.
 	private static class Unavailable {
@@ -1021,8 +1021,9 @@ public class RuntimeUtil {
 	// new Number(12) == 12                <- true
 	public static boolean eq(JSEnvironment env, Object o1, Object o2) {
 		if(o1==o2) {
-			if(o1 instanceof Double d) {
-				return !Double.isNaN(d);
+			// NaN != NaN, but a boxed `new Number(NaN)` is an object, equal to itself
+			if(o1 instanceof Double d && Double.isNaN(d)) {
+				return isBoxedNumber(env,d);
 			}
 			return true;
 		}
@@ -1778,6 +1779,8 @@ public class RuntimeUtil {
         		return b1.shiftLeft(b2.intValueExact());
         	}
         	case NUMBER_NAN: {
+        		// A NaN shift count is 0. BigInt and Number cannot be mixed.
+        		checkNaNShiftOperands(env, n1, n2);
         		if(numberType(n1)==NUMBER_NAN) {
         			return 0;
         		}
@@ -1816,6 +1819,8 @@ public class RuntimeUtil {
         		return b1.shiftRight(b2.intValueExact());
         	}
         	case NUMBER_NAN: {
+        		// A NaN shift count is 0. BigInt and Number cannot be mixed.
+        		checkNaNShiftOperands(env, n1, n2);
         		if(numberType(n1)==NUMBER_NAN) {
         			return 0;
         		}
@@ -1829,6 +1834,11 @@ public class RuntimeUtil {
         	}
         }
 		throw binary(">>", o1, o2);
+	}
+	private static void checkNaNShiftOperands(JSEnvironment env, Number n1, Number n2) {
+		if(!env.supportMixedBigNumber() && (isBigNumber(n1) || isBigNumber(n2))) {
+			throw RuntimeUtil.typeError("Invalid operation between a number and a BigInt/BigDecimal");
+		}
 	}
 	public static Object runshift(JSEnvironment env, Object o1, Object o2) {
 		// Phase 5b: Integer+Integer inline fast path. Result type is Long
@@ -1855,13 +1865,15 @@ public class RuntimeUtil {
 				throw RuntimeUtil.typeError("BigNumber have no unsigned right shift, use >> instead");
         	}
         	case NUMBER_NAN: {
+        		// A NaN shift count is 0. BigInt and Number cannot be mixed.
+        		checkNaNShiftOperands(env, n1, n2);
         		if(numberType(n1)==NUMBER_NAN) {
         			return 0;
         		}
     			if(isBigNumber(n1)) {
     				return JsonUtil.toBigInteger(n1);
     			}
-    			return toInt32(n1); 
+    			return toUInt32(n1);
         	}
         	case NUMBER_MIXED: {
 				throw RuntimeUtil.typeError("Invalid operation between a number and a BigInt/BigDecimal");
@@ -2043,7 +2055,7 @@ public class RuntimeUtil {
 					else if(c==Double.TYPE) c = Double.class;
 					else if(c==Boolean.TYPE) c = Boolean.class;
 				}
-				return c.isAssignableFrom(leftValue.getClass());
+				return leftValue!=null && c.isAssignableFrom(leftValue.getClass());
 			}
 		}
 
@@ -2268,20 +2280,10 @@ public class RuntimeUtil {
 			return b.booleanValue() ? 1 : 0;
 		}
 		if(v instanceof CharSequence) {
-			String s = v.toString();
 			if(isBoxedString(env,v)) {
 				return toNumber(env,toPrimitive(env,v,HINT.NUMBER));
 			}
-			try {
-				s = trimWhiteSpaces(s);
-				if(s.length()==0) {
-					return 0;
-				}
-				int options = 0;
-				return env.getJsonFactory().parseNumber(s,options);
-			} catch(Exception ex) {
-				return Double.NaN;
-			}
+			return stringToNumber(env,v.toString());
 		}
 		if(v instanceof Symbol) {
 			// A boxed Symbol goes through ToPrimitive like any other wrapper (an
@@ -2311,20 +2313,10 @@ public class RuntimeUtil {
 			return b.booleanValue() ? 1 : 0;
 		}
 		if(v instanceof CharSequence) {
-			String s = v.toString();
 			if(isBoxedString(env,v)) {
 				return toNumberPreservingBigInt(env,toPrimitive(env,v,HINT.NUMBER));
 			}
-			try {
-				s = trimWhiteSpaces(s);
-				if(s.length()==0) {
-					return 0;
-				}
-				int options = 0;
-				return env.getJsonFactory().parseNumber(s,options);
-			} catch(Exception ex) {
-				return Double.NaN;
-			}
+			return stringToNumber(env,v.toString());
 		}
 		if(v instanceof Symbol) {
 			if(isBoxedSymbol(env,v)) {
@@ -2381,6 +2373,29 @@ public class RuntimeUtil {
     			return Character.getType(c) == Character.SPACE_SEPARATOR;
     	}
     }	
+	// ToNumber applied to a string. A text that cannot start a numeric
+	// literal is NaN right away, without going through the parser's
+	// exception.
+	private static Number stringToNumber(JSEnvironment env, String s) {
+		s = trimWhiteSpaces(s);
+		int len = s.length();
+		if(len==0) {
+			return 0;
+		}
+		char c = s.charAt(0);
+		if((c=='+' || c=='-') && len>1) {
+			c = s.charAt(1);
+		}
+		if(!((c>='0' && c<='9') || c=='.' || c=='I' || c=='N')) {
+			return Double.NaN;
+		}
+		try {
+			return env.getJsonFactory().parseNumber(s,0);
+		} catch(Exception ex) {
+			return Double.NaN;
+		}
+	}
+
     public static String trimWhiteSpaces(String s) {
         int len = s.length();
         int start = 0;
@@ -2410,28 +2425,6 @@ public class RuntimeUtil {
         return end<len ? s.substring( 0, end ) : s;
     }	    
     
-	public static Number toDecimalNumber(JSEnvironment env, Object v) {
-		if(v==null) {
-			return 0.0;
-		}
-		if(v==UNDEFINED) {
-			return Double.NaN;
-		}
-		if(v instanceof Number) {
-			if(v instanceof Double n) {
-				return n;
-			} else if(v instanceof Float n) {
-				return n.doubleValue();
-			} else if(v instanceof BigDecimal n) {
-				return n;
-			} else if(v instanceof BigInteger n) {
-				return toBigDecimal(env,n);
-			} else {
-				return ((Number)v).doubleValue();
-			}
-		}
-		return toDecimalNumber(env,toNumber(env,v));	
-	}
 	// ToIntegerOrInfinity narrowed to a Java int: NaN -> 0, +/-Infinity (and
 	// anything beyond the int range) CLAMP to Integer.MAX_VALUE/MIN_VALUE.
 	// That is the right contract for every caller spec'd via
@@ -2620,9 +2613,8 @@ public class RuntimeUtil {
         return i;
 	}
 	public static int toInt32(long l) {
-		// If this right??
-        return (int)(l >= MIN_PRECISE_DOUBLE && l <= MAX_PRECISE_DOUBLE ? l : (long)(l % INT32_LIMIT));
-		//return (int)l;
+		// An exact integer: ToInt32 keeps its low 32 bits
+		return (int)l;
 	}
 	public static int toInt32(double d) {
 		if(Double.isNaN(d) || Double.isInfinite(d)) {
@@ -2685,26 +2677,6 @@ public class RuntimeUtil {
         return DoubleConversion.doubleToInt32(d) & 0xFFFF_FFFFL;
     }	
 
-	public static long toInt64(JSEnvironment env, Object v) {
-		Number n = toNumber(env,v);
-		if(n instanceof Double d) {
-	        return (long)d.doubleValue();
-		} else if(n instanceof Float f) {
-	        return (long)f.doubleValue();
-		}
-		return n.longValue();
-	}
-	
-	public static long toUInt64(JSEnvironment env, Object v) {
-		Number n = toNumber(env,v);
-		if(n instanceof Double d) {
-	        return (long)d.doubleValue();
-		} else if(n instanceof Float f) {
-	        return (long)f.doubleValue();
-		}
-		return n.longValue();
-	}
-    
 	public static boolean isBigNumber(Object n) {
 		return n instanceof BigInteger || n instanceof BigDecimal;
 	}
@@ -3130,69 +3102,41 @@ public class RuntimeUtil {
 	}
 	
 	
+	// The primitive value of `v` when it is a boxed primitive (new Number(5),
+	// Object("a"), ...), `v` itself otherwise. A boxed number or string goes
+	// through ToPrimitive, so an overridden valueOf/toString is honored (and
+	// may return another type: the result is converted back).
 	public static Object objectAsPrimitive(JSEnvironment env, Object v) {
-		if(v==null || v==UNDEFINED) {
+		if(v==UNDEFINED) {
 			return v;
 		}
-		if(v instanceof CharSequence s) {
-			return objectAsPrimitive(env,s);
-		}
-		if(v instanceof Number n) {
-			return objectAsPrimitive(env,n);
-		}
-		if(v instanceof Boolean b) {
-			return objectAsPrimitive(env,b);
-		}
-		if(v instanceof Symbol s) {
-			return objectAsPrimitive(env,s);
-		}
-		throw new IllegalStateException("Value is not a primitive");
+		return switch(v) {
+			case null -> null;
+			case CharSequence s -> objectAsPrimitive(env,s);
+			case Number n -> objectAsPrimitive(env,n);
+			case Boolean b -> objectAsPrimitive(env,b);
+			case Symbol s -> isBoxedSymbol(env,s) ? objectToPrimitive(env,s,HINT.DEFAULT) : s;
+			default -> throw new IllegalStateException("Value is not a primitive");
+		};
 	}
 	public static String objectAsPrimitive(JSEnvironment env, CharSequence v) {
-		if(v instanceof String) { // Consstring cannot be an object
-			PrimitivePropertyMap map = env.getStringProperties();
-			if(map!=null) {
-				if(map.containsKey(v)) {
-					return (String)objectToPrimitive(env,v,HINT.STRING); 
-//					// Make a physical copy of the string
-//					return new String(v.toString());
-				}
-			}
+		if(v instanceof String && isBoxedString(env,v)) { // A ConsString cannot be an object
+			return toString(env,objectToPrimitive(env,v,HINT.STRING));
 		}
 		return v.toString();
 	}
 	public static Number objectAsPrimitive(JSEnvironment env, Number v) {
-		PrimitivePropertyMap map = env.getNumberProperties();
-		if(map!=null) {
-			if(map.containsKey(v)) {
-				return (Number)objectToPrimitive(env,v,HINT.NUMBER); 
-//				if(v instanceof Integer n) {
-//					v = Integer.valueOf(n.intValue());
-//				} else if(v instanceof Long n) {
-//					v = Long.valueOf(n.longValue());
-//				} else if(v instanceof Double n) {
-//					v = Double.valueOf(n.doubleValue());
-//				} else if(v instanceof BigInteger n) {
-//					v = new BigInteger(n.toByteArray());
-//				} else if(v instanceof BigDecimal n) {
-//					v = new BigDecimal(n.unscaledValue(), n.scale(),env.getMathContext());
-//				} else if(v instanceof Byte n) {
-//					v = Byte.valueOf(n.byteValue());
-//				} else if(v instanceof Short n) {
-//					v = Short.valueOf(n.shortValue());
-//				} else if(v instanceof Float n) {
-//					v = Float.valueOf(n.floatValue());
-//				}
-			}
+		if(isBoxedNumber(env,v)) {
+			return toNumeric(env,objectToPrimitive(env,v,HINT.NUMBER));
 		}
 		return v;
 	}
+	// A boxed Boolean gives its [[BooleanData]], not ToPrimitive: what both
+	// callers need (JSON serialization, Boolean()), and ToPrimitive could
+	// return a non-boolean anyway.
 	public static Boolean objectAsPrimitive(JSEnvironment env, Boolean v) {
-		PrimitivePropertyMap map = env.getBooleanProperties();
-		if(map!=null) {
-			if(map.containsKey(v)) {
-				return Boolean.valueOf(v);
-			}
+		if(isBoxedBoolean(env,v)) {
+			return Boolean.valueOf(v);
 		}
 		return v;
 	}
@@ -3200,7 +3144,7 @@ public class RuntimeUtil {
 	
 	public static Object toObject(JSEnvironment env, Object v) {
 		if(v==null || v==UNDEFINED) {
-			throw typeError("Value can be converted to an object, {0}",objectTypeName(env, v));
+			throw typeError("Value cannot be converted to an object, {0}",objectTypeName(env, v));
 		}
 		if(!hasPropertyMap(env, v)) {
 			if(v instanceof CharSequence s) {
@@ -3664,51 +3608,6 @@ public class RuntimeUtil {
 		return new AsyncFromSyncJavaIterator(context, sync, awaitInGenerator);
 	}
 
-//	@SuppressWarnings("unchecked")
-//	public static Iterator<Object> valueIterable(JSEnvironment env, Object o) {
-//		Iterator<Object> it = valueIteratorUnchecked(env,o);
-//		if(it==null) {
-//			// for...of should fail when not an iterable
-//			throw RuntimeUtil.typeError("Object is not an iterable, {0}",objectTypeName(env,o));
-//		}
-//		return it;
-//	}
-//	@SuppressWarnings("unchecked")
-//	public static Iterator<Object> valueIterableUnchecked(JSEnvironment env, Object o) {
-//		if(o==null || o==RuntimeUtil.UNDEFINED) {
-//			return null;
-//		}
-//		
-//		ObjectAccessor acc = env.getAccessor(o);
-//		Object itFactory = acc.getMember(o, Symbol.ITERATOR, RuntimeUtil.NOT_AVAILABLE);
-//		if(itFactory!=RuntimeUtil.NOT_AVAILABLE) {
-//			if(itFactory instanceof Callable cl) {
-//				Object i = cl.call(o,RuntimeUtil.EMPTY_PARAMS);
-//				if(i instanceof BuiltinIterator it) {
-//					return it;
-//				}
-//				// Should have a next() method
-//				if(i instanceof JSObject jso) {
-//					return new BuiltinIteratorHelper(env,new JavaIterator(env,jso));
-//				}
-//			}
-//			throw RuntimeUtil.typeError("[Symbol.iterator] is not an iterator");
-//		}
-//		
-//		if(o instanceof JSContainer) { // Ignore Object or Array as iterable/iterator
-//			return null;
-//		}
-//
-//		// TODO: Can this be moved to the Java accessor as Symbol.ITERATOR.
-//		// This would prevent the JSContainer check below
-//		if(o instanceof Iterable<?> i) {
-//			return (Iterator<Object>) i.iterator();
-//		}
-//
-//		return null;
-//	}
-	
-	
 	// Key with inherited enumerable properties
 	// Used by for...in, includes the inherited properties from the proto
 	public static Iterator<String> keyIterator(JSEnvironment env, Object o) {
@@ -4270,6 +4169,7 @@ public class RuntimeUtil {
 							: RuntimeUtil.importModule(context, specifier);
 					settleOnceModuleReady(context, module, p);
 				} catch(Throwable ex) {
+					rethrowIfUncatchable(ex);
 					p.reject(JSRuntimeException.exceptionObject(ex));
 				}
 			}
@@ -4382,6 +4282,7 @@ public class RuntimeUtil {
 						try {
 							dep.initModule(gc, false);
 						} catch(Throwable ex) {
+							rethrowIfUncatchable(ex);
 							// A synchronous throw (dep's own body errored
 							// entirely within its synchronous prefix, before
 							// any suspension) - moduleStatus/evaluationError
@@ -4394,6 +4295,7 @@ public class RuntimeUtil {
 						dep.addEvaluationCompletionCallback(onDepSettled);
 					}
 				} catch(Throwable ex) {
+					rethrowIfUncatchable(ex);
 					p.reject(JSRuntimeException.exceptionObject(ex));
 				}
 			}
@@ -4933,8 +4835,8 @@ public class RuntimeUtil {
 		JSEnvironment env = ctx.getEnvironment();
 		PrivateName pn = ctx.resolvePrivateName(member);
 		Object v = getPrivateField(leftValue, pn);
-		// Needs to be converted to it returns a number
-		v = toNumber(env,v);
+		// The old value is returned converted: ToNumeric (a BigInt stays one)
+		v = toNumeric(env,v);
 		Object vi = incNumber(env,v);
 		setPrivateField(leftValue,pn,vi);
 		return v;
@@ -4951,8 +4853,8 @@ public class RuntimeUtil {
 		JSEnvironment env = ctx.getEnvironment();
 		PrivateName pn = ctx.resolvePrivateName(member);
 		Object v = getPrivateField(leftValue, pn);
-		// Needs to be converted to it returns a number
-		v = toNumber(env,v);
+		// The old value is returned converted: ToNumeric (a BigInt stays one)
+		v = toNumeric(env,v);
 		Object vi = decNumber(env,v);
 		setPrivateField(leftValue,pn,vi);
 		return v;
@@ -5134,7 +5036,7 @@ public class RuntimeUtil {
         			String k = e.getKey();
 	        		accessor.apply(o, k,
 	        				() -> e.getValue(), 
-	        				forUpdate ? (val) -> o.setOwnProperty(k,e.getValue()) : null,
+	        				forUpdate ? (val) -> o.setOwnProperty(k,val) : null,
 	        				forUpdate ? () -> { if(o.hasProperty(k)) { o.deleteProperty(k); return true; } else { return false; } } : null
 		        		);
         		}
@@ -5169,7 +5071,7 @@ public class RuntimeUtil {
 	        		accessor.apply(a, idx,
 	        				() -> a.getProperty(idx), 
 	        				forUpdate ? (val) -> a.setOwnProperty(idx, val) : null,
-	        				forUpdate ? () -> { if(a.arrayHas(idx)) { a.getProperty(idx); return true; } else { return false; } } : null
+	        				forUpdate ? () -> { if(a.arrayHas(idx)) { a.arrayRemove(idx); return true; } else { return false; } } : null
 		        		);
 	    		}
     		}
@@ -5695,71 +5597,47 @@ public class RuntimeUtil {
 	}
 
 	public static JSRuntimeException error(Throwable cause, String msg, Object...params) {
+		return jsError(org.monflabs.galtajs.rt.builtins.errors.Error.ConstructorImpl.CLASSNAME, cause, msg, params);
+	}
+	public static JSRuntimeException evalError(Throwable cause, String msg, Object...params) {
+		return jsError(org.monflabs.galtajs.rt.builtins.errors.EvalError.ConstructorImpl.CLASSNAME, cause, msg, params);
+	}
+	public static JSRuntimeException rangeError(Throwable cause, String msg, Object...params) {
+		return jsError(org.monflabs.galtajs.rt.builtins.errors.RangeError.ConstructorImpl.CLASSNAME, cause, msg, params);
+	}
+	public static JSRuntimeException referenceError(Throwable cause, String msg, Object...params) {
+		return jsError(org.monflabs.galtajs.rt.builtins.errors.ReferenceError.ConstructorImpl.CLASSNAME, cause, msg, params);
+	}
+	public static JSRuntimeException syntaxError(Throwable cause, String msg, Object...params) {
+		return jsError(org.monflabs.galtajs.rt.builtins.errors.SyntaxError.ConstructorImpl.CLASSNAME, cause, msg, params);
+	}
+	public static JSRuntimeException typeError(Throwable cause, String msg, Object...params) {
+		return jsError(org.monflabs.galtajs.rt.builtins.errors.TypeError.ConstructorImpl.CLASSNAME, cause, msg, params);
+	}
+	public static JSRuntimeException uriError(Throwable cause, String msg, Object...params) {
+		return jsError(org.monflabs.galtajs.rt.builtins.errors.URIError.ConstructorImpl.CLASSNAME, cause, msg, params);
+	}
+	public static JSRuntimeException aggregateError(Throwable cause, String msg, Object...params) {
+		return jsError(org.monflabs.galtajs.rt.builtins.errors.AggregateError.ConstructorImpl.CLASSNAME, cause, msg, params);
+	}
+
+	// Creates a native error of the given class, with a formatted message.
+	// The Java exception that caused it, if any, is kept under
+	// Error.JAVA_EXCEPTION.
+	private static JSRuntimeException jsError(String className, Throwable cause, String msg, Object...params) {
 		String m = StringFormat.format(msg,params);
-		JSObject jsException = (JSObject)JSEnvironment.getEnvironment().getStandardObjects().getConstructor(org.monflabs.galtajs.rt.builtins.errors.Error.ConstructorImpl.CLASSNAME).constructObject(new Object[] {m});
+		// AggregateError(errors, message)
+		Object[] args = className.equals(org.monflabs.galtajs.rt.builtins.errors.AggregateError.ConstructorImpl.CLASSNAME)
+				? new Object[] {JSArray.create(JSEnvironment.getEnvironment()), m}
+				: new Object[] {m};
+		JSObject jsException = (JSObject)JSEnvironment.getEnvironment().getStandardObjects().getConstructor(className).constructObject(args);
 		if(cause!=null) {
 			jsException.setOwnProperty(Error.JAVA_EXCEPTION, cause);
 		}
 		return JSRuntimeException.asJavascriptException(cause,jsException);
 	}
-	public static JSRuntimeException evalError(Throwable cause, String msg, Object...params) {
-		String m = StringFormat.format(msg,params);
-		JSObject jsException = (JSObject)JSEnvironment.getEnvironment().getStandardObjects().getConstructor(org.monflabs.galtajs.rt.builtins.errors.EvalError.ConstructorImpl.CLASSNAME).constructObject(new Object[] {m});
-		if(cause!=null) {
-			jsException.setOwnProperty(Error.JAVA_EXCEPTION, jsException);
-		}
-		return JSRuntimeException.asJavascriptException(cause,jsException);
-	}
-	public static JSRuntimeException rangeError(Throwable cause, String msg, Object...params) {
-		String m = StringFormat.format(msg,params);
-		JSObject jsException = (JSObject)JSEnvironment.getEnvironment().getStandardObjects().getConstructor(org.monflabs.galtajs.rt.builtins.errors.RangeError.ConstructorImpl.CLASSNAME).constructObject(new Object[] {m});
-		if(cause!=null) {
-			jsException.setOwnProperty(Error.JAVA_EXCEPTION, jsException);
-		}
-		return JSRuntimeException.asJavascriptException(cause,jsException);
-	}
-	public static JSRuntimeException referenceError(Throwable cause, String msg, Object...params) {
-		String m = StringFormat.format(msg,params);
-		JSObject jsException = (JSObject)JSEnvironment.getEnvironment().getStandardObjects().getConstructor(org.monflabs.galtajs.rt.builtins.errors.ReferenceError.ConstructorImpl.CLASSNAME).constructObject(new Object[] {m});
-		if(cause!=null) {
-			jsException.setOwnProperty(Error.JAVA_EXCEPTION, jsException);
-		}
-		return JSRuntimeException.asJavascriptException(cause,jsException);
-	}
-	public static JSRuntimeException syntaxError(Throwable cause, String msg, Object...params) {
-		String m = StringFormat.format(msg,params);
-		JSObject jsException = (JSObject)JSEnvironment.getEnvironment().getStandardObjects().getConstructor(org.monflabs.galtajs.rt.builtins.errors.SyntaxError.ConstructorImpl.CLASSNAME).constructObject(new Object[] {m});
-		if(cause!=null) {
-			jsException.setOwnProperty(Error.JAVA_EXCEPTION, jsException);
-		}
-		return JSRuntimeException.asJavascriptException(cause,jsException);
-	}
-	public static JSRuntimeException typeError(Throwable cause, String msg, Object...params) {
-		String m = StringFormat.format(msg,params);
-		JSObject jsException = (JSObject)JSEnvironment.getEnvironment().getStandardObjects().getConstructor(org.monflabs.galtajs.rt.builtins.errors.TypeError.ConstructorImpl.CLASSNAME).constructObject(new Object[] {m});
-		if(cause!=null) {
-			jsException.setOwnProperty(Error.JAVA_EXCEPTION, jsException);
-		}
-		return JSRuntimeException.asJavascriptException(cause,jsException);
-	}
-	public static JSRuntimeException uriError(Throwable cause, String msg, Object...params) {
-		String m = StringFormat.format(msg,params);
-		JSObject jsException = (JSObject)JSEnvironment.getEnvironment().getStandardObjects().getConstructor(org.monflabs.galtajs.rt.builtins.errors.URIError.ConstructorImpl.CLASSNAME).constructObject(new Object[] {m});
-		if(cause!=null) {
-			jsException.setOwnProperty(Error.JAVA_EXCEPTION, jsException);
-		}
-		return JSRuntimeException.asJavascriptException(cause,jsException);
-	}
-	public static JSRuntimeException aggregateError(Throwable cause, String msg, Object...params) {
-		String m = StringFormat.format(msg,params);
-		JSObject jsException = (JSObject)JSEnvironment.getEnvironment().getStandardObjects().getConstructor(org.monflabs.galtajs.rt.builtins.errors.AggregateError.ConstructorImpl.CLASSNAME).constructObject(new Object[] {m});
-		if(cause!=null) {
-			jsException.setOwnProperty(Error.JAVA_EXCEPTION, jsException);
-		}
-		return JSRuntimeException.asJavascriptException(cause,jsException);
-	}
-	
-	
+
+
 	public static JSRuntimeException unary(String op, Object p1) {
 		return typeError("Cannot execute operation {0} on parameter {1}",op,errParam(p1));
 	}

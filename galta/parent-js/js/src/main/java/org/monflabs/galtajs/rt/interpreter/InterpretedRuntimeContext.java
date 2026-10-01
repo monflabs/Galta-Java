@@ -88,23 +88,24 @@ public abstract class InterpretedRuntimeContext extends AbstractRuntimeContext i
 	public <T> T executeWithFilterContext(Object filterContext, ASTNode node, JSResult result) {
 		Object oldFilterContext = this.filterContext;
 		this.filterContext = filterContext;
-		Object res = node.evaluateValue(this, result);
-		this.filterContext = oldFilterContext;
-		return (T)res;
+		try {
+			return (T)node.evaluateValue(this, result);
+		} finally {
+			// A filter that throws can be caught by the script
+			this.filterContext = oldFilterContext;
+		}
 	}
 	
 	@Override
 	@SuppressWarnings("unchecked")
 	public <T> T executeWithFilterContext(Object filterContext, Supplier<Object> callback) {
-		// No need for try/finally as an exception will anyway stop the evaluation
 		Object oldFilterContext = this.filterContext;
-		//try {
-			this.filterContext = filterContext;
-			Object res = callback.get();
-		//} finally {
-		this.filterContext = oldFilterContext;
-		// }
-		return (T)res;
+		this.filterContext = filterContext;
+		try {
+			return (T)callback.get();
+		} finally {
+			this.filterContext = oldFilterContext;
+		}
 	}
 	
 	@Override

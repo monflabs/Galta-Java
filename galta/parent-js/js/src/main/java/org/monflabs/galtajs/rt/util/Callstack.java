@@ -56,10 +56,12 @@ public class Callstack {
 		private String composeLabel() {
 			String callerReference=null;
 			if(context instanceof InterpretedRuntimeContext ic) {
-				callerNode = ic.getCallerNode();
-				if(callerNode!=null) {
+				// The location this frame was called from - a local: the
+				// entry's own callerNode (getCallerNode()) is kept as given
+				ASTNode caller = ic.getCallerNode();
+				if(caller!=null) {
 					String fileName = ic.getMainContext().getScriptUnit().getDescriptor().getName();
-					int line = callerNode.getBeginLine();
+					int line = caller.getBeginLine();
 					if(line>=0) {
 						callerReference = " (" + fileName +  " :" + line + ")";
 					} else {

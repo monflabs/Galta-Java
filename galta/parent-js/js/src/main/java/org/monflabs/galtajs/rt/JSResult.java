@@ -100,7 +100,7 @@ public final class JSResult implements Iterable<Object>{
 	
 	public Object getValue() {
 		if(JSEnvironment.CHECK_FOR_DEBUG) {
-			if(valueType!=null && value!=SEQ_TYPE.CHAINING_NULL) {
+			if(valueType!=null && valueType!=SEQ_TYPE.CHAINING_NULL) {
 				throw RuntimeUtil.error("Result access error: Cannot access 'value' for a sequence");
 			}
 		}
