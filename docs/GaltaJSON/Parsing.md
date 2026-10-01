@@ -26,10 +26,11 @@ try(InputStream is = new ByteArrayInputStream("\"Zoë\"".getBytes(StandardCharse
 factory.parse("42");       // 42
 factory.parse("null");     // null
 
-// The typed shortcuts cast the result
+// The typed shortcuts check the type of the result
 JsonObject o = JsonObject.parse("{}");
 JsonArray a = JsonArray.parse("[]");
-JsonObject.parse("[]");    // throws ClassCastException
+JsonObject.parse("[]");    // throws JsonException: "The JSON text is not an object but array"
+JsonObject.parse("null");  // null
 ```
 
 ## Lenient syntax
@@ -367,7 +368,7 @@ JsonFactory.get().supportsNaN();             // true
 
 ### Checked and custom factories
 
-`JavaJsonFactoryChecked.instance` creates the same containers, but every way of storing a value rejects one that is not a JSON value (`JsonType.UNKNOWN`) with a `JsonException`: `put`, `add` and `set`, and the `java.util.Map`/`List` methods too (`putAll`, `putIfAbsent`, `replace`, `replaceAll`, `compute*`, `merge`, `Map.Entry.setValue`, `addAll`, `subList(...)` and `listIterator()` updates). Containers created from a checked one (`getOrCreateObject()`, the lambda forms of `put`/`add`, `deepClone()`) are checked too. With the default, unchecked factory any Java object can be stored and is stringified as a string (a `java.util.Date` as its ISO-8601 instant).
+`JavaJsonFactoryChecked.instance` creates the same containers, but every way of storing a value rejects one that is not a JSON value (`JsonType.UNKNOWN`) with a `JsonException`: `put`, `add` and `set`, and the `java.util.Map`/`List` methods too (`putAll`, `putIfAbsent`, `replace`, `replaceAll`, `compute*`, `merge`, `Map.Entry.setValue` on the `entrySet()`, `sequencedEntrySet()` and `reversed()` views, `putFirst`/`putLast`, `addAll`, `subList(...)` and `listIterator()` updates). Containers created from a checked one (`getOrCreateObject()`, the lambda forms of `put`/`add`, `deepClone()`) are checked too. With the default, unchecked factory any Java object can be stored and is stringified as a string (a `java.util.Date` as its ISO-8601 instant).
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testCheckedFactory`)
 

@@ -134,7 +134,7 @@ The same methods exist on `JsonArray` with an `int` index, and on [`JsonValues`]
 
 ### Typed getters
 
-`getBoolean`, `getByte`, `getShort`, `getInt`, `getLong`, `getFloat`, `getDouble`, `getBigInteger`, `getBigDecimal`, `getNumber`, `getString`, `getObject`, `getArray`, the boxed `getIntObject`-style variants, and the date getters below. A numeric getter accepts any `Number` and converts it the Java way (`Number.intValue()`, so `9.99` reads as `9`), but never parses a string.
+`getBoolean`, `getByte`, `getShort`, `getInt`, `getLong`, `getFloat`, `getDouble`, `getBigInteger`, `getBigDecimal`, `getNumber`, `getString`, `getObject`, `getArray`, the boxed `getIntObject`-style variants, and the date getters below. A numeric getter accepts any `Number` and never parses a string. The integer getters (`getByte`, `getShort`, `getInt`, `getLong` and their boxed variants) truncate toward 0 (`9.99` reads as `9`) and saturate: a value out of the range of the type gives its minimum or maximum (`300` read by `getByte` is `127`, `1e10` read by `getInt` is `Integer.MAX_VALUE`), and `NaN` gives `0`. `getBigInteger` and `getBigDecimal` read a double through its shortest decimal representation (`1e23` is exactly 10<sup>23</sup> for both, `0.1` is `0.1`) and throw a `JsonException` for `NaN` and the infinities, which have no such value. The exception message names the key or the index of the value.
 
 Sample: `doc_examples/json/ValuesExamples.java` (`testTypedGetters`)
 
@@ -144,7 +144,7 @@ JsonObject o = JsonObject.parse("{\"count\":42,\"price\":9.99,\"name\":\"Ada\",\
 o.getInt("count");            // 42
 o.getLong("count");           // 42L
 o.getDouble("count");         // 42.0
-o.getInt("price");            // 9: Number.intValue(), truncated
+o.getInt("price");            // 9: truncated
 o.getBigDecimal("price");     // 9.99
 o.getString("name");          // "Ada"
 o.getBoolean("ok");           // true
@@ -175,18 +175,21 @@ o.getInt("name", -1);          // throws JsonException: wrong type
 
 ### The `as*` conversions
 
-`asNumber`, `asInt`, `asLong`, `asDouble`, `asBigInteger`, `asBigDecimal`, `asBoolean` and `asString` never throw. Without an explicit default they return `0` (`null` for `asNumber`), `false` or `""`. The rules, exactly:
+`asNumber`, `asInt`, `asLong`, `asDouble`, `asBigInteger`, `asBigDecimal`, `asBoolean` and `asString` never throw. Without an explicit default they return `0` (`null` for `asNumber`), `false` or `""`.
+
+Every numeric conversion reads a string the same way: the string is trimmed and parsed by `asNumber` (decimal and exponent notation, `0x`/`0o`/`0b` prefixes, `NaN`, `Infinity`; a Java suffix like `"1f"` or `"1d"` is not a number), then the number is converted like a `Number` value. So `" 12.7 "` is `12` for `asInt`, `asLong` and `asBigInteger`, `12.7` for `asDouble` and `asBigDecimal`, `"0x10"` is `16` for all of them, and a string that does not parse gives the default. The rules, exactly:
 
 | Target | From a number | From a string | From a boolean | Anything else (`null`, missing, object, array) |
 |---|---|---|---|---|
-| `asInt`, `asLong` | `intValue()` / `longValue()` | `Integer.parseInt` / `Long.parseLong`, else the default | `1` / `0` | the default |
-| `asDouble` | `doubleValue()` | `Double.parseDouble`, else the default | `1` / `0` | the default |
-| `asBigInteger`, `asBigDecimal` | converted | `new BigInteger(s)` / `new BigDecimal(s)`, else the default | `1` / `0` | the default |
-| `asNumber` | the number itself | parsed as a JSON number (`"12.7"` gives `12.7`), else the default | `1` / `0` | the default |
-| `asBoolean` | `false` for `0` and `NaN`, else `true` | `false` for `""`, `"0"` and `"false"` (any case), else `true` | itself | the default |
+| `asInt`, `asLong` | truncated toward 0, saturated to the range (`NaN` is `0`) | parsed with `asNumber`, then as a number; else the default | `1` / `0` | the default |
+| `asDouble` | `doubleValue()` | parsed with `asNumber`, then `doubleValue()`; else the default | `1` / `0` | the default |
+| `asBigInteger` | the integer part of its decimal value (a double is its shortest decimal: `1e23` is 10<sup>23</sup>); `NaN` is `0`, an infinity `Long.MIN_VALUE`/`MAX_VALUE` | parsed with `asNumber`, then as a number; else the default | `1` / `0` | the default |
+| `asBigDecimal` | its decimal value (a double is its shortest decimal: `0.1` is `0.1`); `NaN` is `0`, an infinity `-Double.MAX_VALUE`/`Double.MAX_VALUE` | parsed with `asNumber` (precision is kept: `"0.12345678901234567890123"` is exact), then as a number; else the default | `1` / `0` | the default |
+| `asNumber` | the number itself | trimmed and parsed as a number (`"12.7"` gives `12.7`), else the default | `1` / `0` | the default |
+| `asBoolean` | `false` for `0` and `NaN`, else `true` (a `BigDecimal` or `BigInteger` by its sign, so `1e-400` is `true`) | `false` for `""`, `"0"` and `"false"` (any case), else `true` | itself | the default |
 | `asString` | the JSON text of the number | itself | `"true"` / `"false"` | the default |
 
-Note that `asInt("12.7")` is the default, not `12`: the string must be an integer literal. Containers are never converted, not even by `asString`.
+`asBoolean` does not parse strings as numbers: `asBoolean("0.0")` is `true` while `asBoolean(0.0)` is `false`. Containers are never converted, not even by `asString`. `JsonObject.asNumber(key, default)` takes an `int` or any `Number` default.
 
 Sample: `doc_examples/json/ValuesExamples.java` (`testAsConversions`)
 
@@ -262,7 +265,7 @@ o.getLocalDate("at");             // throws JsonException: not an ISO local date
 
 ## Get or create
 
-`getOrCreateObject(key)` and `getOrCreateArray(key)` return the container stored under the key, creating and storing an empty one first when the key is absent. The optional consumer initializes a container only when it is created.
+`getOrCreateObject(key)` and `getOrCreateArray(key)` return the container stored under the key, creating and storing an empty one first when the key is absent or holds `null` (a value of another type throws a `JsonException`). The optional consumer initializes a container only when it is created.
 
 Sample: `doc_examples/json/ValuesExamples.java` (`testGetOrCreate`)
 
@@ -281,7 +284,7 @@ config.getObject("limits").getInt("max");                       // 10
 
 ## Array indexes
 
-A negative index counts from the end in the JSON accessors: the typed getters (`getString(-1)`...), `set(index, value)`/`setValue`, `add(index, value)`/`addValue`, `has`, `getOrDefault` and `jsonValues(index)`. The `java.util.List` methods (`get(int)`, `set(int, Object)`, `add(int, Object)`, `remove(int)`) keep the `List` contract and throw `IndexOutOfBoundsException` for a negative index; `actualIndex(i)` converts one. `has(index)` tells whether an index is in range; the getters with a default return it for an out-of-range index. `firstValue()` and `lastValue()` throw on an empty array; `firstValueOrDefault()` / `lastValueOrDefault()` do not.
+A negative index counts from the end in the JSON accessors: the typed getters (`getString(-1)`...), `set(index, value)`/`setValue`, `add(index, value)`/`addValue`, `has`, `getOrDefault` and `jsonValues(index)`. The `java.util.List` methods (`get(int)`, `set(int, Object)`, `add(int, Object)`, `remove(int)`) keep the `List` contract and throw `IndexOutOfBoundsException` for a negative index; `actualIndex(i)` converts one. `has(index)` tells whether an index is in range; the getters with a default return it for an out-of-range index, while the getters without a default throw an `IndexOutOfBoundsException` (where a missing object key throws a `JsonException`). The tests `isNull(index)`, `isString(index)`... never throw: like for a missing key, an index out of range has no value, so `isNull` is `true` and the others `false`. `firstValue()` and `lastValue()` throw on an empty array; `firstValueOrDefault()` / `lastValueOrDefault()` do not.
 
 Sample: `doc_examples/json/ValuesExamples.java` (`testArrayIndexes`)
 
@@ -323,7 +326,11 @@ o.isNull("b");     // true: a missing key reads as null
 
 ## Equality and hashing
 
-Two containers are equal when they hold equal values: objects regardless of key order, arrays item by item. Numbers compare by exact value across types, so `1`, `1L`, `1.0` and `new BigDecimal("1.00")` are equal inside containers (and `-0.0` is `0`), and `hashCode()` is consistent with that, so containers work as `HashMap` keys and `HashSet` members. Compared with another `java.util.Map` or `List`, a container follows the `Map`/`List` contract, so the equality is symmetric, and its `hashCode()` is the JDK one for contents made of strings, booleans, `null`, `int`-range integers and non integral doubles. `JsonUtil.eq(a, b)` applies the same rule to any two values. Values of different JSON types are never equal (`1` is not `"1"`), and the plain Java values themselves keep Java semantics (`Integer.valueOf(1).equals(1.0)` is `false`).
+Two containers are equal when they hold equal values: objects regardless of key order, arrays item by item. Numbers compare by exact value across types, so `1`, `1L`, `1.0` and `new BigDecimal("1.00")` are equal inside containers (and `-0.0` is `0`); a double or a float has the value of its shortest decimal representation (`0.1` equals `new BigDecimal("0.1")`, and the double 2<sup>60</sup> equals the long `1152921504606847000`, not `1152921504606846976`). `hashCode()` is consistent with that between JSON containers, so containers work as `HashMap` keys and `HashSet` members, and `JsonUtil.hashCode(v)` is consistent with `JsonUtil.eq(a, b)`, which applies the same rule to any two values.
+
+Compared with another `java.util.Map` or `List`, a container follows the `Map`/`List` contract (`Object.equals` on the values), so the equality is symmetric. The hash codes, however, only match the JDK ones for contents made of strings, booleans, `null`, `int`-range integers and non integral doubles: `JsonArray.of(1.0)` equals `List.of(1.0)` but hashes like `List.of(1)`. Don't mix JSON containers and JDK collections as keys of the same hash-based collection. Values of different JSON types are never equal (`1` is not `"1"`), and the plain Java values themselves keep Java semantics (`Integer.valueOf(1).equals(1.0)` is `false`).
+
+A container that contains itself has no value: `equals()`, `hashCode()` and `deepClone()` throw a `JsonException.CircularReference`, as `stringify()` does.
 
 Sample: `doc_examples/json/ValuesExamples.java` (`testNumberEquality`)
 
@@ -349,7 +356,7 @@ Integer.valueOf(1).equals(1.0);          // false: plain Java values keep Java s
 
 ## Ordering
 
-`JsonUtil.compare(a, b)` is a total order over JSON values, used by `sorted()`, `min()` and `max()` (see [Collections](/GaltaJSON/Collections)); `JsonUtil.jsonComparator` wraps it as a `Comparator`. Numbers compare by value across types, strings with `String.compareTo`, `false` before `true`, arrays item by item then by length, objects key by key in sorted key order. Across types the order is `null` < array < object < string < number < boolean.
+`JsonUtil.compare(a, b)` is a total order over JSON values, used by `sorted()`, `min()` and `max()` (see [Collections](/GaltaJSON/Collections)); `JsonUtil.jsonComparator` wraps it as a `Comparator`. Numbers compare by value across types, strings with `String.compareTo`, `false` before `true`, arrays item by item then by length, objects key by key in sorted key order. Across types the order is `null` < array < object < string < number < boolean. A value that is not a JSON value (a Java object stored with `putValue`) sorts after the booleans, and comparing two such values throws an `IllegalStateException`.
 
 Sample: `doc_examples/json/ValuesExamples.java` (`testCompare`)
 
@@ -368,7 +375,7 @@ mixed.sorted();                       // [null,[],{},"a",1,true]
 
 ## Cloning
 
-`clone()` is the shallow `Map`/`List` copy: nested containers are shared. `deepClone()` copies the whole tree (primitives are immutable and shared). Deep cloning a container that holds a non-JSON Java object throws a `JsonException`.
+`clone()` is the shallow `Map`/`List` copy: nested containers are shared. `deepClone()` copies the whole tree (primitives are immutable and shared), with containers created by the same factory. Both keep the [JSON reference](/GaltaJSON/Pointers) of the containers (`getReference()`). Deep cloning a container that holds a non-JSON Java object throws a `JsonException`, and a container that contains itself a `JsonException.CircularReference`.
 
 Sample: `doc_examples/json/ValuesExamples.java` (`testClone`)
 
@@ -390,7 +397,11 @@ withDate.deepClone();                           // throws JsonException: not a J
 
 - `getInt(key)` never parses a string; use `asInt(key)` for loosely typed input.
 - `getInt(key, default)` is not forgiving about types, only about absence.
-- `put(key, value)` with an `Object`-typed value is `Map.put` and does not chain; use `putValue`.
+- `put(key, value)` with an `Object`-typed value is `Map.put` and does not chain; use `putValue`. Conversely, the typed overloads return the container: `Object prev = o.put("k", 5)` is the object, not the previous value.
+- A literal `null` argument is ambiguous between the typed overloads: `o.put("k", null)`, `a.add(null)` and `a.set(0, null)` don't compile. Use `putNull("k")`, `addNull()`, `setNull(0)` (or `putValue`/`addValue`/`setValue`).
+- `a.remove(null)` on an array compiles to `remove(Predicate)` (the most specific overload) and throws a `NullPointerException`; use `a.remove((Object)null)` to remove a `null` item.
+- The `java.util.List` methods keep the `List` contract: `a.set(-1, (Object)x)` throws an `IndexOutOfBoundsException`, while `a.set(-1, "x")` and `a.setValue(-1, x)` set the last item.
+- `JsonObject.parse()`, `JsonArray.parse()` and `JsonContainer.parse()` throw a `JsonException` when the JSON text is of another type (the text `null` gives `null`). `JsonObject.of(...)` takes key/value pairs: a key that is not a string, or a key without a value, throws a `JsonException`.
 - `toString()` on a container is the *pretty* JSON text, while `stringify()` is compact.
 
 ## Source

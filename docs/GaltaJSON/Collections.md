@@ -55,7 +55,7 @@ a.size();                     // 6
 
 ### Sorting and distinct values
 
-`sorted()`, `min()` and `max()` use the JSON order of [`JsonUtil.compare`](/GaltaJSON/Values#ordering): numbers by value across types, and across types `null` < array < object < string < number < boolean. `distinct()` uses JSON equality, so `1` and `1.0` are duplicates. `JsonUtil.objectComparator()` builds a comparator on object members, each ascending or descending.
+`sorted()`, `min()` and `max()` use the JSON order of [`JsonUtil.compare`](/GaltaJSON/Values#ordering): numbers by value across types, and across types `null` < array < object < string < number < boolean. `distinct()` uses JSON equality, so `1` and `1.0` are duplicates. `distinct(keyFunction)` puts the keys in a `HashSet`, so the keys use the Java `equals()`: the keys `1` and `1.0` (an `Integer` and a `Double`) are different, while two equal containers are the same key. `JsonUtil.objectComparator()` builds a comparator on object members, each ascending or descending.
 
 Sample: `doc_examples/json/CollectionsExamples.java` (`testSortingAndDistinct`)
 
@@ -151,7 +151,7 @@ o.findAndSet("id", 0);      // in place
 
 ## Java streams
 
-`stream()` and `parallelStream()` work as on any `List`. `JsonCollectors.toJsonArray()` collects into a new `JsonArray` of the default factory; `toJsonArray(factory)` uses another factory and `toJsonArray(array)` appends to an existing array. `JsonCollectors.toJsonArrayValues()` collects a stream of `JsonValues` into a `JsonValues` holding a new array. The collectors support parallel streams.
+`stream()` and `parallelStream()` work as on any `List`. `JsonCollectors.toJsonArray()` collects into a new `JsonArray` of the default factory; `toJsonArray(factory)` uses another factory and `toJsonArray(array)` appends to an existing array. `JsonCollectors.toJsonArrayValues()` collects a stream of `JsonValues` into a `JsonValues` holding a new array. The collectors support parallel streams. The collectors that create their array can be kept and reused, each collection giving a new array; the ones given a target array append to that same array each time they are used, so they are meant for a single collection.
 
 Sample: `doc_examples/json/CollectionsExamples.java` (`testJavaStreams`)
 
@@ -243,7 +243,9 @@ For reading and writing CSV files, see [Import & Export](/GaltaJSON/Modules/Impo
 ## Gotchas
 
 - `remove(predicate)` does not remove anything from the array: it returns a filtered copy. Use `removeIf` (from `Collection`) to modify the array.
-- `sorted()` orders mixed types by type first; strings come before numbers.
+- `sorted()` orders mixed types by type first; strings come before numbers. A non-JSON value (a Java object stored with `addValue`) sorts after the booleans, and two of them can't be compared (`IllegalStateException`).
+- `contains(v)`, `indexOf(v)` and `remove(Object)` are the `List` methods and use the Java `equals()` on the items: `JsonArray.of(1).contains(1.0)` is `false`, while `JsonArray.of(1).equals(JsonArray.of(1.0))` (JSON equality) is `true`. Use `anyMatch(x -> JsonUtil.eq(x, v))` for a JSON comparison.
+- `factory()` on a `JsonObjectAsLinkedMap`/`JsonArrayAsArrayList` is `JavaJsonFactory.instance` (`JavaJsonFactoryChecked.instance` for the checked ones), even when the container was created by a subclass of these factories: the containers created from it (`getOrCreateObject`, `deepClone`, `filter`...) come from that factory.
 - `find(key, false)` still searches the whole tree, only not below a match.
 - Numbers in CSV use the JSON text, not Java's `toString()`: `4.0` is written `4`.
 
