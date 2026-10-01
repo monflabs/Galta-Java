@@ -195,10 +195,10 @@ public class JsonPathLikeTest extends ProjectTestCase {
 				.find(null,true);
 		checkPath(v, "$..*");
 	}
-//	public void testPath14() throws Exception {
-//		JsonArray v = JsonArray.of(books.find("book").flat().size());
-//		checkPath(v, "$..book.length()");
-//	}
+	public void testPath14() throws Exception {
+		JsonValues v = JsonValues.of(books.find("book").flat()._size());
+		checkPath(v, "$..book.length()");
+	}
 	
 	private void checkPath(JsonValues result, String jsonPath) throws Exception {
 		Object pathResult = JsonPath.parse(JSON).read(jsonPath);

@@ -16,6 +16,7 @@
 package tests.impexp;
 
 import java.io.File;
+import java.time.Instant;
 
 import org.monflabs.json.JsonFactory;
 import org.monflabs.json.JsonObject;
@@ -134,7 +135,20 @@ public class FileTargetTest extends ProjectTestCase {
 	
 	// Test
 	public void testFileTargetTimestamp() throws Exception {
-		
+		File root = support.getTargetTempDirectory("json-timestamp", true);
+		Instant ts = Instant.parse("2020-01-02T03:04:05Z");
+		FileTarget keep = FileTarget.newBuilder().root(root).ignoreCollection(true).keepTimestamp(true).build();
+		keep.saveJsonContent(new StaticSource.DataContent("col", "kept", "{\"a\":1}", ts));
+		File kept = new File(root, "kept.json");
+		assertTrue(kept.isFile());
+		assertEquals(ts.getEpochSecond(), kept.lastModified()/1000);
+
+		// Without keepTimestamp, the file gets the time it was written
+		FileTarget now = FileTarget.newBuilder().root(root).ignoreCollection(true).build();
+		now.saveJsonContent(new StaticSource.DataContent("col", "now", "{\"a\":1}", ts));
+		File written = new File(root, "now.json");
+		assertTrue(written.isFile());
+		assertTrue(written.lastModified() > ts.toEpochMilli() + 1000L*3600*24*365);
 	}
 	
 	

@@ -16,12 +16,16 @@
 package tests.json.factory;
 
 import org.monflabs.json.JsonFactory;
+import org.monflabs.json.java.JavaJsonFactory;
 
 import tests.ProjectTestCase;
 
 public class _CurrentFactoryTest extends ProjectTestCase {
 
-	public void testPrintFactory() {
-		support.print("Factory Class: {0}",JsonFactory.get().getClass());
+	public void testCurrentFactory() {
+		// The suites run the standard tests with each Java factory (see AllJsonJavaFactoryTests)
+		JsonFactory f = JsonFactory.get();
+		assertTrue(f.getClass().getName(), f instanceof JavaJsonFactory);
+		assertEquals("{\"a\":[1,true,null]}", f.stringify(f.parse("{ \"a\" : [1, true, null] }"), true));
 	}
 }

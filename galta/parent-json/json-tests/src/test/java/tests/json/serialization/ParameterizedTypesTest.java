@@ -44,8 +44,17 @@ public class ParameterizedTypesTest extends ProjectTestCase {
 	}
 	
 	public void testCustomReflection() throws Exception {
+		// The factory is global: restore it, the next tests expect the suite's one
+		JsonFactory saved = JsonFactory.get();
 		JsonFactory.set(JavaJsonFactoryChecked.instance);
-		
+		try {
+			customReflection();
+		} finally {
+			JsonFactory.set(saved);
+		}
+	}
+	
+	private void customReflection() throws Exception {
 		JsonObject.create();
 		
 		SimpleRegistry reg = SimpleRegistry.newBuilder()

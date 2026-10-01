@@ -62,13 +62,6 @@ public class JSONTestSuiteTest extends ProjectTestCase {
 		checkFolder(transformDir, false);
 	}
 
-	// To test individual files
-//	public void testParserSingleFile() throws Exception {
-//		File jsonDir = new File(support.getTestResourcesDirectory(),"JSONTestSuite");
-//		File jsonFile = new File(jsonDir,"test_parsing/i_structure_UTF-8_BOM_empty_object.json");
-//		checkFile(jsonFile);
-//	}
-
 	private void checkFolder(File dir, boolean bytes) throws Exception {
 		assertTrue(dir.exists());
 

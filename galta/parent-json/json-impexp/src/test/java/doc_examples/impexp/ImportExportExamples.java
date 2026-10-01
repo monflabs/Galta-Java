@@ -40,6 +40,11 @@ import tests.ProjectTestCase;
  */
 public class ImportExportExamples extends ProjectTestCase {
 
+	/** The temporary files go to target/temp (removed by mvn clean), not to the system temp folder. */
+	private Path tempRoot() {
+		return support.getTargetTempDirectory().toPath();
+	}
+
 	private static Set<String> listFiles(Path root) throws Exception {
 		try(Stream<Path> s = Files.walk(root)) {
 			return s.filter(Files::isRegularFile)
@@ -72,7 +77,7 @@ public class ImportExportExamples extends ProjectTestCase {
 				.container(data)
 				.build();
 
-		Path root = Files.createTempDirectory("galta-export");
+		Path root = Files.createTempDirectory(tempRoot(), "galta-export");
 		FileTarget target = FileTarget.newBuilder()
 				.root(root.toFile())                            // cleared first, by default!
 				.build();
@@ -159,7 +164,7 @@ public class ImportExportExamples extends ProjectTestCase {
 	}
 
 	public void testFileTargetOptions() throws Exception {
-		Path root = Files.createTempDirectory("galta-export");
+		Path root = Files.createTempDirectory(tempRoot(), "galta-export");
 		Files.writeString(root.resolve("keep.txt"), "x");
 
 		FileTarget target = FileTarget.newBuilder()
@@ -189,7 +194,7 @@ public class ImportExportExamples extends ProjectTestCase {
 	}
 
 	public void testZip() throws Exception {
-		Path zip = Files.createTempFile("galta-export", ".zip");
+		Path zip = Files.createTempFile(tempRoot(), "galta-export", ".zip");
 		JsonContainerSource source = JsonContainerSource.newBuilder()
 				.format(JsonInMemoryFormat.RECORDSBYCOLKEY)
 				.container(JsonObject.parse("{ \"c\": { \"k1\": { \"v\": 1 }, \"k2\": { \"v\": 2 } } }"))

@@ -26,6 +26,11 @@ import tests.ProjectTestCase;
  */
 public class JsonSchemaExamples extends ProjectTestCase {
 
+	/** The temporary files go to target/temp (removed by mvn clean), not to the system temp folder. */
+	private Path tempRoot() {
+		return support.getTargetTempDirectory().toPath();
+	}
+
 	private static final String PERSON = """
 			{
 			  "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -130,7 +135,7 @@ public class JsonSchemaExamples extends ProjectTestCase {
 	}
 
 	public void testUriSchemas() throws Exception {
-		Path dir = Files.createTempDirectory("galta-schema");
+		Path dir = Files.createTempDirectory(tempRoot(), "galta-schema");
 		Files.writeString(dir.resolve("address.json"), """
 				{ "type": "object", "properties": { "city": { "type": "string" } }, "required": ["city"] }
 				""");
@@ -162,7 +167,7 @@ public class JsonSchemaExamples extends ProjectTestCase {
 	}
 
 	public void testMissingSchemaAcceptsEverything() throws Exception {
-		Path dir = Files.createTempDirectory("galta-schema");
+		Path dir = Files.createTempDirectory(tempRoot(), "galta-schema");
 		// Fail closed: a schema that cannot be loaded is an error...
 		assertThrows(JsonException.class, () -> JsonSchemaFactory.get().getJsonSchema(dir.resolve("nope.json").toUri()));
 		// ... as is a $ref to a missing document, or to nothing

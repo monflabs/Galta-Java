@@ -21,15 +21,14 @@ import tests.ProjectTestCase;
 
 public class InvalidTest extends ProjectTestCase {
 	
-// TOBE FIXED!
-//	public void testS0() throws Exception {
-//		try {
-//			JsonFactory.get().parse("{\"1\":\"one\"\n\"2\":\"two\"}");
-//			fail();
-//		} catch(Exception e) {
-//			// Expected
-//		}
-// 	}
+	public void testS0() throws Exception {
+		try {
+			JsonFactory.get().parse("{\"1\":\"one\"\n\"2\":\"two\"}");
+			fail();
+		} catch(Exception e) {
+			// Expected
+		}
+ 	}
 
 	public void testS1() throws Exception {
 		String s = "{\"key\":{}";

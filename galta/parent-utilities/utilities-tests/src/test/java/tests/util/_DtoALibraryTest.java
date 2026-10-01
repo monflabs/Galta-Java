@@ -21,15 +21,6 @@ import tests.ProjectTestCase;
 
 public class _DtoALibraryTest extends ProjectTestCase {
 
-//	public void testApacheHarmony() {
-//		//assertEquals( "0", NumberConverter.convert(0.0) );
-//		//assertEquals( "1", NumberConverter.convert(1.0) );
-//		assertEquals( "1.1", NumberConverter.convert(1.1) );
-//		assertEquals( "1.123456", NumberConverter.convert(1.123456) );
-//		assertEquals( "120000000000000000000", NumberConverter.convert(1.2E20) );
-//		assertEquals( "1.2e25", NumberConverter.convert(1.2E25) );
-//	}
-
 	public void testRyu() {
 		assertEquals( "0.0", RyuDouble.doubleToString(0.0) );
 		assertEquals( "1.0", RyuDouble.doubleToString(1.0) );

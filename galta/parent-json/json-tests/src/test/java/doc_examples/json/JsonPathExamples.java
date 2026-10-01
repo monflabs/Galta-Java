@@ -3,6 +3,7 @@ package doc_examples.json;
 import static org.junit.Assert.assertThrows;
 
 import java.util.List;
+import java.util.Locale;
 
 import org.monflabs.json.JsonArray;
 import org.monflabs.json.JsonException;
@@ -250,7 +251,7 @@ public class JsonPathExamples extends ProjectTestCase {
 		assertTrue(prices.anyMatch(p -> p.gt(20)));
 
 		JsonValues titles = JsonValues.of(json).path("$..book[*]")
-			.map(b -> b.getString("title").toUpperCase())
+			.map(b -> b.getString("title").toUpperCase(Locale.ROOT))
 			.skip(2);
 		assertEquals("[\"MOBY DICK\",\"THE LORD OF THE RINGS\"]", titles.stringify());
 

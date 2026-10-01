@@ -59,8 +59,11 @@ public class ProfilerTest extends ProjectTestCase {
 	        assertTrue(toMillis(agg.getTotalWallTime())>=80);
 	        assertTrue(toMillis(aggChild.getTotalWallTime())>=20);
 	        
-	        assertTrue(toMillis(agg.getTotalCpuTime())<100);
-	        assertTrue(toMillis(aggChild.getTotalCpuTime())<100);
+	        // Sleeping takes wall time, not CPU time: the CPU time is at most the wall time
+	        // minus the sleeps (90 ms for Test 1, 20 ms at least for Test 2), whatever the load
+	        // of the machine (5 ms of tolerance for the clocks granularity)
+	        assertTrue(agg.getTotalCpuTime()+"/"+agg.getTotalWallTime(), toMillis(agg.getTotalCpuTime()) <= toMillis(agg.getTotalWallTime())-90+5);
+	        assertTrue(aggChild.getTotalCpuTime()+"/"+aggChild.getTotalWallTime(), toMillis(aggChild.getTotalCpuTime()) <= toMillis(aggChild.getTotalWallTime())-20+5);
 	        
 	        d.dump();
 		} finally {

@@ -15,22 +15,19 @@
  */
 package tests.json;
 
-import org.junit.Before;
 import org.monflabs.json.JsonFactory;
 import org.monflabs.json.parser.JsonParser.StringParser;
 
 import tests.ProjectTestCase;
 
-//
-// This class is used to easily run experiments in dev mode
-// This is not a test meant to run as part of the autonated suite
-//
+/**
+ * The strict parser accepts standard JSON and rejects the relaxed syntax.
+ */
 public class JSONSimpleStrictParserTest extends ProjectTestCase {
 
 	StringParser parser;
 	
 	@Override
-	@Before
     public void setUp() throws Exception {
 		super.setUp();
 		
@@ -38,18 +35,21 @@ public class JSONSimpleStrictParserTest extends ProjectTestCase {
 		parser.setStrict(true);
 	}
 	
-	String JSON = 
-"""
-[null]
-""";
-	
 	public void testParser() throws Exception {
-		try {
-			Object o = parser.parse(JSON);
-			support.print("SUCCESS\n{0}",o!=null ? o.toString() : "<null>");
-		} catch(Throwable ex) {
-			support.print("FAILURE");
-			ex.printStackTrace();
+		Object o = parser.parse("[null]");
+		assertEquals("[null]", JsonFactory.get().stringify(o, true));
+		o = parser.parse("{\"a\": [1, 2.5, \"s\", true, false, null]}");
+		assertEquals("{\"a\":[1,2.5,\"s\",true,false,null]}", JsonFactory.get().stringify(o, true));
+	}
+	
+	public void testRelaxedSyntaxRejected() throws Exception {
+		for(String s: new String[] {"[1,]", "{a:1}", "{'a':1}", "[1] // comment", "[01]"}) {
+			try {
+				parser.parse(s);
+				fail("Strict parser accepted: "+s);
+			} catch(Exception e) {
+				// Expected
+			}
 		}
 	}
 }

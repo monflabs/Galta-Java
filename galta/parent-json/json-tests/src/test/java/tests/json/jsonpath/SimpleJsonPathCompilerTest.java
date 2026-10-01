@@ -46,8 +46,6 @@ public class SimpleJsonPathCompilerTest extends ProjectTestCase {
 	
 	private static JsonPathFactory simpleFactory = new JsonPathFactory();
 	
-	public void testCompileOne() {
-	}
 	public void testCompile() {
 		assertArrayEquals(array(),parts(simpleFactory.getJsonPath(null)));
 		assertArrayEquals(array(),parts(simpleFactory.getJsonPath("")));

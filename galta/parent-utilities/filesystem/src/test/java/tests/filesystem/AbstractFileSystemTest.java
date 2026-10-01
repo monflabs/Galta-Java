@@ -840,8 +840,9 @@ public abstract class AbstractFileSystemTest extends ProjectTestCase {
         Path file = getPath("/visible.txt");
         Files.write(file, "data".getBytes());
         
-        // Just check that the query works - actual value is platform/implementation dependent
-        Files.isHidden(file); // Should not throw
+        // Which files are hidden depends on the implementation (a dot file, an attribute...),
+        // but a plain name is visible everywhere
+        assertFalse(Files.isHidden(file));
     }
     
     // ==================== PathMatcher Tests ====================

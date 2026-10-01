@@ -75,12 +75,16 @@ public class CacheProviderTest extends ProjectTestCase {
 		}));
 		t.start();
 		assertTrue(inFactory.await(5, TimeUnit.SECONDS));
-		// The factory used to run under the cache lock: this read blocked until it returned
-		long start = System.nanoTime();
-		assertEquals(Integer.valueOf(1), cache.get("other", null));
-		assertTrue(System.nanoTime()-start < TimeUnit.SECONDS.toNanos(2));
-		release.countDown();
-		t.join();
+		// The factory used to run under the cache lock: this read blocked until it returned,
+		// which never happens before the read returns (the factory waits for 'release').
+		// The read runs in another thread, so a regression fails on the timeout, not by hanging.
+		try {
+			java.util.concurrent.CompletableFuture<Integer> read = java.util.concurrent.CompletableFuture.supplyAsync(() -> cache.get("other", null));
+			assertEquals(Integer.valueOf(1), read.get(60, TimeUnit.SECONDS));
+		} finally {
+			release.countDown();
+			t.join();
+		}
 		assertEquals(Integer.valueOf(2), cache.get("slow", null));
 	}
 

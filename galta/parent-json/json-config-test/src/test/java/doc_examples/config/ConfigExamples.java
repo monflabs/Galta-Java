@@ -30,6 +30,11 @@ import tests.ProjectTestCase;
  */
 public class ConfigExamples extends ProjectTestCase {
 
+	/** The temporary files go to target/temp (removed by mvn clean), not to the system temp folder. */
+	private Path tempRoot() {
+		return support.getTargetTempDirectory().toPath();
+	}
+
 	private static JsonObject readJson(Path p) throws Exception {
 		return (JsonObject)JsonFactory.get().parse(Files.readString(p));
 	}
@@ -39,7 +44,7 @@ public class ConfigExamples extends ProjectTestCase {
 	// ------------------------------------------------------------------
 
 	public void testFileConfig() throws Exception {
-		Path folder = Files.createTempDirectory("galta-config");
+		Path folder = Files.createTempDirectory(tempRoot(), "galta-config");
 		Files.writeString(folder.resolve("app.json"), """
 				{
 				  "server": { "host": "localhost", "port": 8080, "secure": "true" },
@@ -91,7 +96,7 @@ public class ConfigExamples extends ProjectTestCase {
 	// ------------------------------------------------------------------
 
 	public void testUpdates() throws Exception {
-		Path folder = Files.createTempDirectory("galta-config");
+		Path folder = Files.createTempDirectory(tempRoot(), "galta-config");
 		JsonFileConfig config = JsonFileConfig.newBuilder()
 				.folder(folder)
 				.fileName("app.json")                              // does not exist yet
@@ -128,7 +133,7 @@ public class ConfigExamples extends ProjectTestCase {
 	}
 
 	public void testNoAutoSave() throws Exception {
-		Path folder = Files.createTempDirectory("galta-config");
+		Path folder = Files.createTempDirectory(tempRoot(), "galta-config");
 		JsonFileConfig config = JsonFileConfig.newBuilder()
 				.folder(folder)
 				.fileName("app.json")
@@ -148,7 +153,7 @@ public class ConfigExamples extends ProjectTestCase {
 	// ------------------------------------------------------------------
 
 	public void testReadOnly() throws Exception {
-		Path folder = Files.createTempDirectory("galta-config");
+		Path folder = Files.createTempDirectory(tempRoot(), "galta-config");
 		Files.writeString(folder.resolve("app.json"), "{ \"a\": \"1\" }");
 		JsonFileConfig config = JsonFileConfig.newBuilder()
 				.folder(folder)
@@ -205,7 +210,7 @@ public class ConfigExamples extends ProjectTestCase {
 	// ------------------------------------------------------------------
 
 	public void testReferences() throws Exception {
-		Path folder = Files.createTempDirectory("galta-config");
+		Path folder = Files.createTempDirectory(tempRoot(), "galta-config");
 		Files.writeString(folder.resolve("app.json"), """
 				{ "name": "demo", "db": { "$ref": "db.json" } }
 				""");
@@ -233,7 +238,7 @@ public class ConfigExamples extends ProjectTestCase {
 	}
 
 	public void testReferenceLimits() throws Exception {
-		Path folder = Files.createTempDirectory("galta-config");
+		Path folder = Files.createTempDirectory(tempRoot(), "galta-config");
 		Files.writeString(folder.resolve("app.json"), """
 				{ "db": { "$ref": "common.json#/db" }, "nested": { "$ref": "outer.json" } }
 				""");
@@ -266,7 +271,7 @@ public class ConfigExamples extends ProjectTestCase {
 	// ------------------------------------------------------------------
 
 	public void testEncryption() throws Exception {
-		Path folder = Files.createTempDirectory("galta-config");
+		Path folder = Files.createTempDirectory(tempRoot(), "galta-config");
 		Files.writeString(folder.resolve("app.json"), """
 				{ "user": "joe", "password": "top", "db": { "password": "s3cret", "host": "h" } }
 				""");
@@ -305,7 +310,7 @@ public class ConfigExamples extends ProjectTestCase {
 	}
 
 	public void testMissingFolder() throws Exception {
-		Path folder = Files.createTempDirectory("galta-config").resolve("sub/dir");
+		Path folder = Files.createTempDirectory(tempRoot(), "galta-config").resolve("sub/dir");
 		JsonFileConfig config = JsonFileConfig.newBuilder()
 				.folder(folder)
 				.fileName("app.json")

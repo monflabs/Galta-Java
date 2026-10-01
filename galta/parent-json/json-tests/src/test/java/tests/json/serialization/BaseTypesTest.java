@@ -20,6 +20,7 @@ import static org.junit.Assert.assertArrayEquals;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import org.monflabs.json.JsonFactory;
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.serialization.SimpleRegistry;
 import org.monflabs.json.serialization.classes.SimpleClassAdapter;
@@ -187,9 +188,13 @@ public class BaseTypesTest extends ProjectTestCase {
 		MyClass a = new MyClass(true);
 		
 		JsonObject json = reg.serialize(a);
-		Console.log(json.toString());
+		// Only the field of the adapter, under its name
+		assertEquals("{\"aInt\":79}", JsonFactory.get().stringify(json, true));
 		
 		MyClass a2 = reg.deserialize( MyClass.class, json);
-		Console.log(a2.toString());
+		assertEquals(79, a2.pInt);
+		// The fields the adapter does not map keep their default value
+		assertNull(a2.pString);
+		assertFalse(a2.pBoolean);
 	}
 }

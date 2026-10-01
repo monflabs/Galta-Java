@@ -270,290 +270,290 @@ public class ConvertValueTest extends ProjectTestCase {
 		assertThrows( JsonException.class, () -> v_long.zonedDateTimeValue(ZonedDateTime.of(2020, 2, 20, 13, 44, 18, 0, ZoneId.of("US/Eastern"))));
 	}
 	
-//	public void testDoubleA() {
-//		JsonValue v_double = JsonValue.of(34.34);
-//		
-//		assertFalse(v_double.isNull());
-//		assertTrue(v_double.isNumber());
-//		assertFalse(v_double.isBoolean());
-//		assertFalse(v_double.isString());
-//		assertFalse(v_double.isContainer());
-//		assertFalse(v_double.isObject());
-//		assertFalse(v_double.isArray());
-//
-//		assertEquals(34.34,v_double.value());
-//		
-//		assertEquals(34.34,v_double.numberValue());
-//		assertEquals((byte)34,v_double.byteValue());
-//		assertEquals((short)34,v_double.shortValue());
-//		assertEquals(34,v_double.intValue());
-//		assertEquals(34L,v_double.longValue());
-//		assertEquals(34.34f,v_double.floatValue());
-//		assertEquals(34.34,v_double.doubleValue());
-//		assertEquals(new BigInteger("34"),v_double.bigIntegerValue());
-//		assertEquals(new BigDecimal("34.34"),v_double.bigDecimalValue());
-//		assertThrows( JsonException.class, () -> v_double.booleanValue());
-//		assertThrows( JsonException.class, () -> v_double.stringValue());
-//		assertThrows( JsonException.class, () -> v_double.objectValue());
-//		assertThrows( JsonException.class, () -> v_double.arrayValue());
-//
-//		assertEquals(34.34,v_double.numberValue(10.10));
-//		assertEquals((byte)34,v_double.byteValue((byte)10));
-//		assertEquals((short)34,v_double.shortValue((short)10));
-//		assertEquals(34,v_double.intValue(10));
-//		assertEquals(34L,v_double.longValue(10L));
-//		assertEquals(34.34f,v_double.floatValue(10));
-//		assertEquals(34.34,v_double.doubleValue(10.10));
-//		assertEquals(new BigInteger("34"),v_double.bigIntegerValue(BigInteger.TEN));
-//		assertEquals(new BigDecimal("34.34"),v_double.bigDecimalValue(BigDecimal.TEN));
-//		assertThrows( JsonException.class, () -> v_double.booleanValue(true));
-//		assertThrows( JsonException.class, () -> v_double.stringValue("xy"));
-//		assertThrows( JsonException.class, () -> v_double.objectValue(JsonObject.of("a","AA")));
-//		assertThrows( JsonException.class, () -> v_double.arrayValue(JsonArray.of("d","e")));
-//	}
-//	
-//	public void testBigIntegerA() {
-//		JsonValue v_bigInteger = JsonValue.of(new BigInteger("123456789123456789123456789"));
-//		
-//		assertFalse(v_bigInteger.isNull());
-//		assertTrue(v_bigInteger.isNumber());
-//		assertFalse(v_bigInteger.isBoolean());
-//		assertFalse(v_bigInteger.isString());
-//		assertFalse(v_bigInteger.isContainer());
-//		assertFalse(v_bigInteger.isObject());
-//		assertFalse(v_bigInteger.isArray());		
-//		
-//		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.value());
-//		
-//		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.numberValue());
-//		assertEquals((byte)21,v_bigInteger.byteValue());
-//		assertEquals((short)24341,v_bigInteger.shortValue());
-//		assertEquals(2080661269,v_bigInteger.intValue());
-//		assertEquals(-944716198279094507L,v_bigInteger.longValue());
-//		assertEquals(1.2345678912345679E26f,v_bigInteger.floatValue());
-//		assertEquals(1.2345678912345679E26,v_bigInteger.doubleValue());
-//		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.bigIntegerValue());
-//		assertEquals(new BigDecimal("123456789123456789123456789"),v_bigInteger.bigDecimalValue());
-//		assertThrows( JsonException.class, () -> v_bigInteger.booleanValue());
-//		assertThrows( JsonException.class, () -> v_bigInteger.stringValue());
-//		assertThrows( JsonException.class, () -> v_bigInteger.objectValue());
-//		assertThrows( JsonException.class, () -> v_bigInteger.arrayValue());
-//
-//		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.numberValue(BigInteger.TEN));
-//		assertEquals((byte)21,v_bigInteger.byteValue((byte)10));
-//		assertEquals((short)24341,v_bigInteger.shortValue((short)10));
-//		assertEquals(2080661269,v_bigInteger.intValue(10));
-//		assertEquals(-944716198279094507L,v_bigInteger.longValue(10L));
-//		assertEquals(1.2345678912345679E26f,v_bigInteger.floatValue(10.10f));
-//		assertEquals(1.2345678912345679E26,v_bigInteger.doubleValue(10.10));
-//		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.bigIntegerValue(BigInteger.TEN));
-//		assertEquals(new BigDecimal("123456789123456789123456789"),v_bigInteger.bigDecimalValue(BigDecimal.TEN));
-//		assertThrows( JsonException.class, () -> v_bigInteger.booleanValue(true));
-//		assertThrows( JsonException.class, () -> v_bigInteger.stringValue("xy"));
-//		assertThrows( JsonException.class, () -> v_bigInteger.objectValue(JsonObject.of("a","AA")));
-//		assertThrows( JsonException.class, () -> v_bigInteger.arrayValue(JsonArray.of("d","e")));
-//	}
-//	
-//	public void testBigDecimalA() {
-//		JsonValue v_bigDecimal = JsonValue.of(new BigDecimal("4567892345678765478.5657654"));
-//		
-//		assertFalse(v_bigDecimal.isNull());
-//		assertTrue(v_bigDecimal.isNumber());
-//		assertFalse(v_bigDecimal.isBoolean());
-//		assertFalse(v_bigDecimal.isString());
-//		assertFalse(v_bigDecimal.isContainer());
-//		assertFalse(v_bigDecimal.isObject());
-//		assertFalse(v_bigDecimal.isArray());
-//
-//		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.value());
-//		
-//		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.numberValue());
-//		assertEquals((byte)-90,v_bigDecimal.byteValue());
-//		assertEquals((short)-25178,v_bigDecimal.shortValue());
-//		assertEquals(-60252762,v_bigDecimal.intValue());
-//		assertEquals(4567892345678765478L,v_bigDecimal.longValue());
-//		assertEquals(4.5678923456787656E18f,v_bigDecimal.floatValue());
-//		assertEquals(4.5678923456787656E18,v_bigDecimal.doubleValue());
-//		assertEquals(new BigInteger("4567892345678765478"),v_bigDecimal.bigIntegerValue());
-//		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.bigDecimalValue());
-//		assertThrows( JsonException.class, () -> v_bigDecimal.booleanValue());
-//		assertThrows( JsonException.class, () -> v_bigDecimal.stringValue());
-//		assertThrows( JsonException.class, () -> v_bigDecimal.objectValue());
-//		assertThrows( JsonException.class, () -> v_bigDecimal.arrayValue());
-//
-//		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.numberValue(BigDecimal.TEN));
-//		assertEquals((byte)-90,v_bigDecimal.byteValue((byte)10));
-//		assertEquals((short)-25178,v_bigDecimal.shortValue((short)10));
-//		assertEquals(-60252762,v_bigDecimal.intValue(10));
-//		assertEquals(4567892345678765478L,v_bigDecimal.longValue(10L));
-//		assertEquals(4.5678923456787656E18f,v_bigDecimal.floatValue(10.10f));
-//		assertEquals(4.5678923456787656E18,v_bigDecimal.doubleValue(10.10));
-//		assertEquals(new BigInteger("4567892345678765478"),v_bigDecimal.bigIntegerValue(BigInteger.TEN));
-//		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.bigDecimalValue(BigDecimal.TEN));
-//		assertThrows( JsonException.class, () -> v_bigDecimal.booleanValue(true));
-//		assertThrows( JsonException.class, () -> v_bigDecimal.stringValue("xy"));
-//		assertThrows( JsonException.class, () -> v_bigDecimal.objectValue(JsonObject.of("a","AA")));
-//		assertThrows( JsonException.class, () -> v_bigDecimal.arrayValue(JsonArray.of("d","e")));
-//	}
-//	
-//	public void testBooleanA() {
-//		JsonValue v_boolean = JsonValue.of(true);
-//		
-//		assertFalse(v_boolean.isNull());
-//		assertFalse(v_boolean.isNumber());
-//		assertTrue(v_boolean.isBoolean());
-//		assertFalse(v_boolean.isString());
-//		assertFalse(v_boolean.isContainer());
-//		assertFalse(v_boolean.isObject());
-//		assertFalse(v_boolean.isArray());
-//		
-//		assertEquals(true,v_boolean.value());
-//		
-//		assertThrows( JsonException.class, () -> v_boolean.numberValue());
-//		assertThrows( JsonException.class, () -> v_boolean.byteValue());
-//		assertThrows( JsonException.class, () -> v_boolean.shortValue());
-//		assertThrows( JsonException.class, () -> v_boolean.intValue());
-//		assertThrows( JsonException.class, () -> v_boolean.longValue());
-//		assertThrows( JsonException.class, () -> v_boolean.floatValue());
-//		assertThrows( JsonException.class, () -> v_boolean.doubleValue());
-//		assertThrows( JsonException.class, () -> v_boolean.bigIntegerValue());
-//		assertThrows( JsonException.class, () -> v_boolean.bigDecimalValue());
-//		assertEquals(true,v_boolean.booleanValue());
-//		assertThrows( JsonException.class, () -> v_boolean.stringValue());
-//
-//		assertThrows( JsonException.class, () -> v_boolean.numberValue(10));
-//		assertThrows( JsonException.class, () -> v_boolean.byteValue((byte)10));
-//		assertThrows( JsonException.class, () -> v_boolean.shortValue((short)10));
-//		assertThrows( JsonException.class, () -> v_boolean.intValue(10));
-//		assertThrows( JsonException.class, () -> v_boolean.longValue(10L));
-//		assertThrows( JsonException.class, () -> v_boolean.floatValue(10.0f));
-//		assertThrows( JsonException.class, () -> v_boolean.doubleValue(10.10));
-//		assertThrows( JsonException.class, () -> v_boolean.bigIntegerValue(BigInteger.TEN));
-//		assertThrows( JsonException.class, () -> v_boolean.bigDecimalValue(BigDecimal.TEN));
-//		assertEquals(true,v_boolean.booleanValue(false));
-//		assertThrows( JsonException.class, () -> v_boolean.stringValue("xy"));
-//	}
-//	
-//	public void testStringA() {
-//		JsonValue v_string = JsonValue.of("abc");
-//
-//		assertFalse(v_string.isNull());
-//		assertFalse(v_string.isNumber());
-//		assertFalse(v_string.isBoolean());
-//		assertTrue(v_string.isString());
-//		assertFalse(v_string.isContainer());
-//		assertFalse(v_string.isObject());
-//		assertFalse(v_string.isArray());	
-//		
-//		assertEquals("abc",v_string.value());
-//
-//		assertThrows( JsonException.class, () -> v_string.numberValue());
-//		assertThrows( JsonException.class, () -> v_string.byteValue());
-//		assertThrows( JsonException.class, () -> v_string.shortValue());
-//		assertThrows( JsonException.class, () -> v_string.intValue());
-//		assertThrows( JsonException.class, () -> v_string.longValue());
-//		assertThrows( JsonException.class, () -> v_string.floatValue());
-//		assertThrows( JsonException.class, () -> v_string.doubleValue());
-//		assertThrows( JsonException.class, () -> v_string.bigIntegerValue());
-//		assertThrows( JsonException.class, () -> v_string.bigDecimalValue());
-//		assertThrows( JsonException.class, () -> v_string.booleanValue());
-//		assertEquals("abc",v_string.stringValue());
-//
-//		assertThrows( JsonException.class, () -> v_string.numberValue(10));
-//		assertThrows( JsonException.class, () -> v_string.byteValue((byte)10));
-//		assertThrows( JsonException.class, () -> v_string.shortValue((short)10));
-//		assertThrows( JsonException.class, () -> v_string.intValue(10));
-//		assertThrows( JsonException.class, () -> v_string.longValue(10L));
-//		assertThrows( JsonException.class, () -> v_string.floatValue(10.10f));
-//		assertThrows( JsonException.class, () -> v_string.doubleValue(10.10));
-//		assertThrows( JsonException.class, () -> v_string.bigIntegerValue(BigInteger.TEN));
-//		assertThrows( JsonException.class, () -> v_string.bigDecimalValue(BigDecimal.TEN));
-//		assertThrows( JsonException.class, () -> v_string.booleanValue(true));
-//		assertEquals("abc",v_string.stringValue("xy"));
-//	}
-//	
-//	public void testObject() throws Exception {
-//		JsonValue v_object = JsonValue.of(JsonObject.of("s","xyz"));
-//
-//		assertFalse(v_object.isNull());
-//		assertFalse(v_object.isNumber());
-//		assertFalse(v_object.isBoolean());
-//		assertFalse(v_object.isString());
-//		assertTrue(v_object.isContainer());
-//		assertTrue(v_object.isObject());
-//		assertFalse(v_object.isArray());	
-//		
-//		support.assertJsonEquals(JsonObject.of("s","xyz"), v_object.value());
-//
-//		assertThrows( JsonException.class, () -> v_object.numberValue());
-//		assertThrows( JsonException.class, () -> v_object.byteValue());
-//		assertThrows( JsonException.class, () -> v_object.shortValue());
-//		assertThrows( JsonException.class, () -> v_object.intValue());
-//		assertThrows( JsonException.class, () -> v_object.longValue());
-//		assertThrows( JsonException.class, () -> v_object.floatValue());
-//		assertThrows( JsonException.class, () -> v_object.doubleValue());
-//		assertThrows( JsonException.class, () -> v_object.bigIntegerValue());
-//		assertThrows( JsonException.class, () -> v_object.bigDecimalValue());
-//		assertThrows( JsonException.class, () -> v_object.booleanValue());
-//		assertThrows( JsonException.class, () -> v_object.stringValue());
-//		support.assertJsonEquals(JsonObject.of("s","xyz"), v_object.objectValue());
-//		assertThrows( JsonException.class, () ->  v_object.arrayValue());
-//		//support.assertJsonEquals(JsonArray.of("def"), v_object.arrayValue());
-//
-//		assertThrows( JsonException.class, () -> v_object.numberValue(10));
-//		assertThrows( JsonException.class, () -> v_object.byteValue((byte)10));
-//		assertThrows( JsonException.class, () -> v_object.shortValue((short)10));
-//		assertThrows( JsonException.class, () -> v_object.intValue(10));
-//		assertThrows( JsonException.class, () -> v_object.longValue(10L));
-//		assertThrows( JsonException.class, () -> v_object.floatValue(10.10f));
-//		assertThrows( JsonException.class, () -> v_object.doubleValue(10.10));
-//		assertThrows( JsonException.class, () -> v_object.bigIntegerValue(BigInteger.TEN));
-//		assertThrows( JsonException.class, () -> v_object.bigDecimalValue(BigDecimal.TEN));
-//		assertThrows( JsonException.class, () -> v_object.booleanValue(true));
-//		assertThrows( JsonException.class, () -> v_object.stringValue("xy"));
-//		support.assertJsonEquals(JsonObject.of("s","xyz"), v_object.objectValue(JsonObject.of("a","AA")));
-//		assertThrows( JsonException.class, () -> v_object.arrayValue(JsonArray.of("d","e")));
-//	}
-//	
-//	public void testArray() throws Exception {
-//		JsonValue v_array = JsonValue.of(JsonArray.of("def"));
-//
-//		assertFalse(v_array.isNull());
-//		assertFalse(v_array.isNumber());
-//		assertFalse(v_array.isBoolean());
-//		assertFalse(v_array.isString());
-//		assertTrue(v_array.isContainer());
-//		assertFalse(v_array.isObject());
-//		assertTrue(v_array.isArray());	
-//		
-//		support.assertJsonEquals(JsonArray.of("def"), v_array.value());
-//
-//		assertThrows( JsonException.class, () -> v_array.numberValue());
-//		assertThrows( JsonException.class, () -> v_array.byteValue());
-//		assertThrows( JsonException.class, () -> v_array.shortValue());
-//		assertThrows( JsonException.class, () -> v_array.intValue());
-//		assertThrows( JsonException.class, () -> v_array.longValue());
-//		assertThrows( JsonException.class, () -> v_array.floatValue());
-//		assertThrows( JsonException.class, () -> v_array.doubleValue());
-//		assertThrows( JsonException.class, () -> v_array.bigIntegerValue());
-//		assertThrows( JsonException.class, () -> v_array.bigDecimalValue());
-//		assertThrows( JsonException.class, () -> v_array.booleanValue());
-//		assertThrows( JsonException.class, () -> v_array.stringValue());
-//		assertThrows( JsonException.class, () -> v_array.objectValue());
-//		support.assertJsonEquals(JsonArray.of("def"), v_array.arrayValue());
-//
-//		assertThrows( JsonException.class, () -> v_array.numberValue(10));
-//		assertThrows( JsonException.class, () -> v_array.byteValue((byte)10));
-//		assertThrows( JsonException.class, () -> v_array.shortValue((short)10));
-//		assertThrows( JsonException.class, () -> v_array.intValue(10));
-//		assertThrows( JsonException.class, () -> v_array.longValue(10L));
-//		assertThrows( JsonException.class, () -> v_array.floatValue(10.10f));
-//		assertThrows( JsonException.class, () -> v_array.doubleValue(10.10));
-//		assertThrows( JsonException.class, () -> v_array.bigIntegerValue(BigInteger.TEN));
-//		assertThrows( JsonException.class, () -> v_array.bigDecimalValue(BigDecimal.TEN));
-//		assertThrows( JsonException.class, () -> v_array.booleanValue(true));
-//		assertThrows( JsonException.class, () -> v_array.stringValue("xy"));
-//		assertThrows( JsonException.class, () -> v_array.objectValue(JsonObject.of("a","AA")));
-//		support.assertJsonEquals(JsonArray.of("def"), v_array.arrayValue(JsonArray.of("d","e")));
-//	}
+	public void testDoubleA() {
+		JsonValues v_double = JsonValues.of(34.34);
+		
+		assertFalse(v_double.isNull());
+		assertTrue(v_double.isNumber());
+		assertFalse(v_double.isBoolean());
+		assertFalse(v_double.isString());
+		assertFalse(v_double.isContainer());
+		assertFalse(v_double.isObject());
+		assertFalse(v_double.isArray());
+
+		assertEquals(34.34,v_double.value());
+		
+		assertEquals(34.34,v_double.numberValue());
+		assertEquals((byte)34,v_double.byteValue());
+		assertEquals((short)34,v_double.shortValue());
+		assertEquals(34,v_double.intValue());
+		assertEquals(34L,v_double.longValue());
+		assertEquals(34.34f,v_double.floatValue());
+		assertEquals(34.34,v_double.doubleValue());
+		assertEquals(new BigInteger("34"),v_double.bigIntegerValue());
+		assertEquals(new BigDecimal("34.34"),v_double.bigDecimalValue());
+		assertThrows( JsonException.class, () -> v_double.booleanValue());
+		assertThrows( JsonException.class, () -> v_double.stringValue());
+		assertThrows( JsonException.class, () -> v_double.objectValue());
+		assertThrows( JsonException.class, () -> v_double.arrayValue());
+
+		assertEquals(34.34,v_double.numberValue(10.10));
+		assertEquals((byte)34,v_double.byteValue((byte)10));
+		assertEquals((short)34,v_double.shortValue((short)10));
+		assertEquals(34,v_double.intValue(10));
+		assertEquals(34L,v_double.longValue(10L));
+		assertEquals(34.34f,v_double.floatValue(10));
+		assertEquals(34.34,v_double.doubleValue(10.10));
+		assertEquals(new BigInteger("34"),v_double.bigIntegerValue(BigInteger.TEN));
+		assertEquals(new BigDecimal("34.34"),v_double.bigDecimalValue(BigDecimal.TEN));
+		assertThrows( JsonException.class, () -> v_double.booleanValue(true));
+		assertThrows( JsonException.class, () -> v_double.stringValue("xy"));
+		assertThrows( JsonException.class, () -> v_double.objectValue(JsonObject.of("a","AA")));
+		assertThrows( JsonException.class, () -> v_double.arrayValue(JsonArray.of("d","e")));
+	}
+	
+	public void testBigIntegerA() {
+		JsonValues v_bigInteger = JsonValues.of(new BigInteger("123456789123456789123456789"));
+		
+		assertFalse(v_bigInteger.isNull());
+		assertTrue(v_bigInteger.isNumber());
+		assertFalse(v_bigInteger.isBoolean());
+		assertFalse(v_bigInteger.isString());
+		assertFalse(v_bigInteger.isContainer());
+		assertFalse(v_bigInteger.isObject());
+		assertFalse(v_bigInteger.isArray());		
+		
+		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.value());
+		
+		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.numberValue());
+		assertEquals((byte)21,v_bigInteger.byteValue());
+		assertEquals((short)24341,v_bigInteger.shortValue());
+		assertEquals(Integer.MAX_VALUE,v_bigInteger.intValue()); // saturated, not wrapped
+		assertEquals(Long.MAX_VALUE,v_bigInteger.longValue()); // saturated, not wrapped
+		assertEquals(1.2345678912345679E26f,v_bigInteger.floatValue());
+		assertEquals(1.2345678912345679E26,v_bigInteger.doubleValue());
+		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.bigIntegerValue());
+		assertEquals(new BigDecimal("123456789123456789123456789"),v_bigInteger.bigDecimalValue());
+		assertThrows( JsonException.class, () -> v_bigInteger.booleanValue());
+		assertThrows( JsonException.class, () -> v_bigInteger.stringValue());
+		assertThrows( JsonException.class, () -> v_bigInteger.objectValue());
+		assertThrows( JsonException.class, () -> v_bigInteger.arrayValue());
+
+		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.numberValue(BigInteger.TEN));
+		assertEquals((byte)21,v_bigInteger.byteValue((byte)10));
+		assertEquals((short)24341,v_bigInteger.shortValue((short)10));
+		assertEquals(Integer.MAX_VALUE,v_bigInteger.intValue(10)); // saturated, not wrapped
+		assertEquals(Long.MAX_VALUE,v_bigInteger.longValue(10L)); // saturated, not wrapped
+		assertEquals(1.2345678912345679E26f,v_bigInteger.floatValue(10.10f));
+		assertEquals(1.2345678912345679E26,v_bigInteger.doubleValue(10.10));
+		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.bigIntegerValue(BigInteger.TEN));
+		assertEquals(new BigDecimal("123456789123456789123456789"),v_bigInteger.bigDecimalValue(BigDecimal.TEN));
+		assertThrows( JsonException.class, () -> v_bigInteger.booleanValue(true));
+		assertThrows( JsonException.class, () -> v_bigInteger.stringValue("xy"));
+		assertThrows( JsonException.class, () -> v_bigInteger.objectValue(JsonObject.of("a","AA")));
+		assertThrows( JsonException.class, () -> v_bigInteger.arrayValue(JsonArray.of("d","e")));
+	}
+	
+	public void testBigDecimalA() {
+		JsonValues v_bigDecimal = JsonValues.of(new BigDecimal("4567892345678765478.5657654"));
+		
+		assertFalse(v_bigDecimal.isNull());
+		assertTrue(v_bigDecimal.isNumber());
+		assertFalse(v_bigDecimal.isBoolean());
+		assertFalse(v_bigDecimal.isString());
+		assertFalse(v_bigDecimal.isContainer());
+		assertFalse(v_bigDecimal.isObject());
+		assertFalse(v_bigDecimal.isArray());
+
+		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.value());
+		
+		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.numberValue());
+		assertEquals((byte)-90,v_bigDecimal.byteValue());
+		assertEquals((short)-25178,v_bigDecimal.shortValue());
+		assertEquals(Integer.MAX_VALUE,v_bigDecimal.intValue()); // saturated, not wrapped
+		assertEquals(4567892345678765478L,v_bigDecimal.longValue());
+		assertEquals(4.5678923456787656E18f,v_bigDecimal.floatValue());
+		assertEquals(4.5678923456787656E18,v_bigDecimal.doubleValue());
+		assertEquals(new BigInteger("4567892345678765478"),v_bigDecimal.bigIntegerValue());
+		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.bigDecimalValue());
+		assertThrows( JsonException.class, () -> v_bigDecimal.booleanValue());
+		assertThrows( JsonException.class, () -> v_bigDecimal.stringValue());
+		assertThrows( JsonException.class, () -> v_bigDecimal.objectValue());
+		assertThrows( JsonException.class, () -> v_bigDecimal.arrayValue());
+
+		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.numberValue(BigDecimal.TEN));
+		assertEquals((byte)-90,v_bigDecimal.byteValue((byte)10));
+		assertEquals((short)-25178,v_bigDecimal.shortValue((short)10));
+		assertEquals(Integer.MAX_VALUE,v_bigDecimal.intValue(10)); // saturated, not wrapped
+		assertEquals(4567892345678765478L,v_bigDecimal.longValue(10L));
+		assertEquals(4.5678923456787656E18f,v_bigDecimal.floatValue(10.10f));
+		assertEquals(4.5678923456787656E18,v_bigDecimal.doubleValue(10.10));
+		assertEquals(new BigInteger("4567892345678765478"),v_bigDecimal.bigIntegerValue(BigInteger.TEN));
+		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.bigDecimalValue(BigDecimal.TEN));
+		assertThrows( JsonException.class, () -> v_bigDecimal.booleanValue(true));
+		assertThrows( JsonException.class, () -> v_bigDecimal.stringValue("xy"));
+		assertThrows( JsonException.class, () -> v_bigDecimal.objectValue(JsonObject.of("a","AA")));
+		assertThrows( JsonException.class, () -> v_bigDecimal.arrayValue(JsonArray.of("d","e")));
+	}
+	
+	public void testBooleanA() {
+		JsonValues v_boolean = JsonValues.of(true);
+		
+		assertFalse(v_boolean.isNull());
+		assertFalse(v_boolean.isNumber());
+		assertTrue(v_boolean.isBoolean());
+		assertFalse(v_boolean.isString());
+		assertFalse(v_boolean.isContainer());
+		assertFalse(v_boolean.isObject());
+		assertFalse(v_boolean.isArray());
+		
+		assertEquals(true,v_boolean.value());
+		
+		assertThrows( JsonException.class, () -> v_boolean.numberValue());
+		assertThrows( JsonException.class, () -> v_boolean.byteValue());
+		assertThrows( JsonException.class, () -> v_boolean.shortValue());
+		assertThrows( JsonException.class, () -> v_boolean.intValue());
+		assertThrows( JsonException.class, () -> v_boolean.longValue());
+		assertThrows( JsonException.class, () -> v_boolean.floatValue());
+		assertThrows( JsonException.class, () -> v_boolean.doubleValue());
+		assertThrows( JsonException.class, () -> v_boolean.bigIntegerValue());
+		assertThrows( JsonException.class, () -> v_boolean.bigDecimalValue());
+		assertEquals(true,v_boolean.booleanValue());
+		assertThrows( JsonException.class, () -> v_boolean.stringValue());
+
+		assertThrows( JsonException.class, () -> v_boolean.numberValue(10));
+		assertThrows( JsonException.class, () -> v_boolean.byteValue((byte)10));
+		assertThrows( JsonException.class, () -> v_boolean.shortValue((short)10));
+		assertThrows( JsonException.class, () -> v_boolean.intValue(10));
+		assertThrows( JsonException.class, () -> v_boolean.longValue(10L));
+		assertThrows( JsonException.class, () -> v_boolean.floatValue(10.0f));
+		assertThrows( JsonException.class, () -> v_boolean.doubleValue(10.10));
+		assertThrows( JsonException.class, () -> v_boolean.bigIntegerValue(BigInteger.TEN));
+		assertThrows( JsonException.class, () -> v_boolean.bigDecimalValue(BigDecimal.TEN));
+		assertEquals(true,v_boolean.booleanValue(false));
+		assertThrows( JsonException.class, () -> v_boolean.stringValue("xy"));
+	}
+	
+	public void testStringA() {
+		JsonValues v_string = JsonValues.of("abc");
+
+		assertFalse(v_string.isNull());
+		assertFalse(v_string.isNumber());
+		assertFalse(v_string.isBoolean());
+		assertTrue(v_string.isString());
+		assertFalse(v_string.isContainer());
+		assertFalse(v_string.isObject());
+		assertFalse(v_string.isArray());	
+		
+		assertEquals("abc",v_string.value());
+
+		assertThrows( JsonException.class, () -> v_string.numberValue());
+		assertThrows( JsonException.class, () -> v_string.byteValue());
+		assertThrows( JsonException.class, () -> v_string.shortValue());
+		assertThrows( JsonException.class, () -> v_string.intValue());
+		assertThrows( JsonException.class, () -> v_string.longValue());
+		assertThrows( JsonException.class, () -> v_string.floatValue());
+		assertThrows( JsonException.class, () -> v_string.doubleValue());
+		assertThrows( JsonException.class, () -> v_string.bigIntegerValue());
+		assertThrows( JsonException.class, () -> v_string.bigDecimalValue());
+		assertThrows( JsonException.class, () -> v_string.booleanValue());
+		assertEquals("abc",v_string.stringValue());
+
+		assertThrows( JsonException.class, () -> v_string.numberValue(10));
+		assertThrows( JsonException.class, () -> v_string.byteValue((byte)10));
+		assertThrows( JsonException.class, () -> v_string.shortValue((short)10));
+		assertThrows( JsonException.class, () -> v_string.intValue(10));
+		assertThrows( JsonException.class, () -> v_string.longValue(10L));
+		assertThrows( JsonException.class, () -> v_string.floatValue(10.10f));
+		assertThrows( JsonException.class, () -> v_string.doubleValue(10.10));
+		assertThrows( JsonException.class, () -> v_string.bigIntegerValue(BigInteger.TEN));
+		assertThrows( JsonException.class, () -> v_string.bigDecimalValue(BigDecimal.TEN));
+		assertThrows( JsonException.class, () -> v_string.booleanValue(true));
+		assertEquals("abc",v_string.stringValue("xy"));
+	}
+	
+	public void testObject() throws Exception {
+		JsonValues v_object = JsonValues.of(JsonObject.of("s","xyz"));
+
+		assertFalse(v_object.isNull());
+		assertFalse(v_object.isNumber());
+		assertFalse(v_object.isBoolean());
+		assertFalse(v_object.isString());
+		assertTrue(v_object.isContainer());
+		assertTrue(v_object.isObject());
+		assertFalse(v_object.isArray());	
+		
+		support.assertJsonEquals(JsonObject.of("s","xyz"), v_object.value());
+
+		assertThrows( JsonException.class, () -> v_object.numberValue());
+		assertThrows( JsonException.class, () -> v_object.byteValue());
+		assertThrows( JsonException.class, () -> v_object.shortValue());
+		assertThrows( JsonException.class, () -> v_object.intValue());
+		assertThrows( JsonException.class, () -> v_object.longValue());
+		assertThrows( JsonException.class, () -> v_object.floatValue());
+		assertThrows( JsonException.class, () -> v_object.doubleValue());
+		assertThrows( JsonException.class, () -> v_object.bigIntegerValue());
+		assertThrows( JsonException.class, () -> v_object.bigDecimalValue());
+		assertThrows( JsonException.class, () -> v_object.booleanValue());
+		assertThrows( JsonException.class, () -> v_object.stringValue());
+		support.assertJsonEquals(JsonObject.of("s","xyz"), v_object.objectValue());
+		assertThrows( JsonException.class, () ->  v_object.arrayValue());
+		//support.assertJsonEquals(JsonArray.of("def"), v_object.arrayValue());
+
+		assertThrows( JsonException.class, () -> v_object.numberValue(10));
+		assertThrows( JsonException.class, () -> v_object.byteValue((byte)10));
+		assertThrows( JsonException.class, () -> v_object.shortValue((short)10));
+		assertThrows( JsonException.class, () -> v_object.intValue(10));
+		assertThrows( JsonException.class, () -> v_object.longValue(10L));
+		assertThrows( JsonException.class, () -> v_object.floatValue(10.10f));
+		assertThrows( JsonException.class, () -> v_object.doubleValue(10.10));
+		assertThrows( JsonException.class, () -> v_object.bigIntegerValue(BigInteger.TEN));
+		assertThrows( JsonException.class, () -> v_object.bigDecimalValue(BigDecimal.TEN));
+		assertThrows( JsonException.class, () -> v_object.booleanValue(true));
+		assertThrows( JsonException.class, () -> v_object.stringValue("xy"));
+		support.assertJsonEquals(JsonObject.of("s","xyz"), v_object.objectValue(JsonObject.of("a","AA")));
+		assertThrows( JsonException.class, () -> v_object.arrayValue(JsonArray.of("d","e")));
+	}
+	
+	public void testArray() throws Exception {
+		JsonValues v_array = JsonValues.of(JsonArray.of("def"));
+
+		assertFalse(v_array.isNull());
+		assertFalse(v_array.isNumber());
+		assertFalse(v_array.isBoolean());
+		assertFalse(v_array.isString());
+		assertTrue(v_array.isContainer());
+		assertFalse(v_array.isObject());
+		assertTrue(v_array.isArray());	
+		
+		support.assertJsonEquals(JsonArray.of("def"), v_array.value());
+
+		assertThrows( JsonException.class, () -> v_array.numberValue());
+		assertThrows( JsonException.class, () -> v_array.byteValue());
+		assertThrows( JsonException.class, () -> v_array.shortValue());
+		assertThrows( JsonException.class, () -> v_array.intValue());
+		assertThrows( JsonException.class, () -> v_array.longValue());
+		assertThrows( JsonException.class, () -> v_array.floatValue());
+		assertThrows( JsonException.class, () -> v_array.doubleValue());
+		assertThrows( JsonException.class, () -> v_array.bigIntegerValue());
+		assertThrows( JsonException.class, () -> v_array.bigDecimalValue());
+		assertThrows( JsonException.class, () -> v_array.booleanValue());
+		assertThrows( JsonException.class, () -> v_array.stringValue());
+		assertThrows( JsonException.class, () -> v_array.objectValue());
+		support.assertJsonEquals(JsonArray.of("def"), v_array.arrayValue());
+
+		assertThrows( JsonException.class, () -> v_array.numberValue(10));
+		assertThrows( JsonException.class, () -> v_array.byteValue((byte)10));
+		assertThrows( JsonException.class, () -> v_array.shortValue((short)10));
+		assertThrows( JsonException.class, () -> v_array.intValue(10));
+		assertThrows( JsonException.class, () -> v_array.longValue(10L));
+		assertThrows( JsonException.class, () -> v_array.floatValue(10.10f));
+		assertThrows( JsonException.class, () -> v_array.doubleValue(10.10));
+		assertThrows( JsonException.class, () -> v_array.bigIntegerValue(BigInteger.TEN));
+		assertThrows( JsonException.class, () -> v_array.bigDecimalValue(BigDecimal.TEN));
+		assertThrows( JsonException.class, () -> v_array.booleanValue(true));
+		assertThrows( JsonException.class, () -> v_array.stringValue("xy"));
+		assertThrows( JsonException.class, () -> v_array.objectValue(JsonObject.of("a","AA")));
+		support.assertJsonEquals(JsonArray.of("def"), v_array.arrayValue(JsonArray.of("d","e")));
+	}
 }

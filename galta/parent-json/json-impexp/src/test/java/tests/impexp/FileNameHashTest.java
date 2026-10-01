@@ -15,8 +15,6 @@
  */
 package tests.impexp;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Random;
 
 import org.monflabs.json.JsonException;
@@ -60,30 +58,27 @@ public class FileNameHashTest extends ProjectTestCase {
 	}
 	
 	public void testDistribution() throws Exception {
-		Map<String,Integer> hashes = new HashMap<>();
-		
-		for(int i=0; i<1_000_000; i++) {
-			String s = randomString();
-			String h = FilenameHash.hash(s, 4);
-			Integer count = hashes.get(h);
-			if(count==null) {
-				count = 0;
-			}
-			count++;
-			hashes.put(h, count);
+		// The 256 first-level folders get a similar share of the keys
+		Random random = new Random(42);
+		int[] counts = new int[256];
+		int n = 256*200;
+		for(int i=0; i<n; i++) {
+			String h = FilenameHash.hash(randomString(random), 1);
+			counts[Integer.parseInt(h, 16)]++;
 		}
 		int min=Integer.MAX_VALUE, max=-1;
-		for(Integer v: hashes.values()) {
+		for(int v: counts) {
 			min = Math.min(min,v);
 			max = Math.max(max,v);
 		}
-		support.print("File hash distribution, min/max entries: {0}-{1}", min, max);
+		// 200 keys expected per folder: a uniform hash stays well within these bounds
+		assertTrue("min="+min, min>=100);
+		assertTrue("max="+max, max<=300);
 	}
-	private static Random random = new Random();
-	private static String randomString() {
+	private static String randomString(Random random) {
 	    int min = 'A';
 	    int max = 'Z';
-	    int targetStringLength = random.nextInt(10-3) + 3; 
+	    int targetStringLength = random.nextInt(10-3) + 3;
 	    StringBuilder buffer = new StringBuilder(targetStringLength);
 	    for (int i = 0; i < targetStringLength; i++) {
 	        int ch = min + random.nextInt(max - min);
