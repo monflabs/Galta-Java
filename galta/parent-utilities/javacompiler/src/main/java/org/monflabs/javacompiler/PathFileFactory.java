@@ -95,6 +95,11 @@ public class PathFileFactory implements SourceFactory, TargetFactory {
 	}
 
 	@Override
+	public boolean delete(String fileName) throws IOException {
+		return Files.deleteIfExists(path.resolve(fileName));
+	}
+
+	@Override
 	public Collection<String> listClassFiles(String packageFolder) throws IOException {
 		List<String> result = new ArrayList<>();
 		Path dir = packageFolder.isEmpty() ? path : path.resolve(packageFolder);

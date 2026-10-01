@@ -23,7 +23,9 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.tools.FileObject;
@@ -52,6 +54,9 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 	private TargetFactory targetFactory;
 	private ClassLoader cl;
 	private List<TargetFactory> classPathFactories;
+	// The class outputs of the running compilation: they reach the target factory only when the
+	// compilation succeeds (see JavaCompiler.writeOutputs)
+	private Map<String,byte[]> stagedOutputs;
 
 	protected PathFileManager(JavaFileManager fileManager, TargetFactory targetFactory, ClassLoader cl) {
 		super(fileManager);
@@ -66,11 +71,36 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 		}
 	}
 
+	/**
+	 * Start collecting the outputs of a compilation in memory.
+	 */
+	void startCompilation() {
+		stagedOutputs = new LinkedHashMap<>();
+	}
+
+	/**
+	 * Stop collecting the outputs of a compilation.
+	 * @return the outputs, by file name relative to the target root
+	 */
+	Map<String,byte[]> endCompilation() {
+		Map<String,byte[]> result = stagedOutputs;
+		stagedOutputs = null;
+		return result!=null ? result : new LinkedHashMap<>();
+	}
+
+	private JavaFileObject classOutput(String fileName, JavaFileObject.Kind kind) {
+		if(stagedOutputs==null) {
+			// Not within a compilation started by the compiler: write directly
+			return new PathTargetFile(targetFactory, fileName, kind, true);
+		}
+		return new StagedOutputFile(stagedOutputs, fileName, kind);
+	}
+
 	@Override
 	public JavaFileObject getJavaFileForOutput(JavaFileManager.Location location, String className,
 			JavaFileObject.Kind kind, FileObject sibling) throws IOException {
 		if(location==StandardLocation.CLASS_OUTPUT) {
-			return new PathTargetFile(targetFactory, className, kind);
+			return classOutput(className.replace('.', '/') + kind.extension, kind);
 		}
 		if(location==StandardLocation.SOURCE_OUTPUT) {
 			return new MemoryOutputFile(className.replace('.', '/') + kind.extension, kind);
@@ -82,7 +112,7 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 	public FileObject getFileForOutput(Location location, String packageName, String relativeName, FileObject sibling) throws IOException {
 		String fileName = packageName.isEmpty() ? relativeName : packageName.replace('.', '/') + "/" + relativeName;
 		if(location==StandardLocation.CLASS_OUTPUT) {
-			return new PathTargetFile(targetFactory, fileName, JavaFileObject.Kind.OTHER, true);
+			return classOutput(fileName, JavaFileObject.Kind.OTHER);
 		}
 		if(location==StandardLocation.SOURCE_OUTPUT) {
 			return new MemoryOutputFile(fileName, JavaFileObject.Kind.OTHER);
@@ -92,6 +122,10 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 
 	@Override
 	public ClassLoader getClassLoader(JavaFileManager.Location location) {
+		if(location==StandardLocation.ANNOTATION_PROCESSOR_PATH && super.hasLocation(location)) {
+			// An explicit processor path (-processorpath): the processors come from there
+			return super.getClassLoader(location);
+		}
 		return cl;
 	}
 	
@@ -131,7 +165,8 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 	
 	@Override
 	public boolean isSameFile(FileObject a, FileObject b) {
-		if(a instanceof FactoryClassFile || b instanceof FactoryClassFile || a instanceof MemoryOutputFile || b instanceof MemoryOutputFile) {
+		if(a instanceof FactoryClassFile || b instanceof FactoryClassFile || a instanceof MemoryOutputFile || b instanceof MemoryOutputFile
+				|| a instanceof StagedOutputFile || b instanceof StagedOutputFile) {
 			return a.toUri().equals(b.toUri());
 		}
 		return super.isSameFile(a, b);
@@ -160,6 +195,47 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 		}
 	}
 	
+	/**
+	 * A class output kept in memory until the compilation succeeds.
+	 */
+	private static class StagedOutputFile extends SimpleJavaFileObject {
+		private final Map<String,byte[]> outputs;
+		private final String fileName;
+		StagedOutputFile(Map<String,byte[]> outputs, String fileName, Kind kind) {
+			super(URI.create("staged:///" + fileName), kind);
+			this.outputs = outputs;
+			this.fileName = fileName;
+		}
+		@Override
+		public OutputStream openOutputStream() {
+			return new ByteArrayOutputStream() {
+				@Override
+				public void close() throws IOException {
+					synchronized(outputs) {
+						outputs.put(fileName, toByteArray());
+					}
+				}
+			};
+		}
+		@Override
+		public InputStream openInputStream() throws IOException {
+			byte[] b;
+			synchronized(outputs) {
+				b = outputs.get(fileName);
+			}
+			if(b==null) {
+				throw new IOException("File not written yet: "+fileName);
+			}
+			return new ByteArrayInputStream(b);
+		}
+		@Override
+		public CharSequence getCharContent(boolean ignoreEncodingErrors) throws IOException {
+			try(InputStream is = openInputStream()) {
+				return new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+			}
+		}
+	}
+
 	/**
 	 * A generated file kept in memory, readable back by javac (generated sources are compiled).
 	 */

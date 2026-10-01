@@ -59,6 +59,10 @@ public class MapTargetFactory implements TargetFactory {
 		return files.get(fileName);
 	}
 	@Override
+	public boolean delete(String fileName) {
+		return files.remove(fileName)!=null;
+	}
+	@Override
 	public Collection<String> listClassFiles(String packageFolder) {
 		return listClassFiles(packageFolder, false);
 	}

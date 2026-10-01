@@ -64,4 +64,18 @@ public interface TargetFactory {
 	public default Collection<String> listClassFiles(String packageFolder, boolean recurse) throws IOException {
 		return listClassFiles(packageFolder);
 	}
+
+	/**
+	 * Delete a file, if it exists.
+	 * <p>
+	 * The compiler deletes the previous outputs of a recompiled class that the new compilation
+	 * no longer produces (e.g. a nested class that was removed from the source). A factory that
+	 * does not support deleting keeps them: they are then still loadable, but unused.
+	 * @param fileName the file name, relative to the factory root ("com/acme/Greeter$1.class")
+	 * @return true if the file was deleted
+	 * @throws IOException
+	 */
+	public default boolean delete(String fileName) throws IOException {
+		return false;
+	}
 }

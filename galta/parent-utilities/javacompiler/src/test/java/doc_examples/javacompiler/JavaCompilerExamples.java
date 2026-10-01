@@ -112,9 +112,9 @@ public class JavaCompilerExamples extends ProjectTestCase {
 				.build()) {
 			JavaCompilerException e = assertThrows(JavaCompilerException.class, () -> compiler.compile("Broken"));
 			// Unable to compile the source
-			// [kind=ERROR, line=2, col=20, message=incompatible types: String cannot be converted to int]
+			// [kind=ERROR, source=Broken.java, line=2, col=20, message=incompatible types: java.lang.String cannot be converted to int]
 			assertTrue(e.getMessage().startsWith("Unable to compile the source"));
-			assertTrue(e.getMessage().contains("[kind=ERROR, line=2, col=20, message=incompatible types"));
+			assertTrue(e.getMessage(), e.getMessage().contains("[kind=ERROR, source=Broken.java, line=2, col=20, message=incompatible types: java.lang.String cannot be converted to int]"));
 		}
 	}
 
@@ -140,8 +140,8 @@ public class JavaCompilerExamples extends ProjectTestCase {
 				.failOnWarnings(true)
 				.build()) {
 			JavaCompilerException e = assertThrows(JavaCompilerException.class, () -> compiler.compile("Raw"));
-			// [kind=MANDATORY_WARNING, line=1, col=90, message=unchecked call to add(E) as a member of the raw type java.util.List]
-			assertTrue(e.getMessage().contains("kind=MANDATORY_WARNING"));
+			// [kind=MANDATORY_WARNING, source=Raw.java, line=1, col=90, message=unchecked call to add(E) as a member of the raw type java.util.List]
+			assertTrue(e.getMessage(), e.getMessage().contains("[kind=MANDATORY_WARNING, source=Raw.java, line=1, col=90, message=unchecked call to add(E) as a member of the raw type java.util.List]"));
 		}
 	}
 

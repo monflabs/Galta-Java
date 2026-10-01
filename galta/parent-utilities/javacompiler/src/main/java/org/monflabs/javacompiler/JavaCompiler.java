@@ -16,9 +16,15 @@
 package org.monflabs.javacompiler;
 
 import java.io.Closeable;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -33,7 +39,8 @@ public abstract class JavaCompiler implements Closeable {
 	private TargetFactory targetFactory;
 	private ClassLoader parentClassLoader;
 	private FactoryClassLoader classLoader;
-	private boolean compiledSinceLoader;
+	// The classes written (or deleted) by the compilations since the last getClassLoader() call
+	private Set<String> rewrittenClasses = new HashSet<>();
 	private List<String> options;
 	private List<String> warnings = Collections.emptyList();
 	
@@ -70,17 +77,26 @@ public abstract class JavaCompiler implements Closeable {
 	/**
 	 * Return a class loader for the compiled classes.
 	 * <p>
-	 * A class loader defines a class only once. When a compilation happened after the current
-	 * class loader defined some classes, a new class loader is returned, so the recompiled
-	 * classes are loaded in their latest version. Classes loaded through a previously returned
-	 * class loader are not affected.
+	 * A class loader defines a class only once. When a compilation rewrote a class that the
+	 * current class loader already loaded, a new class loader is returned, so the recompiled
+	 * classes are loaded in their latest version. Otherwise the same class loader is kept, so
+	 * the classes it already loaded stay compatible with the newly compiled ones. Classes
+	 * loaded through a previously returned class loader are not affected.
+	 * <p>
+	 * A compiler built with another compiler's class loader as parent keeps that loader: when
+	 * the other compiler later returns a new class loader, the classes of both are no longer
+	 * compatible (a <code>ClassCastException</code> or <code>NoSuchMethodError</code> can
+	 * follow). Rebuild the dependent compiler, with the new class loader, in that case.
 	 * @return the class loader
 	 */
 	public synchronized FactoryClassLoader getClassLoader() {
-		if(compiledSinceLoader && classLoader.hasDefinedClasses()) {
-			classLoader = new FactoryClassLoader(parentClassLoader, targetFactory);
+		for(String name: rewrittenClasses) {
+			if(classLoader.alreadyLoaded(name)!=null) {
+				classLoader = new FactoryClassLoader(parentClassLoader, targetFactory);
+				break;
+			}
 		}
-		compiledSinceLoader = false;
+		rewrittenClasses.clear();
 		return classLoader;
 	}
 	
@@ -116,21 +132,63 @@ public abstract class JavaCompiler implements Closeable {
 	 */
 	public final synchronized void compile(List<String> sources) {
 		warnings = Collections.emptyList();
-		try {
-			List<String> w = doCompile(sources);
-			if(w!=null && !w.isEmpty()) {
-				warnings = Collections.unmodifiableList(w);
-			}
-		} finally {
-			// Even a failed compilation may have written some classes
-			compiledSinceLoader = true;
+		if(sources==null || sources.isEmpty()) {
+			throw new JavaCompilerException(null,"No source to compile");
+		}
+		List<String> w = doCompile(sources);
+		if(w!=null && !w.isEmpty()) {
+			warnings = Collections.unmodifiableList(w);
 		}
 	}
 
 	/**
 	 * Compile a set of sources.
+	 * <p>
+	 * An implementation writes its outputs with {@link #writeOutputs(Map, Collection)}, once
+	 * the compilation succeeded: a failed compilation leaves the target factory unchanged.
 	 * @param sources the source names, as class names
 	 * @return the warnings, if any
 	 */
 	protected abstract List<String> doCompile(List<String> sources);
+
+	/**
+	 * Write the outputs of a successful compilation to the target factory.
+	 * <p>
+	 * The previous class files of the compiled top-level classes (<code>Outer.class</code>,
+	 * <code>Outer$*.class</code>) that are not part of the new outputs are deleted first, when
+	 * the target factory supports listing and deleting files.
+	 * @param outputs the outputs, by file name relative to the target root
+	 * @param sources the compiled sources, as class names
+	 */
+	protected void writeOutputs(Map<String,byte[]> outputs, Collection<String> sources) {
+		try {
+			for(String source: sources) {
+				int dot = source.lastIndexOf('.');
+				String folder = dot>=0 ? source.substring(0,dot).replace('.', '/') : "";
+				String simple = source.substring(dot+1);
+				for(String file: targetFactory.listClassFiles(folder)) {
+					String name = file.substring(folder.isEmpty() ? 0 : folder.length()+1);
+					if((name.equals(simple+".class") || name.startsWith(simple+"$")) && !outputs.containsKey(file)) {
+						if(targetFactory.delete(file)) {
+							rewrittenClasses.add(toClassName(file));
+						}
+					}
+				}
+			}
+			for(Map.Entry<String,byte[]> e: outputs.entrySet()) {
+				try(OutputStream os = targetFactory.openOutputStream(e.getKey())) {
+					os.write(e.getValue());
+				}
+				if(e.getKey().endsWith(".class")) {
+					rewrittenClasses.add(toClassName(e.getKey()));
+				}
+			}
+		} catch(IOException ex) {
+			throw new JavaCompilerException(ex,"Error while writing the compiled classes to the target");
+		}
+	}
+
+	private static String toClassName(String fileName) {
+		return fileName.substring(0, fileName.length()-".class".length()).replace('/', '.');
+	}
 }

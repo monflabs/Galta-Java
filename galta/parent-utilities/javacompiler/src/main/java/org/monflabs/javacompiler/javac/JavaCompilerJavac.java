@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import javax.tools.Diagnostic;
@@ -48,7 +49,16 @@ import org.monflabs.util.Console;
  * the <code>file:</code> URLs of the {@link URLClassLoader}s found in the parent class loader
  * chain, and the classes of the target factory and of the parent <code>FactoryClassLoader</code>s.
  * It is left untouched when the options set it explicitly (<code>-classpath</code>, <code>-cp</code>
- * or <code>--class-path</code>).
+ * or <code>--class-path</code>). Only <code>file:</code> URLs are used: the entries of other
+ * class loaders (<code>jar:</code> or custom URL schemes, module layers...) are not visible to javac.
+ * <p>
+ * Annotation processing is off (<code>-proc:none</code>) unless the options mention it
+ * (<code>-processor</code>, <code>-processorpath</code>, <code>--processor-path</code>,
+ * <code>--processor-module-path</code> or <code>-proc:</code>): otherwise any processor
+ * registered on the class path would run on every compilation.
+ * <p>
+ * The outputs are kept in memory during the compilation and written to the target factory only
+ * when it succeeds: a failed compilation leaves the target unchanged.
  */
 public class JavaCompilerJavac extends org.monflabs.javacompiler.JavaCompiler {
 
@@ -81,6 +91,30 @@ public class JavaCompilerJavac extends org.monflabs.javacompiler.JavaCompiler {
 		// The compiler's class loader is only exposed to the annotation processors: use its parent,
 		// as the compiler class loader instance changes after a recompilation
 		this.fileManager = new PathFileManager(stdFileManager, getTargetFactory(), new org.monflabs.javacompiler.FactoryClassLoader(parentClassLoader, getTargetFactory()));
+	}
+	
+	/**
+	 * The options passed to javac: annotation processing is disabled unless the options
+	 * explicitly configure it.
+	 */
+	static List<String> effectiveOptions(List<String> options) {
+		List<String> result = new ArrayList<>();
+		boolean processing = false;
+		if(options!=null) {
+			for(String o: options) {
+				if(o.equals("-processor") || o.equals("-processorpath") || o.equals("--processor-path") || o.startsWith("--processor-path=")
+					|| o.equals("--processor-module-path") || o.startsWith("--processor-module-path=") || o.startsWith("-proc:")) {
+					processing = true;
+				}
+			}
+		}
+		if(!processing) {
+			result.add("-proc:none");
+		}
+		if(options!=null) {
+			result.addAll(options);
+		}
+		return result;
 	}
 	
 	private static boolean hasClassPathOption(List<String> options) {
@@ -155,8 +189,21 @@ public class JavaCompilerJavac extends org.monflabs.javacompiler.JavaCompiler {
 			compilationUnits.add(new PathSourceFile(getSourceFactory(), name));
 		}
 		
-		JavaCompiler.CompilationTask task = javac.getTask(null, fileManager, collector, getOptions(), null, compilationUnits);
-		boolean result = task.call();
+		boolean result;
+		Map<String,byte[]> outputs;
+		fileManager.startCompilation();
+		try {
+			JavaCompiler.CompilationTask task = javac.getTask(null, fileManager, collector, effectiveOptions(getOptions()), null, compilationUnits);
+			result = task.call();
+		} catch(IllegalArgumentException ex) {
+			// Invalid option
+			throw new JavaCompilerException(ex,"Invalid compiler option: {0}",ex.getMessage());
+		} catch(RuntimeException ex) {
+			// For example an exception thrown by an annotation processor
+			throw new JavaCompilerException(ex,"Unable to compile the source: {0}",ex.getMessage());
+		} finally {
+			outputs = fileManager.endCompilation();
+		}
 		List<String> warnings = new ArrayList<>();
 		if (!result || collector.getDiagnostics().size() > 0) {
 			StringBuilder exceptionMsg = new StringBuilder();
@@ -187,12 +234,17 @@ public class JavaCompilerJavac extends org.monflabs.javacompiler.JavaCompiler {
 				throw new JavaCompilerException(null,exceptionMsg.toString());
 			}
 		}
+		writeOutputs(outputs, sources);
 		return warnings;
 	}
 	
 	private static String format(Diagnostic<? extends JavaFileObject> d) {
 		StringBuilder b = new StringBuilder();
 		b.append("[kind=").append(d.getKind());
+		if(d.getSource()!=null) {
+			String name = d.getSource().getName();
+			b.append(", ").append("source=").append(name.startsWith("/") ? name.substring(1) : name);
+		}
 		b.append(", ").append("line=").append(d.getLineNumber());
 		b.append(", ").append("col=").append(d.getColumnNumber());
 		b.append(", ").append("message=").append(d.getMessage(Locale.US)).append("]");
