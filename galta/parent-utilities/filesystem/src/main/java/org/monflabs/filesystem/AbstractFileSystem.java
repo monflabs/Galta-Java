@@ -77,7 +77,10 @@ public abstract class AbstractFileSystem extends FileSystem {
     	StringBuilder sb = new StringBuilder(first);
         for (String segment : more) {
             if (segment.length() > 0) {
-                if (sb.length() > 0 && !sb.toString().endsWith(separator)) {
+                // No toString() per segment: compare the trailing characters in place
+                int len = sb.length();
+                int sepLen = separator.length();
+                if (len > 0 && (len < sepLen || sb.indexOf(separator, len - sepLen) < 0)) {
                     sb.append(separator);
                 }
                 sb.append(segment);

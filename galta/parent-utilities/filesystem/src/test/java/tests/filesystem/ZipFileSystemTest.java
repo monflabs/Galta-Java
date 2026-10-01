@@ -484,4 +484,17 @@ public class ZipFileSystemTest extends ProjectTestCase {
             assertThrows(java.nio.file.FileSystemNotFoundException.class, () -> registered.getFileSystem(URI.create("zip:///other.zip")));
         }
     }
+
+    public void testChannelPositionBeyond2GBAndClosedChannel() throws IOException {
+        java.nio.channels.SeekableByteChannel ch = Files.newByteChannel(fs.getPath("/file1.txt"));
+        long far = 3L << 31;
+        ch.position(far);
+        // The position used to be cast to an int and wrap around
+        assertEquals(far, ch.position());
+        assertEquals(-1, ch.read(java.nio.ByteBuffer.allocate(4)));
+        ch.close();
+        // A closed channel throws ClosedChannelException, not a plain IOException
+        assertThrows(java.nio.channels.ClosedChannelException.class, () -> ch.read(java.nio.ByteBuffer.allocate(4)));
+        assertThrows(java.nio.channels.ClosedChannelException.class, () -> ch.position());
+    }
 }

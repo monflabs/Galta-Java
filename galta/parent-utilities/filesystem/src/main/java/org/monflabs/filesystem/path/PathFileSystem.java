@@ -78,7 +78,7 @@ public class PathFileSystem extends AbstractFileSystem {
 		@Override
 		protected PathFileSystem _build() {
 			try {
-				PathFileSystemProvider p = provider!=null ? provider : DEFAUT_PROVIDER;
+				PathFileSystemProvider p = provider!=null ? provider : DEFAULT_PROVIDER;
 				URI u = uri!=null ? uri : DEFAULT_URI;
 				HashMap<String,Object> env = new HashMap<>();
 		        env.put(PathFileSystemProvider.ROOT_PARAM, root);
@@ -93,11 +93,16 @@ public class PathFileSystem extends AbstractFileSystem {
 		return new Builder();
 	}
 	
-	public static final PathFileSystemProvider DEFAUT_PROVIDER = new PathFileSystemProvider(false);
+	public static final PathFileSystemProvider DEFAULT_PROVIDER = new PathFileSystemProvider(false);
+	/** @deprecated misspelled: use {@link #DEFAULT_PROVIDER} */
+	@Deprecated
+	public static final PathFileSystemProvider DEFAUT_PROVIDER = DEFAULT_PROVIDER;
 	public static final URI DEFAULT_URI = URI.create(PathFileSystemProvider.SCHEME + ":///");
 
 	
     private final java.nio.file.Path rootPath;
+    // The real path of the root, resolved once rather than on every operation
+    private final Sandbox.RealRoot realRoot;
     
     /**
      * Create a PathFileSystem with a root path for sandboxing.
@@ -110,6 +115,7 @@ public class PathFileSystem extends AbstractFileSystem {
         super(provider, uri, "/");  // Always use "/" as separator
         // Absolute, so that relativizing an absolute OS path against it works
         this.rootPath = rootPath != null ? rootPath.toAbsolutePath().normalize() : null;
+        this.realRoot = this.rootPath != null ? new Sandbox.RealRoot(this.rootPath) : null;
     }
     
     /**
@@ -169,7 +175,7 @@ public class PathFileSystem extends AbstractFileSystem {
         if (rootPath == null) {
             return;
         }
-        Sandbox.checkInside(osPath, rootPath, osPath);
+        Sandbox.checkInside(osPath, rootPath, realRoot.get(), osPath);
     }
     
     /**

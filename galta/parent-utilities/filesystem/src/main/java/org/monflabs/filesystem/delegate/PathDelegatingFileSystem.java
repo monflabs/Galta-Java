@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.HashMap;
 
 import org.monflabs.filesystem.AbstractFileSystem;
+import org.monflabs.filesystem.Sandbox;
 import org.monflabs.filesystem.AbstractPath;
 import org.monflabs.util.ObjectBuilder;
 import org.monflabs.util.path.FileSystemRuntimeException;
@@ -54,7 +55,7 @@ public class PathDelegatingFileSystem extends AbstractFileSystem {
 		@Override
 		protected PathDelegatingFileSystem _build() {
 			try {
-				PathDelegatingFileSystemProvider p = provider!=null ? provider : DEFAUT_PROVIDER;
+				PathDelegatingFileSystemProvider p = provider!=null ? provider : DEFAULT_PROVIDER;
 				URI u = uri!=null ? uri : DEFAULT_URI;
 				HashMap<String,Object> env = new HashMap<>();
 		        env.put(PathDelegatingFileSystemProvider.ROOT_PATH_PARAM, root);
@@ -69,14 +70,26 @@ public class PathDelegatingFileSystem extends AbstractFileSystem {
 		return new Builder();
 	}
 
-	public static PathDelegatingFileSystemProvider DEFAUT_PROVIDER = new PathDelegatingFileSystemProvider(false);
+	public static final PathDelegatingFileSystemProvider DEFAULT_PROVIDER = new PathDelegatingFileSystemProvider(false);
+	/** @deprecated misspelled: use {@link #DEFAULT_PROVIDER} */
+	@Deprecated
+	public static final PathDelegatingFileSystemProvider DEFAUT_PROVIDER = DEFAULT_PROVIDER;
 	public static final URI DEFAULT_URI = URI.create(PathDelegatingFileSystemProvider.SCHEME + ":///");
     
     private final Path rootPath;
+    private final Sandbox.RealRoot realRoot;
     
     public PathDelegatingFileSystem(PathDelegatingFileSystemProvider provider, URI uri, Path rootPath) {
         super(provider, uri, rootPath.getFileSystem().getSeparator());
         this.rootPath = rootPath;
+        this.realRoot = new Sandbox.RealRoot(rootPath);
+    }
+
+    /**
+     * The real path of the root (symbolic links resolved), resolved once.
+     */
+    public Path getRealRootPath() throws java.io.IOException {
+        return realRoot.get();
     }
     
     /**

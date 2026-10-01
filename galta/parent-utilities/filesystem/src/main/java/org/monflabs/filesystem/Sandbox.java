@@ -43,8 +43,15 @@ public final class Sandbox {
      * @throws AccessDeniedException if the path escapes the root
      */
     public static void checkInside(Path path, Path root, Object displayPath) throws IOException {
-        Path realRoot = root.toRealPath();
-        Path current = path.toAbsolutePath().normalize();
+        checkInside(path, root, root.toRealPath(), displayPath);
+    }
+
+    /**
+     * Same as {@link #checkInside(Path, Path, Object)}, with the real path of the root
+     * already resolved: a filesystem resolves it once instead of on every operation.
+     */
+    public static void checkInside(Path path, Path root, Path realRoot, Object displayPath) throws IOException {
+        Path current= path.toAbsolutePath().normalize();
         if (!current.startsWith(root.toAbsolutePath().normalize()) && !current.startsWith(realRoot)) {
             throw escapes(displayPath);
         }
@@ -80,6 +87,27 @@ public final class Sandbox {
         throw escapes(displayPath);
     }
     
+    /**
+     * The real path of a sandbox root, resolved on first use and then kept.
+     */
+    public static final class RealRoot {
+        private final Path root;
+        private volatile Path real;
+
+        public RealRoot(Path root) {
+            this.root = root;
+        }
+
+        public Path get() throws IOException {
+            Path r = real;
+            if (r == null) {
+                r = root.toRealPath();
+                real = r;
+            }
+            return r;
+        }
+    }
+
     private static AccessDeniedException escapes(Object displayPath) {
         return new AccessDeniedException("Path escapes filesystem root: " + displayPath);
     }

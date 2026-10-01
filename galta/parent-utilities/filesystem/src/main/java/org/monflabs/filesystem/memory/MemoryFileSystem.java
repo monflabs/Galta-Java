@@ -50,7 +50,7 @@ public class MemoryFileSystem extends AbstractFileSystem {
 		@Override
 		protected MemoryFileSystem _build() {
 			try {
-				MemoryFileSystemProvider p = provider!=null ? provider : DEFAUT_PROVIDER;
+				MemoryFileSystemProvider p = provider!=null ? provider : DEFAULT_PROVIDER;
 				URI u = uri!=null ? uri : DEFAULT_URI;
 				HashMap<String,Object> env = new HashMap<>();
 				return (MemoryFileSystem)p.newFileSystem(u, env);
@@ -64,7 +64,10 @@ public class MemoryFileSystem extends AbstractFileSystem {
 		return new Builder();
 	}
 	
-	public static MemoryFileSystemProvider DEFAUT_PROVIDER = new MemoryFileSystemProvider(false);
+	public static final MemoryFileSystemProvider DEFAULT_PROVIDER = new MemoryFileSystemProvider(false);
+	/** @deprecated misspelled: use {@link #DEFAULT_PROVIDER} */
+	@Deprecated
+	public static final MemoryFileSystemProvider DEFAUT_PROVIDER = DEFAULT_PROVIDER;
 	public static final URI DEFAULT_URI = URI.create(MemoryFileSystemProvider.SCHEME + ":///");
     
     private final Map<String, MemoryFileNode> nodes = new ConcurrentHashMap<>();

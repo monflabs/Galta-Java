@@ -417,12 +417,38 @@ public abstract class AbstractPath implements Path {
         return path;
     }
     
+    // Computed once: a path is immutable
+    private List<String> nameComponents;
+
+    /**
+     * The name elements of this path (an unmodifiable list).
+     */
     protected List<String> getNameComponents() {
-        if (path.isEmpty() || path.equals(separator)) {
-            return new ArrayList<>();
+        List<String> names = nameComponents;
+        if (names == null) {
+            names = java.util.Collections.unmodifiableList(splitNameComponents());
+            nameComponents = names;
         }
-        String[] parts = path.split(java.util.regex.Pattern.quote(separator));
-        List<String> names = new ArrayList<>();
+        return names;
+    }
+
+    private List<String> splitNameComponents() {
+        if (path.isEmpty() || path.equals(separator)) {
+            return new ArrayList<>(0);
+        }
+        // Split by hand: String.split() compiled a regex on every call
+        List<String> parts = new ArrayList<>();
+        int sepLen = separator.length();
+        int start = 0;
+        while (true) {
+            int i = sepLen == 0 ? -1 : path.indexOf(separator, start);
+            parts.add(i < 0 ? path.substring(start) : path.substring(start, i));
+            if (i < 0) {
+                break;
+            }
+            start = i + sepLen;
+        }
+        List<String> names = new ArrayList<>(parts.size());
         boolean skipDrive = hasDriveLetter();
         for (String part : parts) {
             if (!part.isEmpty()) {

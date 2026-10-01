@@ -103,6 +103,11 @@ public class ResourceFileSystem extends AbstractFileSystem {
     private final Set<String> resourcePaths;
     // Resource path -> URL prefix of the classpath entry whose manifest listed it
     private final Map<String, String> origins = new HashMap<>();
+    // Indexed once at load: directory ("" for the root) -> names of its direct children
+    private final Map<String, Set<String>> directories = new HashMap<>();
+    // Resolved lazily, then cached: resources don't change while the filesystem is open
+    private final Map<String, URL> urls = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Long> sizes = new java.util.concurrent.ConcurrentHashMap<>();
     private final ResourceFileStore fileStore;
     
     public ResourceFileSystem(ResourceFileSystemProvider provider, URI uri, 
@@ -113,6 +118,34 @@ public class ResourceFileSystem extends AbstractFileSystem {
         this.basePath = basePath;
         this.resourcePaths = loadManifest(manifestFile);
         this.fileStore = new ResourceFileStore(this);
+        indexDirectories();
+    }
+
+    private void indexDirectories() {
+        directories.put("", new LinkedHashSet<>());
+        for (String resource : resourcePaths) {
+            // Register the resource with its parent, and the implicit ancestors
+            String child = resource;
+            int slash = child.lastIndexOf('/');
+            while (true) {
+                String parent = slash < 0 ? "" : child.substring(0, slash);
+                String name = child.substring(slash + 1);
+                Set<String> siblings = directories.get(parent);
+                boolean known = siblings != null;
+                if (!known) {
+                    siblings = new LinkedHashSet<>();
+                    directories.put(parent, siblings);
+                }
+                if (!name.isEmpty()) {
+                    siblings.add(name);
+                }
+                if (known || parent.isEmpty()) {
+                    break;
+                }
+                child = parent;
+                slash = child.lastIndexOf('/');
+            }
+        }
     }
     
     /**
@@ -176,23 +209,6 @@ public class ResourceFileSystem extends AbstractFileSystem {
     }
     
     @Override
-    public Path getPath(String first, String... more) {
-        checkOpen();
-        
-        StringBuilder pathBuilder = new StringBuilder(first);
-        for (String segment : more) {
-            if (!segment.isEmpty()) {
-                if (pathBuilder.length() > 0 && pathBuilder.charAt(pathBuilder.length() - 1) != '/') {
-                    pathBuilder.append('/');
-                }
-                pathBuilder.append(segment);
-            }
-        }
-        
-        return new ResourcePath(this, pathBuilder.toString());
-    }
-    
-    @Override
     protected boolean matchRelativeToRoot() {
         // Patterns are matched against "a/b.txt", not "/a/b.txt"
         return true;
@@ -247,15 +263,10 @@ public class ResourceFileSystem extends AbstractFileSystem {
      * Check if a path represents an implicit directory.
      */
     private boolean isImplicitDirectory(String pathStr) {
-        String prefix = pathStr.endsWith("/") ? pathStr : pathStr + "/";
-        
-        for (String resource : resourcePaths) {
-            if (resource.startsWith(prefix)) {
-                return true;
-            }
+        if (pathStr.endsWith("/")) {
+            pathStr = pathStr.substring(0, pathStr.length() - 1);
         }
-        
-        return false;
+        return directories.containsKey(pathStr);
     }
     
     /**
@@ -271,8 +282,19 @@ public class ResourceFileSystem extends AbstractFileSystem {
      * The size of a resource file, read from its URL connection when available.
      */
     long resourceSize(ResourcePath path) {
+        String pathStr = normalizePath(path.toString());
+        Long cached = sizes.get(pathStr);
+        if (cached != null) {
+            return cached;
+        }
+        long size = computeResourceSize(path, pathStr);
+        sizes.put(pathStr, size);
+        return size;
+    }
+
+    private long computeResourceSize(ResourcePath path, String pathStr) {
         try {
-            URL url = findResource(normalizePath(path.toString()));
+            URL url = findResource(pathStr);
             if (url != null) {
                 java.net.URLConnection c = url.openConnection();
                 long length = c.getContentLengthLong();
@@ -311,6 +333,18 @@ public class ResourceFileSystem extends AbstractFileSystem {
      * holding the same name, one jar's manifest could serve the other jar's bytes.
      */
     private URL findResource(String pathStr) throws IOException {
+        URL cached = urls.get(pathStr);
+        if (cached != null) {
+            return cached;
+        }
+        URL url = lookupResource(pathStr);
+        if (url != null) {
+            urls.put(pathStr, url);
+        }
+        return url;
+    }
+
+    private URL lookupResource(String pathStr) throws IOException {
         String resourcePath = basePath + pathStr;
         String origin = origins.get(pathStr);
         URL first = null;
@@ -331,53 +365,19 @@ public class ResourceFileSystem extends AbstractFileSystem {
      */
     public List<Path> listDirectory(ResourcePath dir) {
         String dirPath = normalizePath(dir.toString());
-        
-        // Normalize directory path
-        if (!dirPath.isEmpty() && !dirPath.endsWith("/")) {
-            dirPath = dirPath + "/";
+        if (dirPath.endsWith("/")) {
+            dirPath = dirPath.substring(0, dirPath.length() - 1);
         }
-        
-        Set<String> children = new LinkedHashSet<>();
-        
-        // Scan all resources
-        for (String resource : resourcePaths) {
-            // Check if resource is under this directory
-            if (dirPath.isEmpty() || resource.startsWith(dirPath)) {
-                // Get relative path
-                String relativePath = dirPath.isEmpty() ? resource : resource.substring(dirPath.length());
-                
-                // Skip if empty
-                if (relativePath.isEmpty()) {
-                    continue;
-                }
-                
-                // Get first component (direct child)
-                int slashIndex = relativePath.indexOf('/');
-                String childName;
-                if (slashIndex > 0) {
-                    // Directory entry
-                    childName = relativePath.substring(0, slashIndex);
-                } else if (slashIndex == 0) {
-                    // Skip entries that start with slash
-                    continue;
-                } else {
-                    // File entry
-                    childName = relativePath;
-                }
-                
-                children.add(childName);
+        Set<String> children = directories.get(dirPath);
+        List<Path> result = new ArrayList<>();
+        if (children != null) {
+            for (String child : children) {
+                result.add(dir.resolve(child));
             }
         }
-        
-        // Convert to paths
-        List<Path> result = new ArrayList<>();
-        for (String child : children) {
-            result.add(dir.resolve(child));
-        }
-        
         return result;
     }
-    
+
     /**
      * Normalize a path string (remove leading slash).
      */

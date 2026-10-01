@@ -103,7 +103,7 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
     private void validatePath(PathDelegatingPath path) throws IOException {
         PathDelegatingFileSystem fs = (PathDelegatingFileSystem) path.getFileSystem();
         // Lexical check, then symbolic links followed (dangling ones included)
-        Sandbox.checkInside(path.toDelegatePath(), fs.getRootPath(), path);
+        Sandbox.checkInside(path.toDelegatePath(), fs.getRootPath(), fs.getRealRootPath(), path);
     }
     
     @Override

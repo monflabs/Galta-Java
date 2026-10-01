@@ -115,7 +115,7 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
             // Symbolic links are followed, dangling ones included: getCanonicalFile() returns a
             // dangling link's own path, so a link to a missing file outside passed the check and
             // CREATE then created that file outside the root
-            Sandbox.checkInside(path.toFile().toPath(), fs.getRoot().toPath(), path);
+            Sandbox.checkInside(path.toFile().toPath(), fs.getRoot().toPath(), fs.getRealRootPath(), path);
         }
     }
     

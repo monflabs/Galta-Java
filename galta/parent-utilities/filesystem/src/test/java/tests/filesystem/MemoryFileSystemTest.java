@@ -31,7 +31,7 @@ public class MemoryFileSystemTest extends AbstractFileSystemTest {
     
     @Override
     protected FileSystem createFileSystem(int index) throws IOException {
-        return MemoryFileSystem.DEFAUT_PROVIDER.newFileSystem(MemoryFileSystem.DEFAULT_URI, new HashMap<>());
+        return MemoryFileSystem.DEFAULT_PROVIDER.newFileSystem(MemoryFileSystem.DEFAULT_URI, new HashMap<>());
     }
     
     @Override

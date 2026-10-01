@@ -50,9 +50,9 @@ public class DualFileSystemDemo {
         System.out.println("=".repeat(60) + "\n");
         
         try {
-            demonstrateFilesystem("File-based", FileFileSystem.DEFAUT_PROVIDER, FileFileSystemProvider.SCHEME);
+            demonstrateFilesystem("File-based", FileFileSystem.DEFAULT_PROVIDER, FileFileSystemProvider.SCHEME);
             System.out.println("\n" + "=".repeat(60) + "\n");
-            demonstrateFilesystem("Memory-based", MemoryFileSystem.DEFAUT_PROVIDER, MemoryFileSystemProvider.SCHEME);
+            demonstrateFilesystem("Memory-based", MemoryFileSystem.DEFAULT_PROVIDER, MemoryFileSystemProvider.SCHEME);
         } catch (Exception e) {
             e.printStackTrace();
         }

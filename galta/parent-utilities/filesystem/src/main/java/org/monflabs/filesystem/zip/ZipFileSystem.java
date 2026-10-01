@@ -178,23 +178,6 @@ public class ZipFileSystem extends AbstractFileSystem {
     }
     
     @Override
-    public Path getPath(String first, String... more) {
-        checkOpen();
-        
-        StringBuilder pathBuilder = new StringBuilder(first);
-        for (String segment : more) {
-            if (!segment.isEmpty()) {
-                if (pathBuilder.length() > 0 && pathBuilder.charAt(pathBuilder.length() - 1) != '/') {
-                    pathBuilder.append('/');
-                }
-                pathBuilder.append(segment);
-            }
-        }
-        
-        return new ZipPath(this, pathBuilder.toString());
-    }
-    
-    @Override
     protected boolean matchRelativeToRoot() {
         // Patterns are matched against "a/b.txt", not "/a/b.txt"
         return true;

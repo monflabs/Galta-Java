@@ -279,7 +279,7 @@ public class PathFileSystemDemo {
             env.put(PathFileSystemProvider.ROOT_PARAM, rootPath);
         }
         
-        PathFileSystemProvider provider = PathFileSystem.DEFAUT_PROVIDER;
+        PathFileSystemProvider provider = PathFileSystem.DEFAULT_PROVIDER;
         return provider.newFileSystem(
             URI.create("pathfs:///" + UUID.randomUUID()), 
             env

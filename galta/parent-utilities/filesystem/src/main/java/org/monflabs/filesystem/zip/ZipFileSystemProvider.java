@@ -49,6 +49,7 @@ import org.monflabs.filesystem.AbstractFileSystem;
 import org.monflabs.filesystem.AbstractFileSystemProvider;
 import org.monflabs.filesystem.AbstractPath;
 import org.monflabs.filesystem.ListDirectoryStream;
+import org.monflabs.filesystem.ReadOnlyByteChannel;
 
 /**
  * FileSystemProvider for read-only ZIP file access.
@@ -282,82 +283,6 @@ public class ZipFileSystemProvider extends AbstractFileSystemProvider {
     @Override
     protected void setTimes(Path path, FileTime lastModifiedTime, FileTime lastAccessTime, FileTime createTime) throws IOException {
         throw new ReadOnlyFileSystemException();
-    }
-    
-    /**
-     * Read-only byte channel that wraps a byte array.
-     */
-    private static class ReadOnlyByteChannel implements SeekableByteChannel {
-        private final byte[] content;
-        private int position;
-        private boolean open = true;
-        
-        public ReadOnlyByteChannel(byte[] content) {
-            this.content = content;
-            this.position = 0;
-        }
-        
-        @Override
-        public int read(ByteBuffer dst) throws IOException {
-            checkOpen();
-            
-            if (position >= content.length) {
-                return -1;
-            }
-            
-            int length = Math.min(dst.remaining(), content.length - position);
-            dst.put(content, position, length);
-            position += length;
-            return length;
-        }
-        
-        @Override
-        public int write(ByteBuffer src) throws IOException {
-            throw new NonWritableChannelException();
-        }
-        
-        @Override
-        public long position() throws IOException {
-            checkOpen();
-            return position;
-        }
-        
-        @Override
-        public SeekableByteChannel position(long newPosition) throws IOException {
-            checkOpen();
-            if (newPosition < 0) {
-                throw new IllegalArgumentException("Negative position");
-            }
-            this.position = (int) newPosition;
-            return this;
-        }
-        
-        @Override
-        public long size() throws IOException {
-            checkOpen();
-            return content.length;
-        }
-        
-        @Override
-        public SeekableByteChannel truncate(long size) throws IOException {
-            throw new NonWritableChannelException();
-        }
-        
-        @Override
-        public boolean isOpen() {
-            return open;
-        }
-        
-        @Override
-        public void close() {
-            open = false;
-        }
-        
-        private void checkOpen() throws IOException {
-            if (!open) {
-                throw new IOException("Channel is closed");
-            }
-        }
     }
     
     /**
