@@ -110,6 +110,21 @@ public class JsonPathExamples extends ProjectTestCase {
 		assertEquals("[4,5]", JsonPathFactory.get().getJsonPath("$[?(@ >= 3)]").read(numbers).stringify());
 	}
 
+	public void testFunctions() {
+		assertEquals("[\"Sayings of the Century\",\"The Lord of the Rings\"]", read("$..book[?length(@.title) > 15].title").stringify());
+		assertEquals("[\"Moby Dick\",\"The Lord of the Rings\"]", read("$..book[?count(@.*) == 5].title").stringify());
+		assertEquals("[\"Moby Dick\"]", read("$..book[?match(@.isbn, '0-553-.*')].title").stringify());
+		assertEquals("[\"Moby Dick\"]", read("$..book[?search(@.author, 'Mel')].title").stringify());
+		assertEquals("[\"Sayings of the Century\",\"Moby Dick\"]", read("$..book[?value(@..price) < 9].title").stringify());
+	}
+
+	public void testStrictMode() {
+		JsonObject odd = JsonObject.parse("{\"a-b\":1}");
+		assertEquals(1, JsonPathFactory.get().getJsonPath("$.a-b").read(odd).intValue());
+		assertThrows(JsonException.class, () -> JsonPathFactory.strict().getJsonPath("$.a-b"));
+		assertEquals(1, JsonPathFactory.strict().getJsonPath("$['a-b']").read(odd).intValue());
+	}
+
 	public void testUnsupported() {
 		assertThrows(JsonException.class, () -> JsonPathFactory.get().getJsonPath("$[?(@.d in [2, 3])]"));
 		assertThrows(JsonException.class, () -> JsonPathFactory.get().getJsonPath("$[?(@.a =~ /x/)]"));
@@ -118,8 +133,9 @@ public class JsonPathExamples extends ProjectTestCase {
 	}
 
 	public void testFilterIndefinitePath() {
-		JsonPath p = JsonPathFactory.get().getJsonPath("$.store[?(@..price > 10)]");
-		assertThrows(JsonException.class, () -> p.read(json));
+		// A comparison needs a singular query: rejected when the path is compiled
+		assertThrows(JsonException.class, () -> JsonPathFactory.get().getJsonPath("$.store[?(@..price > 10)]"));
+		assertThrows(JsonException.class, () -> JsonPathFactory.get().getJsonPath("$.store.book[?(@.tags[*] == 'x')]"));
 	}
 
 	public void testResultShapes() {

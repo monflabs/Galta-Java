@@ -15,6 +15,11 @@
  */
 package org.monflabs.json.jsonpath;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
+import org.monflabs.json.JsonArray;
+import org.monflabs.json.JsonObject;
 import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonUtil;
 
@@ -67,7 +72,7 @@ public final class ExprBinaryOp extends ExprNode {
 	private static void addNode(StringBuilder b, ExprNode n) {
 		if(n instanceof ExprLiteral) {
 			b.append(n.toString());
-		} else if(n instanceof ExprPathOp) {
+		} else if(n instanceof ExprPathOp || n instanceof ExprFunction) {
 			b.append(n.toString());
 		} else {
 			b.append("(");
@@ -94,87 +99,27 @@ public final class ExprBinaryOp extends ExprNode {
 			}
 		}
 			
-		JsonValues rLeft = null;
-		if(left instanceof ExprPathOp p) {
-			rLeft = p.executePath(root, current);
-		}
-		JsonValues rRight = null;
-		if(right instanceof ExprPathOp p) {
-			rRight = p.executePath(root, current);
-		}
+		// RFC 9535: the operands are values, or Nothing (an empty singular query)
+		Object l = left.evaluate(root, current);
+		Object r = right.evaluate(root, current);
 		switch(op) {
-			case EQ:	 return eq(rLeft,rRight);
-			case NE:	 return ne(rLeft,rRight);
-			case LT:	 return lt(rLeft,rRight);
-			case LE:	 return le(rLeft,rRight);
-			case GT:	 return gt(rLeft,rRight);
-			case GE:	 return ge(rLeft,rRight);
+			case EQ:	 return eq(l,r);
+			case NE:	 return !eq(l,r);
+			case LT:	 return lt(l,r);
+			case LE:	 return lt(l,r) || eq(l,r);
+			case GT:	 return lt(r,l);
+			case GE:	 return lt(r,l) || eq(l,r);
 		}
 		throw new IllegalStateException();
 	}
-	private boolean eq(JsonValues rLeft , JsonValues rRight) {
-		return eq(left,rLeft,right,rRight);
-	}
-	private boolean ne(JsonValues rLeft , JsonValues rRight) {
-		return !eq(left,rLeft,right,rRight);
-	}
-	private boolean lt(JsonValues rLeft , JsonValues rRight) {
-		return lt(left,rLeft,right,rRight);
-	}
-	private boolean le(JsonValues rLeft , JsonValues rRight) {
-		return lt(left,rLeft,right,rRight) || eq(left,rLeft,right,rRight);
-	}
-	private boolean gt(JsonValues rLeft , JsonValues rRight) {
-		return lt(right,rRight,left,rLeft);
-	}
-	private boolean ge(JsonValues rLeft , JsonValues rRight) {
-		return lt(right,rRight,left,rLeft) || eq(left,rLeft,right,rRight);
-	}
-
-	
 	
 	// Comparisons are different from the Javascript spec!
-	private static boolean eq(ExprNode left, JsonValues rLeft, ExprNode right, JsonValues rRight) {
-		if(rLeft!=null) {
-			if(!((ExprPathOp)left).isDefinite()) {
-				throw new JsonException(null,"Can't use an indefinite path in filters");
-			}
+	private static boolean eq(Object v1, Object v2) {
+		if(v1==NOTHING || v2==NOTHING) {
+			// Nothing only equals Nothing
+			return v1==v2;
 		}
-		if(rRight!=null) {
-			if(!((ExprPathOp)right).isDefinite()) {
-				throw new JsonException(null,"Can't use an indefinite path in filters");
-			}
-		}
-		if(rLeft!=null) {
-			if(rRight!=null) {
-				int leftSize = rLeft._size();
-				int rightSize = rRight._size();
-				if(leftSize==rightSize) {
-					for(int i=0; i<leftSize; i++) {
-						if(!eqValue(rLeft._get(i), rRight._get(i))) {
-							return false;
-						}
-					}
-					return true;
-				}
-			} else if(right instanceof ExprLiteral lit) {
-				if(rLeft._size()==1) {
-					return eqValue(rLeft._get(0), lit.getValue());
-				}
-			}
-		} else if(rRight!=null) {
-			if(left instanceof ExprLiteral lit) {
-				if(rRight._size()==1) {
-					return eqValue(rRight._get(0), lit.getValue());
-				}
-			}
-		} else {
-			if(left instanceof ExprLiteral leftLit && right instanceof ExprLiteral rightLit) {
-				return eqValue(leftLit.getValue(), rightLit.getValue());
-			}
-		}
-			
-		return false;
+		return eqValue(v1, v2);
 	}
 	private static boolean eqValue(Object v1, Object v2) {
 		if(v1==v2) {
@@ -184,67 +129,67 @@ public final class ExprBinaryOp extends ExprNode {
 			return false;
 		}
 		if(v1 instanceof Number n1 && v2 instanceof Number n2) {
-			// Exact comparison (big or long values are not rounded to a double); NaN
-			// equals nothing, not even NaN
-			if(isNaN(n1) || isNaN(n2)) {
-				return false;
-			}
-			return JsonUtil.compareNumber(n1, n2)==0;
+			return compareNumbers(n1, n2)==0;
 		}
 		// Works for Boolean, Strings, Array & Objects
 		if(v1.getClass()==v2.getClass()) {
 			return v1.equals(v2);
 		}
-			
+		if(v1 instanceof JsonObject && v2 instanceof JsonObject || v1 instanceof JsonArray && v2 instanceof JsonArray) {
+			return v1.equals(v2);
+		}
 		return false;
 	}
 	
-	private static boolean lt(ExprNode left, JsonValues rLeft, ExprNode right, JsonValues rRight) {
-		if(rLeft!=null) {
-			if(!((ExprPathOp)left).isDefinite()) {
-				throw new JsonException(null,"Can't use an indefinite path in filters");
-			}
+	private static boolean lt(Object v1, Object v2) {
+		if(v1==NOTHING || v2==NOTHING) {
+			return false;
 		}
-		if(rRight!=null) {
-			if(!((ExprPathOp)right).isDefinite()) {
-				throw new JsonException(null,"Can't use an indefinite path in filters");
-			}
-		}
-
-		Object v1,v2;
-		if(rLeft!=null) {
-			if(rLeft._size()!=1) {
-				return false;
-			}
-			v1 = rLeft._get(0);
-		} else if(left instanceof ExprLiteral litLeft) {
-			v1 = litLeft.getValue();
-		} else {
-			throw new IllegalStateException();
-		}
-		
-		if(rRight!=null) {
-			if(rRight._size()!=1) {
-				return false;
-			}
-			v2 = rRight._get(0);
-		} else if(right instanceof ExprLiteral litRight) {
-			v2 = litRight.getValue();
-		} else {
-			throw new IllegalStateException();
-		}
-
 		return ltValue(v1, v2);
 	}
+	
+	private static final int UNORDERED = Integer.MIN_VALUE;
+	/**
+	 * Compare two numbers: as doubles if one of them is a Double or a Float, else exactly
+	 * (an integer literal larger than 2^53 is not rounded). UNORDERED for NaN.
+	 */
+	static int compareNumbers(Number n1, Number n2) {
+		if(n1 instanceof Double || n1 instanceof Float || n2 instanceof Double || n2 instanceof Float) {
+			double d1 = n1.doubleValue();
+			double d2 = n2.doubleValue();
+			if(Double.isNaN(d1) || Double.isNaN(d2)) {
+				return UNORDERED;
+			}
+			// -0.0 == 0.0
+			return d1<d2 ? -1 : d1>d2 ? 1 : 0;
+		}
+		return toBigDecimal(n1).compareTo(toBigDecimal(n2));
+	}
+	private static BigDecimal toBigDecimal(Number n) {
+		if(n instanceof BigDecimal bd) {
+			return bd;
+		}
+		if(n instanceof BigInteger bi) {
+			return new BigDecimal(bi);
+		}
+		if(n instanceof Integer || n instanceof Long || n instanceof Short || n instanceof Byte
+				|| n instanceof java.util.concurrent.atomic.AtomicInteger || n instanceof java.util.concurrent.atomic.AtomicLong) {
+			return BigDecimal.valueOf(n.longValue());
+		}
+		try {
+			return new BigDecimal(n.toString());
+		} catch(NumberFormatException ex) {
+			return BigDecimal.valueOf(n.doubleValue());
+		}
+	}
+	
 	private static boolean ltValue(Object v1, Object v2) {
 		if(v1 instanceof String s1 && v2 instanceof String s2) {
 			return compareCodePoints(s1,s2)<0;
 		}
 		if(v1 instanceof Number n1 && v2 instanceof Number n2) {
-			if(isNaN(n1) || isNaN(n2)) {
-				return false;
-			}
-			return JsonUtil.compareNumber(n1, n2)<0;
+			int c = compareNumbers(n1, n2);
+			return c!=UNORDERED && c<0;
 		}
 		return false;
 	}
@@ -272,6 +217,6 @@ public final class ExprBinaryOp extends ExprNode {
 	 * Check if a node can be an operand of a comparison (a literal or a path).
 	 */
 	static boolean isComparable(ExprNode n) {
-		return n instanceof ExprLiteral || n instanceof ExprPathOp;
+		return n instanceof ExprLiteral || n instanceof ExprPathOp || n instanceof ExprFunction;
 	}
 }

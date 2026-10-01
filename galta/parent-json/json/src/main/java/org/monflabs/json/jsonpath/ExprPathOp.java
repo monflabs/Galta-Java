@@ -56,6 +56,32 @@ public final class ExprPathOp extends ExprNode {
 	public boolean isDefinite() {
 		return node==null || node.isDefinite();
 	}
+	
+	/**
+	 * True if the path selects at most one node (RFC 9535 singular query): only member
+	 * names and single indexes, one per segment.
+	 */
+	public boolean isSingular() {
+		for(PathNode p=node; p!=null; p=p.next()) {
+			if(!(p instanceof PathIndex pi)) {
+				return false;
+			}
+			PathIndex.Index i = pi.getIndex();
+			if(i==null || i.next()!=null || !(i instanceof PathIndex.Member || i instanceof PathIndex.SingleIndex)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	/**
+	 * The value of a singular query, or {@link ExprNode#NOTHING} when it selects no node.
+	 */
+	@Override
+	public Object evaluate(Object root, Object current) {
+		JsonValues r = executePath(root, current);
+		return r._size()==1 ? r._get(0) : NOTHING;
+	}
 
 
 	public JsonValues executePath(Object root, Object current) {

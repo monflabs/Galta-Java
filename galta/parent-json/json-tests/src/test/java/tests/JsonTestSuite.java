@@ -128,10 +128,12 @@ public class JsonTestSuite  {
 		suite.addTestSuite(SimpleJsonPathReadTest.class);
 		suite.addTestSuite(SimpleJsonPathWriteTest.class);
 		suite.addTestSuite(tests.json.jsonpath.JsonPathSpecTest.class);
+		suite.addTestSuite(tests.json.jsonpath.JsonPathRfc9535Test.class);
 
 		// jsonpointer
 		suite.addTestSuite(JsonPointerTest.class);
 		suite.addTestSuite(tests.json.jsonpointer.JsonPointerRfcTest.class);
+		suite.addTestSuite(tests.json.jsonpointer.JsonPointerSafetyTest.class);
 
 		// jsonreference
 		suite.addTestSuite(JsonReferenceTest.class);

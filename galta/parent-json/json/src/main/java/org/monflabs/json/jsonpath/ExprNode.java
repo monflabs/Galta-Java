@@ -22,7 +22,29 @@ package org.monflabs.json.jsonpath;
  */
 public abstract class ExprNode {
 	
+	/**
+	 * The absence of a value (RFC 9535 "Nothing"): a singular query that selects no node,
+	 * or a function that has no result.
+	 */
+	public static final Object NOTHING = new Object() {
+		@Override
+		public String toString() {
+			return "Nothing";
+		}
+	};
+	
+	/**
+	 * Evaluate the expression as a logical (test) expression.
+	 */
 	public abstract boolean execute(Object root, Object current);
+	
+	/**
+	 * Evaluate the expression as a value (comparison operand, function argument): a JSON
+	 * value, or {@link #NOTHING}.
+	 */
+	public Object evaluate(Object root, Object current) {
+		throw new IllegalStateException("The expression "+this+" is not a value");
+	}
 	
 	@Override
 	public abstract String toString();

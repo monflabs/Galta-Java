@@ -30,6 +30,9 @@ import org.monflabs.json.jsonpointer.JsonPointer;
 public class PathIndex extends PathNode {
 	
 	public static Index addIndex(Index prior, int start) {
+		return addIndex(prior, (long)start);
+	}
+	public static Index addIndex(Index prior, long start) {
 		Index i = new SingleIndex(start);
 		if(prior!=null) {
 			prior.next = i;
@@ -80,15 +83,24 @@ public class PathIndex extends PathNode {
 	}
 	
 	public static final class SingleIndex extends Index {
-		private int start;
-		private SingleIndex(int start) {
+		private long start;
+		private SingleIndex(long start) {
 			this.start = start;
 		}
 		@Override
 		public String toString() {
-			return Integer.toString(start);
+			return Long.toString(start);
 		}
+		/**
+		 * The index, clamped to the int range (an index beyond it never selects anything).
+		 */
 		public int getIndex() {
+			return (int)Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, start));
+		}
+		/**
+		 * The index, as written (RFC 9535 allows up to +/-(2^53-1)).
+		 */
+		public long getLongIndex() {
 			return start;
 		}
 		@Override
@@ -98,8 +110,10 @@ public class PathIndex extends PathNode {
 		@Override
 		void extract(JsonValues r, Object root, Object c, JsonPointer sourcePointer) {
 			if(c instanceof JsonArray a) {
-				int idx = a.actualIndex(start);
-				if(idx>=0 && idx<a.size()) {
+				int size = a.size();
+				long l = start<0 ? start + size : start;
+				if(l>=0 && l<size) {
+					int idx = (int)l;
 					if(sourcePointer!=null) {
 						r._add(a.get(idx),sourcePointer.getChild(idx));
 					} else {
@@ -108,7 +122,7 @@ public class PathIndex extends PathNode {
 				}
 			} else if(c instanceof JsonObject o) {
 				if(JsonPathParser.RELAXED_SYNTAX) {
-					String member = Integer.toString(start);
+					String member = Long.toString(start);
 					if(o.has(member)) {
 						if(sourcePointer!=null) {
 							r._add(o.get(member),sourcePointer.getChild(member));

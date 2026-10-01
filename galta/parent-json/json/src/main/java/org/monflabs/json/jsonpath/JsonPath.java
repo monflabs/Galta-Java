@@ -217,24 +217,38 @@ public class JsonPath {
 					if(idx instanceof PathIndex.Member m) {
 						parts.add(m.getMember());
 					} else if(idx instanceof PathIndex.SingleIndex si) {
+						if(si.getLongIndex()!=si.getIndex()) {
+							throw new JsonException(null,"The index {0} is too large for a JSON pointer", si.getLongIndex());
+						}
 						parts.add(si.getIndex());
 					} else {
 						throw new JsonException(null,"The JSON path must be definite to evaluate as a JSON pointer");
 					}
 				}
 			}
-			jsonPointer = JsonPointer.ofParts(parts.toArray());
+			jsonPointer = JsonPointer.ofJsonPathParts(parts.toArray());
 
 		}
 		return jsonPointer;
 	}
 	
 	public static final JsonPath parse(String jsonPath, int _start, boolean partial) {
+		return parse(jsonPath, _start, partial, false);
+	}
+	
+	/**
+	 * Parse a JSON Path.
+	 * @param strict if true, the path must comply with RFC 9535 (see {@link JsonPathParser})
+	 */
+	public static final JsonPath parse(String jsonPath, int _start, boolean partial, boolean strict) {
 		if(jsonPath==null || jsonPath.isEmpty()) {
+			if(strict && !partial) {
+				throw new JsonException(null,"Json Path must start with a leading '$': the empty string is not a query");
+			}
 			return new JsonPath(jsonPath, null);
 		}
 		
-		JsonPathParser m = new JsonPathParser(jsonPath,_start);
+		JsonPathParser m = new JsonPathParser(jsonPath,_start,strict);
 		
 		if(!m.match('$')) {
 			if(partial) {
@@ -244,6 +258,12 @@ public class JsonPath {
 		}
 		
 		PathNode node = m.readPathNode(partial);
+		if(strict && !partial && m.getRemaining()==0) {
+			char last = jsonPath.charAt(jsonPath.length()-1);
+			if(last==' ' || last=='\t' || last=='\n' || last=='\r') {
+				throw new JsonException(null,"Json Path cannot end with a blank: ''{0}''", jsonPath);
+			}
+		}
 		String sPath = _start>0 || m.getRemaining()>0 ? jsonPath.substring(_start,m.getPtr()) : jsonPath;
 		return new JsonPath( sPath, node);
 	}

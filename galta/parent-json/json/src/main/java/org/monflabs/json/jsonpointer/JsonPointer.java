@@ -43,7 +43,13 @@ import org.monflabs.util.StringUtil;
  * </ul>
  * The "-" token designates the (non existent) element after the last one: it never
  * exists for read, exists, replace and remove, and appends for add and setValue.
- * 
+ * <p>
+ * A pointer created from a JSON Path ({@link #ofJsonPath(String)}, {@link #ofJsonPathParts(Object...)})
+ * keeps the JSON Path distinction: a member name ($['0']) never addresses an array element.
+ * <p>
+ * Pointers are immutable. {@link #getChild(String)} is O(1): the parts array is only built
+ * when needed.
+ *  
  * @author priand
  */
 public class JsonPointer {
@@ -51,7 +57,7 @@ public class JsonPointer {
 	// This is a JSON pointer extension
 	private static final boolean NEGATIVE_INDEXES = true;
 
-	public static final JsonPointer EMPTY = new JsonPointer(new Object[]{});
+	public static final JsonPointer EMPTY = new JsonPointer(new Object[]{}, false);
 
 	private static Object LASTKEY = new Number() {
 		@Override
@@ -96,7 +102,60 @@ public class JsonPointer {
 		if(path.charAt(0)=='/') {
 			path = path.substring(1);
 		}
-		return new JsonPointer(parse(path));
+		return new JsonPointer(parse(path), false);
+	}
+
+	/**
+	 * Parse the URI fragment representation of a JSON pointer (RFC 6901 section 6):
+	 * "#/a%20b" is the member "a b". The leading '#' is optional, and the fragment is
+	 * percent-decoded (UTF-8) before being parsed as a pointer.
+	 * @throws JsonException for a malformed percent-encoding
+	 */
+	public static JsonPointer ofFragment(String fragment) {
+		if(fragment==null) {
+			return EMPTY;
+		}
+		if(fragment.startsWith("#")) {
+			fragment = fragment.substring(1);
+		}
+		return of(decodeFragment(fragment));
+	}
+
+	/**
+	 * Percent-decode a URI fragment (UTF-8). A '+' stays a plus sign.
+	 * @throws JsonException for a malformed or truncated escape, or bytes that are not UTF-8
+	 */
+	public static String decodeFragment(String fragment) {
+		if(fragment.indexOf('%')<0) {
+			return fragment;
+		}
+		int length = fragment.length();
+		StringBuilder b = new StringBuilder(length);
+		java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+		for(int i=0; i<length; ) {
+			char c = fragment.charAt(i);
+			if(c!='%') {
+				b.append(c);
+				i++;
+				continue;
+			}
+			bytes.reset();
+			while(i<length && fragment.charAt(i)=='%') {
+				int h = i+2<length ? Character.digit(fragment.charAt(i+1),16) : -1;
+				int l = i+2<length ? Character.digit(fragment.charAt(i+2),16) : -1;
+				if(h<0 || l<0) {
+					throw new JsonException(null,"Invalid percent-encoding in {0}", fragment);
+				}
+				bytes.write((h<<4)|l);
+				i += 3;
+			}
+			try {
+				b.append(java.nio.charset.StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes.toByteArray())));
+			} catch(java.nio.charset.CharacterCodingException ex) {
+				throw new JsonException(ex,"Invalid percent-encoding in {0}", fragment);
+			}
+		}
+		return b.toString();
 	}
 
 	/**
@@ -104,8 +163,20 @@ public class JsonPointer {
 	 * or an array index (Integer).
 	 */
 	public static JsonPointer ofParts(Object... parts) {
+		return ofParts(parts, false);
+	}
+
+	/**
+	 * Create a JSON pointer from the parts of a definite JSON Path: the member names
+	 * ({@link String}) never address array elements, only the indexes ({@link Integer}) do.
+	 */
+	public static JsonPointer ofJsonPathParts(Object... parts) {
+		return ofParts(parts, true);
+	}
+
+	private static JsonPointer ofParts(Object[] parts, boolean memberNames) {
 		if(parts==null || parts.length==0) {
-			return EMPTY;
+			return memberNames ? EMPTY_JSONPATH : EMPTY;
 		}
 		Object[] p = new Object[parts.length];
 		for(int i=0; i<parts.length; i++) {
@@ -116,7 +187,7 @@ public class JsonPointer {
 				throw new JsonException(null,"Invalid JSON pointer part {0}",o);
 			}
 		}
-		return new JsonPointer(p);
+		return new JsonPointer(p, memberNames);
 	}
 	public static JsonPointer ofJsonPath(String path) {
 		if(path==null) {
@@ -127,19 +198,59 @@ public class JsonPointer {
 	}
 
 	static JsonPointer createJsonPath(Object[] parts) {
-		return new JsonPointer(parts);
+		return parts.length==0 ? EMPTY_JSONPATH : new JsonPointer(parts, true);
 	}
-	
-	private Object[] parts;
 
-	private JsonPointer(Object[] parts) {
-		this.parts = parts;
+	private static final JsonPointer EMPTY_JSONPATH = new JsonPointer(new Object[]{}, true);
+
+	// The parts are either materialized (cache), or defined by the parent and the last part:
+	// getChild() is then O(1), and the array is only built on demand
+	private final JsonPointer parent;
+	private final Object last;
+	private final int size;
+	// Member names never address array elements (JSON Path semantics)
+	private final boolean memberNames;
+	private volatile Object[] cache;
+
+	private JsonPointer(Object[] parts, boolean memberNames) {
+		this.parent = null;
+		this.cache = parts;
+		this.size = parts.length;
+		this.last = size>0 ? parts[size-1] : null;
+		this.memberNames = memberNames;
 	}
-	
+	private JsonPointer(JsonPointer parent, Object last) {
+		this.parent = parent;
+		this.last = last;
+		this.size = parent.size+1;
+		this.memberNames = parent.memberNames;
+	}
+
+	private Object[] parts() {
+		Object[] p = cache;
+		if(p==null) {
+			p = new Object[size];
+			JsonPointer c = this;
+			int i = size-1;
+			Object[] cc;
+			while((cc=c.cache)==null) {
+				p[i--] = c.last;
+				c = c.parent;
+			}
+			if(i>=0) {
+				System.arraycopy(cc, 0, p, 0, i+1);
+			}
+			cache = p;
+		}
+		return p;
+	}
+
 	public boolean contains(JsonPointer p) {
-		if(parts.length>=p.parts.length) {
-			for(int i=0; i<p.parts.length; i++) {
-				if(!samePart(p.parts[i],parts[i])) {
+		Object[] parts = parts();
+		if(parts.length>=p.size) {
+			Object[] pparts = p.parts();
+			for(int i=0; i<pparts.length; i++) {
+				if(!samePart(pparts[i],parts[i])) {
 					return false;
 				}
 			}
@@ -157,6 +268,7 @@ public class JsonPointer {
 	public int hashCode() {
 		// Order dependent: /a/b and /b/a must not collide systematically
 		int h = 1;
+		Object[] parts = parts();
 		for(int i=0; i<parts.length; i++) {
 			h = 31*h + parts[i].toString().hashCode();
 		}
@@ -166,9 +278,11 @@ public class JsonPointer {
 	@Override
 	public boolean equals(Object o) {
 		if(o instanceof JsonPointer p) {
-			if(parts.length==p.parts.length) {
+			if(size==p.size) {
+				Object[] parts = parts();
+				Object[] pparts = p.parts();
 				for(int i=0; i<parts.length; i++) {
-					if(!samePart(parts[i],p.parts[i])) {
+					if(!samePart(parts[i],pparts[i])) {
 						return false;
 					}
 				}
@@ -179,26 +293,29 @@ public class JsonPointer {
 	}
 	
 	public boolean isEmpty() {
-		return parts.length==0;
+		return size==0;
 	}
-	
+
 	public int size() {
-		return parts.length;
+		return size;
 	}
-	
+
 	public Object getLastPart() {
-		if(parts.length>0) {
-			return parts[parts.length-1];
-		}
-		return null;
+		return last;
 	}
-	
+
 	public Object getPart(int index) {
-		return parts[index];
+		if(index==size-1) {
+			return last;
+		}
+		return parts()[index];
 	}
-	
+
+	/**
+	 * The parts of the pointer, as a new array (changing it doesn't change the pointer).
+	 */
 	public Object[] getParts() {
-		return parts;
+		return parts().clone();
 	}
 
 	@Override
@@ -207,6 +324,7 @@ public class JsonPointer {
 	}
 
 	public String toJsonPointerString() {
+		Object[] parts = parts();
 		StringBuilder b = new StringBuilder();
 		for(int i=0; i<parts.length; i++) {
 			Object p = parts[i];
@@ -223,13 +341,22 @@ public class JsonPointer {
 	public String toJsonPathString() {
 		return toJsonPathString(true);
 	}
+	/**
+	 * The equivalent JSON Path.
+	 * @throws JsonException if the pointer holds the "-" token (past the last element),
+	 * that no JSON Path can express
+	 */
 	public String toJsonPathString(boolean dollarPrefix) {
+		Object[] parts = parts();
 		StringBuilder b = new StringBuilder();
 		if(dollarPrefix) {
 			b.append('$');
 		}
 		for(int i=0; i<parts.length; i++) {
 			Object p = parts[i];
+			if(p==LASTKEY) {
+				throw new JsonException(null,"The JSON pointer {0} has no JSON Path equivalent ('-' is past the last element)", toJsonPointerString());
+			}
 			if(p instanceof Number n) {
 				b.append('[');
 				b.append(n.intValue());
@@ -250,15 +377,19 @@ public class JsonPointer {
 	}
 
 	public JsonPointer getParent() {
-		if(parts.length==0) {
+		if(size==0) {
 			throw new JsonException(null,"JsonPointer doesn't have a parent");
 		}
-		if(parts.length==1) {
-			return EMPTY;
+		if(parent!=null) {
+			return parent;
 		}
+		if(size==1) {
+			return memberNames ? EMPTY_JSONPATH : EMPTY;
+		}
+		Object[] parts = parts();
 		Object[] p = new Object[parts.length-1];
 		System.arraycopy(parts,0,p,0,parts.length-1);
-		return new JsonPointer(p);
+		return new JsonPointer(p, memberNames);
 	}
 
 	/**
@@ -266,22 +397,17 @@ public class JsonPointer {
 	 * even when it looks like a number ("0") or is "-".
 	 */
 	public JsonPointer getChild(String member) {
-		Object[] p = new Object[parts.length+1];
-		System.arraycopy(parts,0,p,0,parts.length);
-		p[parts.length] = member;
-		return new JsonPointer(p);
+		return new JsonPointer(this, member);
 	}
 	public JsonPointer getChild(int index) {
 		if(index<0) {
 			throw new JsonException(null,"Invalid negative index {0}",index);
 		}
-		Object[] p = new Object[parts.length+1];
-		System.arraycopy(parts,0,p,0,parts.length);
-		p[parts.length] = index;
-		return new JsonPointer(p);
+		return new JsonPointer(this, index);
 	}
 	
 	public boolean exists(Object v) {
+		Object[] parts = parts();
 		for(int i=0; i<parts.length; i++) {
 			Object key = parts[i];
 			if(v instanceof JsonObject o) {
@@ -291,7 +417,7 @@ public class JsonPointer {
 				}
 				v = o.get(ks);
 			} else if(v instanceof JsonArray a) {
-				int index = existingIndex(a, key);
+				int index = existingIndex(a, key, memberNames);
 				if(index<0) {
 					return false;
 				}
@@ -304,6 +430,7 @@ public class JsonPointer {
 	}
 	
 	public Object read(Object v) {
+		Object[] parts = parts();
 		for(int i=0; i<parts.length; i++) {
 			Object key = parts[i];
 			if(v instanceof JsonObject o) {
@@ -313,7 +440,7 @@ public class JsonPointer {
 				}
 				v = o.get(ks);
 			} else if(v instanceof JsonArray a) {
-				int index = existingIndex(a, key);
+				int index = existingIndex(a, key, memberNames);
 				if(index<0) {
 					return null;
 				}
@@ -331,6 +458,7 @@ public class JsonPointer {
 	 * 
 	 */
 	public boolean add(Object v, Object value) {
+		Object[] parts = parts();
 		for(int i=0; i<parts.length; i++) {
 			Object key = parts[i];
 			if(v instanceof JsonObject o) {
@@ -345,7 +473,7 @@ public class JsonPointer {
 					if(key==LASTKEY) {
 						a.add(value);
 					} else {
-						int index = partIndex(a, key);
+						int index = partIndex(a, key, memberNames);
 						if(NEGATIVE_INDEXES && index<0 && index!=Integer.MIN_VALUE) {
 							index = a.size() + index;
 						}
@@ -357,7 +485,7 @@ public class JsonPointer {
 					}
 					return true;
 				}
-				int index = existingIndex(a, key);
+				int index = existingIndex(a, key, memberNames);
 				if(index<0) {
 					return false;
 				}
@@ -377,6 +505,7 @@ public class JsonPointer {
 	 * than padding the array with nulls (RFC 6902 'add' semantics).
 	 */
 	public boolean setValue(Object v, Object value) {
+		Object[] parts = parts();
 		for(int i=0; i<parts.length; i++) {
 			Object key = parts[i];
 			if(v instanceof JsonObject o) {
@@ -391,7 +520,7 @@ public class JsonPointer {
 					o.put(ks, v);
 				}
 			} else if(v instanceof JsonArray a) {
-				int index = key==LASTKEY ? a.size() : partIndex(a, key);
+				int index = key==LASTKEY ? a.size() : partIndex(a, key, memberNames);
 				if(NEGATIVE_INDEXES && index<0 && index!=Integer.MIN_VALUE) {
 					index = a.size() + index;
 				}
@@ -423,6 +552,7 @@ public class JsonPointer {
 		return false;
 	}
 	private Object createPart(int index) {
+		Object[] parts = parts();
 		// The next index determines the type Object/Array
 		Object p = parts[index+1];
 		if(p instanceof Number) {
@@ -438,6 +568,7 @@ public class JsonPointer {
 	 * The path must exist, and it return false if the path did not exist.
 	 */
 	public boolean replace(Object v, Object value) {
+		Object[] parts = parts();
 		for(int i=0; i<parts.length; i++) {
 			Object key = parts[i];
 			if(v instanceof JsonObject o) {
@@ -454,7 +585,7 @@ public class JsonPointer {
 				}
 				v = o.get(ks);
 			} else if(v instanceof JsonArray a) {
-				int index = existingIndex(a, key);
+				int index = existingIndex(a, key, memberNames);
 				if(index<0) {
 					return false;
 				}
@@ -471,6 +602,7 @@ public class JsonPointer {
 	}
 	
 	public boolean remove(Object v) {
+		Object[] parts = parts();
 		for(int i=0; i<parts.length; i++) {
 			Object key = parts[i];
 			if(v instanceof JsonObject o) {
@@ -484,7 +616,7 @@ public class JsonPointer {
 				}
 				v = o.get(ks);
 			} else if(v instanceof JsonArray a) {
-				int index = existingIndex(a, key);
+				int index = existingIndex(a, key, memberNames);
 				if(index<0) {
 					return false;
 				}
@@ -504,14 +636,14 @@ public class JsonPointer {
 	 * The raw index a part designates in an array, possibly negative (extension),
 	 * or Integer.MIN_VALUE if the part is not an index ("-", a member name).
 	 */
-	private static int partIndex(JsonArray a, Object key) {
+	private static int partIndex(JsonArray a, Object key, boolean memberNames) {
 		if(key==LASTKEY) {
 			return Integer.MIN_VALUE;
 		}
 		if(key instanceof Integer n) {
 			return n;
 		}
-		if(key instanceof String s && !s.isEmpty()) {
+		if(!memberNames && key instanceof String s && !s.isEmpty()) {
 			// RFC 6901: a reference token is an index if it is a canonical number
 			char c = s.charAt(0);
 			if(c>='0' && c<='9') {
@@ -526,8 +658,8 @@ public class JsonPointer {
 	/**
 	 * The index of an existing element, or -1 if the part does not designate one.
 	 */
-	private static int existingIndex(JsonArray a, Object key) {
-		int index = partIndex(a, key);
+	private static int existingIndex(JsonArray a, Object key, boolean memberNames) {
+		int index = partIndex(a, key, memberNames);
 		if(index==Integer.MIN_VALUE) {
 			return -1;
 		}
@@ -549,18 +681,18 @@ public class JsonPointer {
         if( s==null ) {
             return StringUtil.EMPTY_STRING_ARRAY;
         }
-        return splitString( null, 0, s, 0 );
-    }
-    private static Object[] splitString(Object[] result, int count, String s, int pos) {
-        int newPos = s.indexOf('/',pos);
-        if( newPos>=0 ) {
-            result = splitString( null, count+1, s, newPos+1 );
-            result[count] = partValue(s.substring( pos, newPos));
-        } else {
-            result = new Object[count+1];
-            result[count] = partValue(s.substring( pos ));
+        // Iterative: a pointer can have a very large number of segments
+        List<Object> result = new ArrayList<>();
+        int pos = 0;
+        for(;;) {
+            int newPos = s.indexOf('/',pos);
+            if(newPos<0) {
+                result.add(partValue(s.substring(pos)));
+                return result.toArray();
+            }
+            result.add(partValue(s.substring(pos, newPos)));
+            pos = newPos+1;
         }
-        return result;
     }
     private static Object partValue(String s) {
     	int length = s.length();

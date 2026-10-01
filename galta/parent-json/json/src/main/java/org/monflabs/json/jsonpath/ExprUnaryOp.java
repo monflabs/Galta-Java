@@ -46,7 +46,7 @@ public final class ExprUnaryOp extends ExprNode {
 	private static void addNode(StringBuilder b, ExprNode n) {
 		if(n instanceof ExprLiteral) {
 			b.append(n.toString());
-		} else if(n instanceof ExprPathOp) {
+		} else if(n instanceof ExprPathOp || n instanceof ExprFunction) {
 			b.append(n.toString());
 		} else {
 			b.append("(");

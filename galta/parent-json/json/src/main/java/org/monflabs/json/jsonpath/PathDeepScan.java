@@ -15,7 +15,10 @@
  */
 package org.monflabs.json.jsonpath;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.monflabs.json.JsonArray;
 import org.monflabs.json.JsonObject;
@@ -44,6 +47,25 @@ public class PathDeepScan extends PathNode {
 	
 	@Override
 	public void execute(JsonValues r, Object root, Object source, JsonPointer sourcePointer) {
+		scan(r, source, sourcePointer, null);
+	}
+	
+	/**
+	 * Add the value and its descendants. A container that is one of its own ancestors (a
+	 * cyclic graph, e.g. resolved recursive references) is skipped: the back edge is not
+	 * followed. Shared, non cyclic containers are visited at each location, as they are
+	 * distinct nodes for JSON Path.
+	 */
+	private void scan(JsonValues r, Object source, JsonPointer sourcePointer, Set<Object> ancestors) {
+		boolean container = source instanceof JsonObject || source instanceof JsonArray;
+		if(container) {
+			if(ancestors==null) {
+				ancestors = Collections.newSetFromMap(new IdentityHashMap<>());
+			}
+			if(!ancestors.add(source)) {
+				return;
+			}
+		}
 		if(sourcePointer!=null) {
 			r._add(source, sourcePointer);
 		} else {
@@ -51,21 +73,16 @@ public class PathDeepScan extends PathNode {
 		}
 		if(source instanceof JsonObject o) {
 			for(Map.Entry<String,Object> e: o.entrySet()) {
-				if(sourcePointer!=null) {
-					execute(r, root, e.getValue(), sourcePointer.getChild(e.getKey()));
-				} else {
-					execute(r, root, e.getValue(), null);
-				}
+				scan(r, e.getValue(), sourcePointer!=null ? sourcePointer.getChild(e.getKey()) : null, ancestors);
 			}
 		} else if(source instanceof JsonArray a) {
 			int sz = a.size();
 			for(int i=0; i<sz; i++) {
-				if(sourcePointer!=null) {
-					execute(r, root, a.get(i), sourcePointer.getChild(i));
-				} else {
-					execute(r, root, a.get(i), null);
-				}
+				scan(r, a.get(i), sourcePointer!=null ? sourcePointer.getChild(i) : null, ancestors);
 			}
+		}
+		if(container) {
+			ancestors.remove(source);
 		}
 	}
 }

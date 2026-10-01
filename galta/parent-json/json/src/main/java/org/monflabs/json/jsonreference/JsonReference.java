@@ -15,10 +15,8 @@
  */
 package org.monflabs.json.jsonreference;
 
-import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -445,42 +443,13 @@ public class JsonReference {
 	 * A '+' is a plus sign, not a space.
 	 */
 	static String decodeFragment(String fragment, String ref) {
-		if(fragment.indexOf('%')<0) {
-			return fragment;
+		try {
+			return JsonPointer.decodeFragment(fragment);
+		} catch(JsonException ex) {
+			throw new JsonException(ex,"Invalid percent-encoding in $ref '{0}'", ref);
 		}
-		ByteArrayOutputStream bytes = new ByteArrayOutputStream(fragment.length());
-		StringBuilder b = new StringBuilder(fragment.length());
-		int length = fragment.length();
-		for(int i=0; i<length; ) {
-			char c = fragment.charAt(i);
-			if(c=='%') {
-				bytes.reset();
-				while(i<length && fragment.charAt(i)=='%') {
-					if(i+2>=length) {
-						throw new JsonException(null,"Invalid percent-encoding in $ref '{0}'", ref);
-					}
-					int h = Character.digit(fragment.charAt(i+1),16);
-					int l = Character.digit(fragment.charAt(i+2),16);
-					if(h<0 || l<0) {
-						throw new JsonException(null,"Invalid percent-encoding in $ref '{0}'", ref);
-					}
-					bytes.write((h<<4)|l);
-					i += 3;
-				}
-				byte[] bs = bytes.toByteArray();
-				try {
-					b.append(StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bs)));
-				} catch(java.nio.charset.CharacterCodingException ex) {
-					throw new JsonException(ex,"Invalid percent-encoding in $ref '{0}'", ref);
-				}
-			} else {
-				b.append(c);
-				i++;
-			}
-		}
-		return b.toString();
 	}
-
+	
 	/**
 	 * Find the containers that were resolved from a reference.
 	 * Each container is reported once, even in a cyclic (recursive) graph.

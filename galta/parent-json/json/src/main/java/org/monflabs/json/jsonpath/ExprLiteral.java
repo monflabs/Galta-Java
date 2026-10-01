@@ -51,6 +51,11 @@ public final class ExprLiteral extends ExprNode {
 	 * its truthiness: null, false, 0, NaN and "" are false, anything else is true.
 	 */
 	@Override
+	public Object evaluate(Object root, Object current) {
+		return value;
+	}
+	
+	@Override
 	public boolean execute(Object root, Object current) {
 		return isTruthy(value);
 	}

@@ -1,10 +1,10 @@
 # JSON Path
 
-GaltaJSON includes a JSON Path engine for Java: a path is compiled once into a `JsonPath` and evaluated against any value, giving a `JsonValues` result that can be navigated, converted and transformed. The syntax follows the common Goessner / RFC 9535 subset: members, indexes, slices, wildcards, deep scan, unions and filters. Scripts in GaltaJS have their own path operators, built into the language; see [JSON Path in GaltaJS](/GaltaJS/Extensions/JsonPath).
+GaltaJSON includes a JSON Path engine for Java: a path is compiled once into a `JsonPath` and evaluated against any value, giving a `JsonValues` result that can be navigated, converted and transformed. The syntax is [RFC 9535](https://www.rfc-editor.org/rfc/rfc9535): members, indexes, slices, wildcards, deep scan, unions, filters and the standard functions (`length`, `count`, `match`, `search`, `value`). By default the parser is a little more lenient than the RFC; a strict mode rejects everything the RFC does (see [Strict mode](#strict-mode-and-rfc-9535)). Scripts in GaltaJS have their own path operators, built into the language; see [JSON Path in GaltaJS](/GaltaJS/Extensions/JsonPath).
 
 ## Compiling and reading
 
-`JsonPathFactory.get().getJsonPath(path)` compiles a path; compiled paths are cached (an LRU cache of 512 entries per factory; `new JsonPathFactory(0)` has none, and `createJsonPath(path)` always compiles). `read(json)` evaluates it. `JsonValues.of(json).path(path)` does both.
+`JsonPathFactory.get().getJsonPath(path)` compiles a path; compiled paths are cached (a concurrent cache of about 512 entries per factory, whose lookups don't lock; when it is full, a quarter of it is evicted. `new JsonPathFactory(0)` has none, and `createJsonPath(path)` always compiles). `JsonPathFactory.strict()` is the shared factory of the strict mode. `read(json)` evaluates it. `JsonValues.of(json).path(path)` does both.
 
 The samples on this page use the classic bookstore document, with an extra top-level `"expensive": 10`:
 
@@ -55,12 +55,12 @@ A path starts with `$`, the value it is evaluated on.
 | `.name`, `['name']`, `["name"]` | Member of an object | `$.store.bicycle`, `$['store']` |
 | `.*`, `[*]` | Every item of an array, or every member value of an object | `$.store.book[*]` |
 | `..name`, `..*`, `..[...]` | Deep scan: the selector applied to the value and all its descendants | `$..author` |
-| `[i]` | Array index, negative from the end | `$..book[-1]` |
+| `[i]` | Array index, negative from the end, up to &plusmn;(2<sup>53</sup>-1) | `$..book[-1]` |
 | `[start:end:step]` | Slice: `end` exclusive, every part optional, negative values from the end, a negative step walks backwards, a step of `0` selects nothing | `$..book[:2]`, `$..book[::-1]` |
 | `[a, b, ...]` | Union of indexes, slices, names, wildcards and filters | `$..book[0,1]`, `$.store.bicycle['color','price']` |
 | `[?(expr)]`, `[?expr]` | Filter the array items or object member values | `$..book[?(@.price < 10)]` |
 
-An unquoted member name starts with a letter, `_`, `$` or a non-ASCII character, followed by those, digits or `-` (so `$.a-b` is the key `"a-b"`, but `$.-a` is an error); anything else needs the bracket form. A dotted number such as `.0` is a *member name*: it selects the key `"0"` of an object and nothing in an array; use `[0]` for an index.
+An unquoted member name starts with a letter, `_`, `$` or a non-ASCII character, followed by those, digits or `-` (so `$.a-b` is the key `"a-b"`, but `$.-a` is an error); anything else needs the bracket form. `$` and `-` are extensions: the strict mode only accepts letters, `_`, digits and non-ASCII characters. A dotted number such as `.0` is a *member name*: it selects the key `"0"` of an object and nothing in an array; use `[0]` for an index.
 
 ### Children and descendants
 
@@ -116,11 +116,12 @@ A filter keeps the array items (or object member values) for which its expressio
 | `==`, `!=` | Equality; numbers compare by value, other values only equal values of the same type |
 | `<`, `<=`, `>`, `>=` | Ordering of two numbers or two strings; false for any other pair |
 | `&&`, `\|\|`, `!`, `( )` | Logic and grouping; `&&` binds tighter than `\|\|` |
-| `'text'`, `"text"`, numbers, `true`, `false`, `null` | Literals. Used alone as a logical operand (`@.a && false`), a literal is true unless it is `false`, `null`, `0` or `""` |
+| `'text'`, `"text"`, numbers, `true`, `false`, `null` | Literals. Number literals are exact (`9007199254740993` is not rounded to a double, `0.1` is a decimal). Used alone as a logical operand (`@.a && false`), a literal is true unless it is `false`, `null`, `0` or `""` |
+| `length(v)`, `count(q)`, `match(s, re)`, `search(s, re)`, `value(q)` | The RFC 9535 functions, see [Functions](#functions) |
 
-A comparison operand must be a literal or a path (`(@.a == 1) < 2` is rejected), and a missing operand (`@.a ==`) is a parse error. Strings are ordered by Unicode code point.
+A comparison operand must be a literal, a *singular* query or a function returning a value (`(@.a == 1) < 2` is rejected), and a missing operand (`@.a ==`) is a parse error. Strings are ordered by Unicode code point. Numbers compare by exact value, except when one of them is a `double` (or a `float`), compared as doubles: `@.price == 8.95` matches the parsed `8.95`.
 
-A path compared in a filter must be definite (no wildcard, deep scan, slice or filter in it); an indefinite one throws a `JsonException` when the filter runs. A comparison involving a missing member is false, so `!=` is true for it.
+A singular query selects at most one node: it is made of member names and single indexes only (no wildcard, deep scan, slice, union or filter). Comparing any other query is rejected with a `JsonException` when the path is compiled, as RFC 9535 requires (it used to fail only when the filter ran on some data). A query that selects nothing compares as *Nothing*: it is only equal to another Nothing, so `@.missing == 1` is false, `@.missing != 1` is true, and `@.missing == @.other_missing` is true.
 
 Sample: `doc_examples/json/JsonPathExamples.java` (`testFilters`)
 
@@ -160,11 +161,36 @@ Sample: `doc_examples/json/JsonPathExamples.java` (`testFilterPrimitives`, `test
 JsonArray numbers = JsonArray.of(1, 4, 2, 5);
 JsonPathFactory.get().getJsonPath("$[?(@ >= 3)]").read(numbers);   // [4,5]
 
-JsonPath p = JsonPathFactory.get().getJsonPath("$.store[?(@..price > 10)]");
-p.read(json);        // throws JsonException: indefinite path in a filter
+// A comparison needs a singular query: rejected when the path is compiled
+JsonPathFactory.get().getJsonPath("$.store[?(@..price > 10)]");             // throws JsonException
+JsonPathFactory.get().getJsonPath("$.store.book[?(@.tags[*] == 'x')]");     // throws JsonException
 ```
 
-Not supported, and rejected with a `JsonException` when the path is compiled: the `in` operator, regular expression matching (`=~`), functions such as `length()`, and script expressions such as `[(@.length-1)]`.
+### Functions
+
+The five RFC 9535 functions are available. Their arguments are checked when the path is compiled: a *value* argument is a literal, a singular query or a function returning a value; a *query* argument is any query.
+
+| Function | Result |
+|---|---|
+| `length(value)` | The number of characters (Unicode code points) of a string, of items of an array, of members of an object; Nothing for any other value |
+| `count(query)` | The number of nodes the query selects |
+| `value(query)` | The value of the only node the query selects; Nothing if it selects none or several |
+| `match(string, regex)` | True if the whole string matches the regular expression |
+| `search(string, regex)` | True if a part of the string matches the regular expression |
+
+`length`, `count` and `value` return a value, to compare (`length(@.title) > 10`); `match` and `search` are tests, used alone or with `!`, `&&`, `\|\|` (`!search(@.author, 'Tolkien')`); the other uses are rejected when the path is compiled. The regular expressions are [I-Regexp](https://www.rfc-editor.org/rfc/rfc9485) (`.` matches anything but a line break, `^` and `$` are ordinary characters), run with Java's engine; an invalid expression, or an argument that is not a string, makes the test false.
+
+Sample: `doc_examples/json/JsonPathExamples.java` (`testFunctions`)
+
+```java
+read("$..book[?length(@.title) > 15].title");      // ["Sayings of the Century","The Lord of the Rings"]
+read("$..book[?count(@.*) == 5].title");           // ["Moby Dick","The Lord of the Rings"]: 5 members
+read("$..book[?match(@.isbn, '0-553-.*')].title"); // ["Moby Dick"]
+read("$..book[?search(@.author, 'Mel')].title");   // ["Moby Dick"]
+read("$..book[?value(@..price) < 9].title");       // ["Sayings of the Century","Moby Dick"]
+```
+
+Not supported, and rejected with a `JsonException` when the path is compiled: the `in` operator, regular expression matching with `=~`, other functions or method calls such as `@.title.length()`, and script expressions such as `[(@.length-1)]`.
 
 Sample: `doc_examples/json/JsonPathExamples.java` (`testUnsupported`)
 
@@ -248,6 +274,8 @@ all.write(json, 0);        // throws JsonException
 ```
 
 To update every match of an indefinite path, iterate over `read(json, true)` and use each pointer.
+
+As for reading, a quoted member name is never an array index: `$.list['0']` selects nothing in an array, and writing through it returns `false` without changing the array (`$.list[0]` is the index).
 
 Sample: `doc_examples/json/JsonPathExamples.java` (`testPathInfo`)
 
@@ -346,9 +374,34 @@ v.findAndSet("price", 0);                // in place
 v.path("$..price").stringify();          // [0,0,0,0,0]
 ```
 
+## Strict mode and RFC 9535
+
+`JsonPathFactory.strict()` (or `new JsonPathFactory(cacheSize, true)`, or `JsonPath.parse(path, 0, false, true)`) parses the paths as RFC 9535 defines them. The default, lenient, factory also accepts the following, that the strict mode rejects:
+
+| Accepted by the lenient parser | Example |
+|---|---|
+| The empty string, as an empty path | `""` |
+| A space after `.` or `..`, a trailing space | `$. a`, `$.a ` |
+| `$` and `-` in an unquoted member name | `$.$id`, `$.a-b` |
+| A member name starting with a digit | `$.1` (the key `"1"`) |
+| The index `-0` | `$[-0]` |
+| In a string, `\x41`, an escaped quote of the other kind (`'\"'`), an unpaired surrogate (`'\uD800'`), a raw control character other than a line break or a tab | `$['\x41']` |
+| A number without digits before the point | `$[?@.a == .5]` |
+
+Both modes reject the rest of what RFC 9535 rejects: non-singular comparisons, ill-typed function calls, unknown functions, indexes beyond &plusmn;(2<sup>53</sup>-1), leading zeros (`$[01]`). Both evaluate the same way; the remaining difference with the RFC is that a deep scan (`..`) does not follow a back reference to one of its own ancestors, so it terminates on a cyclic graph (such as a recursive schema resolved by [JsonReference](/GaltaJSON/Pointers#json-references)), where the RFC only considers trees.
+
+Sample: `doc_examples/json/JsonPathExamples.java` (`testStrictMode`)
+
+```java
+JsonPathFactory.get().getJsonPath("$.a-b");       // the key "a-b"
+JsonPathFactory.strict().getJsonPath("$.a-b");    // throws JsonException
+JsonPathFactory.strict().getJsonPath("$['a-b']"); // the key "a-b"
+```
+
 ## Gotchas
 
 - `.0` is a member name, not an index: use `[0]`.
+- `$..` and `$..*` on a cyclic graph visit each container once per path from the root, and skip the back edges.
 - A path that ends on an array returns *one* value, the array; add `[*]` or call `flat()` for its items.
 - The numeric comparison helpers of `JsonValues` compare exact values: `eq(8)` is false for `8.95`.
 - `_size()` and `_get(i)` are the raw accessors; `get(i)` navigates into an array.
