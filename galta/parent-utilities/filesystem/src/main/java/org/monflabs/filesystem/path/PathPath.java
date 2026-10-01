@@ -27,6 +27,8 @@ import org.monflabs.filesystem.AbstractPath;
  * Always uses "/" as separator, regardless of OS.
  */
 public class PathPath extends AbstractPath {
+
+    private static final boolean BACKSLASH_IS_SEPARATOR = "\\".equals(java.nio.file.FileSystems.getDefault().getSeparator());
     
     public PathPath(PathFileSystem fileSystem, String path) {
         super(fileSystem, path);
@@ -43,8 +45,11 @@ public class PathPath extends AbstractPath {
             return "";
         }
         
-        // Always use / as separator (force cross-platform)
-        path = path.replace('\\', '/');
+        // Always use / as separator. A backslash is a separator only when the host is Windows,
+        // where it can't be part of a file name; elsewhere it is an ordinary character
+        if (BACKSLASH_IS_SEPARATOR) {
+            path = path.replace('\\', '/');
+        }
         
         // Collapse repeated separators ("a//b" is "a/b")
         while (path.contains("//")) {
@@ -61,18 +66,11 @@ public class PathPath extends AbstractPath {
     
     @Override
     public URI toUri() {
-        PathFileSystem pfs = getFileSystem();
-        if (pfs.getRootPath() != null) {
-            // Sandboxed: a URI of the virtual path, which never discloses where the root
-            // lives on the host (normalized, so it never shows a ".." above the root)
-            try {
-                return new URI(pfs.provider().getScheme(), "", toUriPath(toAbsolutePath().normalize()), null, null);
-            } catch (java.net.URISyntaxException e) {
-                throw new IllegalArgumentException(e);
-            }
-        }
-        // Unsandboxed: the virtual path is the host path, so the URI of the real file
-        return pfs.toOSPath(toString()).toUri();
+        // A pathfs: URI of the virtual path. Sandboxed, it never discloses where the root
+        // lives on the host (normalized, so it never shows a ".." above the root);
+        // unsandboxed, the virtual path is the host path. A "file:" URI could not be mapped
+        // back by this provider's getPath(URI)
+        return buildUri(toUriPath(toAbsolutePath().normalize()));
     }
     
     @Override
@@ -124,6 +122,20 @@ public class PathPath extends AbstractPath {
     public java.nio.file.Path toOSPathChecked() throws IOException {
         java.nio.file.Path osPath = toOSPath();
         getFileSystem().checkSandbox(osPath);
+        return osPath;
+    }
+
+    /**
+     * The underlying OS path, verified to stay inside the sandbox root. When links are not
+     * followed (NOFOLLOW_LINKS, delete, move), only the parent is verified: the last element
+     * may be a link pointing anywhere, it is acted upon, never followed.
+     */
+    public java.nio.file.Path toOSPathChecked(boolean followLinks) throws IOException {
+        if (followLinks) {
+            return toOSPathChecked();
+        }
+        java.nio.file.Path osPath = toOSPath();
+        getFileSystem().checkSandboxParent(osPath);
         return osPath;
     }
 }

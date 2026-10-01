@@ -44,13 +44,10 @@ public class ZipPath extends AbstractPath {
     
     @Override
     public URI toUri() {
-        // zip://zipfile.zip!/path/to/entry
+        // zip:///dir/archive.zip!/path/to/entry: the archive identifies the filesystem
+        // (a filesystem built without a URI used to give "zip:///!/entry")
         ZipFileSystem fs = getFileSystem();
-        try {
-            return new URI(fs.provider().getScheme(), "", fs.getUri().getPath() + "!" + toAbsolutePath().toString(), null, null);
-        } catch (java.net.URISyntaxException e) {
-            throw new IllegalArgumentException(e);
-        }
+        return buildUri(fs.getIdentityPath() + "!" + toAbsolutePath().toString());
     }
     
     @Override

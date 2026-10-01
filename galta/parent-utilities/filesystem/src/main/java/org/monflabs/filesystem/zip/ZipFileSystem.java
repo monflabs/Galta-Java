@@ -45,6 +45,7 @@ public class ZipFileSystem extends AbstractFileSystem {
 		private ZipFileSystemProvider provider;
 		private URI uri;
 		private Path zipFile;
+		private Long maxEntrySize;
 		
 		public Builder provider(ZipFileSystemProvider provider) {
 			this.provider = provider;
@@ -58,14 +59,29 @@ public class ZipFileSystem extends AbstractFileSystem {
 			this.zipFile = zipFile;
 			return this;
 		}
+		/**
+		 * The largest entry a random-access channel (Files.newByteChannel(),
+		 * Files.readAllBytes(), Files.readString()...) reads into memory; default
+		 * {@link ZipFileSystemProvider#DEFAULT_MAX_ENTRY_SIZE}. Files.newInputStream() streams
+		 * an entry of any size.
+		 */
+		public Builder maxEntrySize(long maxEntrySize) {
+			this.maxEntrySize = maxEntrySize;
+			return this;
+		}
 		
 		@Override
 		protected ZipFileSystem _build() {
 			try {
 				ZipFileSystemProvider p = provider!=null ? provider : DEFAULT_PROVIDER;
-				URI u = uri!=null ? uri : DEFAULT_URI;
+				// Without a URI, the URI of the archive ("zip:///dir/a.zip"): the URIs of the
+				// entries then name the archive ("zip:///dir/a.zip!/entry")
+				URI u = uri!=null ? uri : (zipFile!=null ? identityUri(zipFile) : DEFAULT_URI);
 				HashMap<String,Object> env = new HashMap<>();
 				env.put(ZipFileSystemProvider.ZIP_FILE_PARAM, zipFile);
+				if (maxEntrySize != null) {
+					env.put(ZipFileSystemProvider.MAX_ENTRY_SIZE_PARAM, maxEntrySize);
+				}
 				return (ZipFileSystem)p.newFileSystem(u, env);
 			} catch(IOException ex) {
 				throw new FileSystemRuntimeException(ex);
@@ -77,22 +93,48 @@ public class ZipFileSystem extends AbstractFileSystem {
 		return new Builder();
 	}
 
+	/**
+	 * The URI identifying the filesystem of an archive: "zip:" and the archive's absolute path.
+	 */
+	public static URI identityUri(Path zipFile) {
+		try {
+			return new URI(ZipFileSystemProvider.SCHEME, "", zipFile.toAbsolutePath().toUri().getPath(), null, null);
+		} catch (java.net.URISyntaxException e) {
+			throw new IllegalArgumentException(e);
+		}
+	}
+
 	public static final ZipFileSystemProvider DEFAULT_PROVIDER = new ZipFileSystemProvider(false);
 	public static final URI DEFAULT_URI = URI.create(ZipFileSystemProvider.SCHEME + ":///");
 	
     
     private final ZipFile zipFile;
     private final ZipFileStore fileStore;
+    private final long maxEntrySize;
+    // Computed once: the archive does not change, and a closed ZipFile cannot be enumerated
+    private long totalCompressedSize;
     // Indexed once when the archive is opened: entry name (without a trailing "/") ->
     // entry, and directory name ("" for the root) -> names of its direct children
     private final Map<String, ZipEntry> entries = new HashMap<>();
     private final Map<String, Set<String>> directories = new HashMap<>();
 
     public ZipFileSystem(ZipFileSystemProvider provider, URI uri, ZipFile zipFile) {
+        this(provider, uri, zipFile, ZipFileSystemProvider.DEFAULT_MAX_ENTRY_SIZE);
+    }
+
+    public ZipFileSystem(ZipFileSystemProvider provider, URI uri, ZipFile zipFile, long maxEntrySize) {
     	super(provider, uri, "/");
         this.zipFile = zipFile;
+        this.maxEntrySize = maxEntrySize;
         this.fileStore = new ZipFileStore(this);
         index();
+    }
+
+    /**
+     * The largest entry a random-access channel reads into memory.
+     */
+    public long getMaxEntrySize() {
+        return maxEntrySize;
     }
 
     private void index() {
@@ -100,7 +142,9 @@ public class ZipFileSystem extends AbstractFileSystem {
         Enumeration<? extends ZipEntry> en = zipFile.entries();
         while (en.hasMoreElements()) {
             ZipEntry entry = en.nextElement();
-            String name = entry.getName();
+            totalCompressedSize += Math.max(0, entry.getCompressedSize());
+            String rawName = entry.getName();
+            String name = rawName;
             boolean dir = name.endsWith("/");
             if (dir) {
                 name = name.substring(0, name.length() - 1);
@@ -110,8 +154,13 @@ public class ZipFileSystem extends AbstractFileSystem {
                 // forever and let paths climb out of the archive (zip-slip)
                 continue;
             }
-            // The first entry wins, as with ZipFile.getEntry()
-            entries.putIfAbsent(name, entry);
+            // With duplicate names, the entry ZipFile.getEntry() returns wins: it is the one
+            // ZipFile.getInputStream() reads, so the attributes and the content always come
+            // from the same entry (the first one's attributes used to go with another's bytes)
+            if (!entries.containsKey(name)) {
+                ZipEntry canonical = zipFile.getEntry(rawName);
+                entries.put(name, canonical != null ? canonical : entry);
+            }
             if (dir) {
                 directories.computeIfAbsent(name, k -> new LinkedHashSet<>());
             }
@@ -134,19 +183,15 @@ public class ZipFileSystem extends AbstractFileSystem {
                 slash = child.lastIndexOf('/');
             }
         }
+        // A file entry "f" next to "f/child.txt": "f" is a directory (its children are
+        // readable and listed), the file entry is hidden. It used to be a file whose
+        // children could be read but not listed
+        entries.entrySet().removeIf(e -> !e.getValue().isDirectory() && directories.containsKey(e.getKey()));
     }
 
     // A relative name made of non empty segments, none of them "." or ".."
     private static boolean isSafeEntryName(String name) {
-        if (name.isEmpty() || name.startsWith("/") || name.indexOf('\\') >= 0) {
-            return false;
-        }
-        for (String segment : name.split("/", -1)) {
-            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) {
-                return false;
-            }
-        }
-        return true;
+        return isSafeRelativeName(name);
     }
 
     @Override
@@ -169,12 +214,30 @@ public class ZipFileSystem extends AbstractFileSystem {
     
     @Override
     public Iterable<Path> getRootDirectories() {
+        checkOpen();
         return Collections.singletonList(new ZipPath(this, "/"));
     }
-    
+
     @Override
     public Iterable<FileStore> getFileStores() {
+        checkOpen();
         return Collections.singletonList(fileStore);
+    }
+
+    /**
+     * The path naming this filesystem in the URIs of its entries, before the "!": the path
+     * of the filesystem's URI, or the archive's path when the filesystem has a bare
+     * "zip:///" URI.
+     */
+    String getIdentityPath() {
+        String p = uri != null ? uri.getPath() : null;
+        if (p != null && !p.isEmpty() && !p.equals("/")) {
+            while (p.length() > 1 && p.endsWith("/")) {
+                p = p.substring(0, p.length() - 1);
+            }
+            return p;
+        }
+        return identityUri(java.nio.file.Paths.get(zipFile.getName())).getPath();
     }
     
     @Override
@@ -212,7 +275,7 @@ public class ZipFileSystem extends AbstractFileSystem {
      * The entry name of a path: absolute, "." and ".." resolved ("/a/../a/b.txt" is "a/b.txt"),
      * without the leading slash.
      */
-    private static String entryName(ZipPath path) {
+    static String entryName(ZipPath path) {
         String pathStr = path.toAbsolutePath().normalize().toString();
         return pathStr.startsWith("/") ? pathStr.substring(1) : pathStr;
     }
@@ -236,13 +299,37 @@ public class ZipFileSystem extends AbstractFileSystem {
     }
     
     /**
-     * Read the entire content of a ZIP entry.
+     * Read the entire content of a ZIP entry, up to {@link #getMaxEntrySize()} bytes: a larger
+     * entry (or a "zip bomb" inflating far beyond its declared size) throws a
+     * FileSystemException instead of exhausting the heap.
      */
     public byte[] readEntry(ZipEntry entry) throws IOException {
         checkOpen();
-        try (InputStream is = zipFile.getInputStream(entry)) {
-            return is.readAllBytes();
+        String name = "/" + entry.getName();
+        if (entry.getSize() > maxEntrySize) {
+            throw tooLarge(name, entry.getSize());
         }
+        try (InputStream is = zipFile.getInputStream(entry)) {
+            byte[] content = is.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, maxEntrySize + 1));
+            if (content.length > maxEntrySize) {
+                throw tooLarge(name, -1);
+            }
+            return content;
+        }
+    }
+
+    private java.nio.file.FileSystemException tooLarge(String name, long size) {
+        return new java.nio.file.FileSystemException(name, null,
+            "Entry larger than the " + maxEntrySize + " bytes a random-access channel reads into memory"
+            + (size >= 0 ? " (" + size + " bytes)" : "") + ": read it with Files.newInputStream()");
+    }
+
+    /**
+     * A stream over the content of a ZIP entry, inflated as it is read (no size limit).
+     */
+    public InputStream openEntry(ZipEntry entry) throws IOException {
+        checkOpen();
+        return zipFile.getInputStream(entry);
     }
     
     /**
@@ -294,23 +381,20 @@ public class ZipFileSystem extends AbstractFileSystem {
         
         @Override
         public long getTotalSpace() throws IOException {
-            // Approximate based on compressed size of all entries
-            long total = 0;
-            Enumeration<? extends ZipEntry> entries = fs.zipFile.entries();
-            while (entries.hasMoreElements()) {
-                ZipEntry entry = entries.nextElement();
-                total += entry.getCompressedSize();
-            }
-            return total;
+            // The compressed size of all entries, computed when the archive was indexed
+            fs.checkOpen();
+            return fs.totalCompressedSize;
         }
-        
+
         @Override
         public long getUsableSpace() throws IOException {
+            fs.checkOpen();
             return 0; // Read-only
         }
-        
+
         @Override
         public long getUnallocatedSpace() throws IOException {
+            fs.checkOpen();
             return 0; // Read-only
         }
         

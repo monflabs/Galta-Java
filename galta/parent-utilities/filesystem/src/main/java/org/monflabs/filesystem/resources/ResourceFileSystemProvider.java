@@ -17,7 +17,6 @@ package org.monflabs.filesystem.resources;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AccessMode;
@@ -25,6 +24,7 @@ import java.nio.file.CopyOption;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -46,6 +46,7 @@ import org.monflabs.filesystem.AbstractFileSystemProvider;
 import org.monflabs.filesystem.AbstractPath;
 import org.monflabs.filesystem.ListDirectoryStream;
 import org.monflabs.filesystem.ReadOnlyByteChannel;
+import org.monflabs.filesystem.zip.ZipFileSystemProvider;
 
 /**
  * FileSystemProvider for read-only access to classpath resources.
@@ -58,6 +59,13 @@ public class ResourceFileSystemProvider extends AbstractFileSystemProvider {
     public static final String BASE_PATH_PARAM = "basePath";
     public static final String MANIFEST_FILE_PARAM = "manifestFile";
     public static final String DEFAULT_MANIFEST_FILE = "resources.manifest";
+    /**
+     * Environment parameter (a Number or a String): the largest resource a random-access
+     * channel reads into memory. Files.newInputStream() streams resources of any size.
+     */
+    public static final String MAX_ENTRY_SIZE_PARAM = ZipFileSystemProvider.MAX_ENTRY_SIZE_PARAM;
+    /** The default {@link #MAX_ENTRY_SIZE_PARAM}: 256 MB. */
+    public static final long DEFAULT_MAX_ENTRY_SIZE = ZipFileSystemProvider.DEFAULT_MAX_ENTRY_SIZE;
     
     public ResourceFileSystemProvider(boolean registered) {
     	super(registered);
@@ -113,7 +121,7 @@ public class ResourceFileSystemProvider extends AbstractFileSystemProvider {
             }
         }
         
-        return new ResourceFileSystem(this, uri, classLoader, basePath, manifestFile);
+        return new ResourceFileSystem(this, uri, classLoader, basePath, manifestFile, ZipFileSystemProvider.maxEntrySize(env));
     }
     
     @Override
@@ -129,8 +137,22 @@ public class ResourceFileSystemProvider extends AbstractFileSystemProvider {
         ResourcePath resourcePath = (ResourcePath) path;
         ResourceFileSystem fs = (ResourceFileSystem) path.getFileSystem();
         
-        // Check for write options - Resource filesystem is read-only
+        // Resource filesystem is read-only
+        checkReadOnlyOptions(options);
+        checkFile(fs, resourcePath);
+
+        // A random-access channel holds the resource in memory, up to the filesystem's
+        // maxEntrySize (FileSystemException beyond)
+        byte[] content = fs.readResource(resourcePath);
+
+        return new ReadOnlyByteChannel(content);
+    }
+
+    private static void checkReadOnlyOptions(Set<? extends OpenOption> options) {
         for (OpenOption option : options) {
+            if (option == null) {
+                throw new NullPointerException();
+            }
             if (option == StandardOpenOption.WRITE ||
                 option == StandardOpenOption.APPEND ||
                 option == StandardOpenOption.CREATE ||
@@ -139,28 +161,40 @@ public class ResourceFileSystemProvider extends AbstractFileSystemProvider {
                 option == StandardOpenOption.TRUNCATE_EXISTING) {
                 throw new ReadOnlyFileSystemException();
             }
+            if (!(option instanceof StandardOpenOption) && option != LinkOption.NOFOLLOW_LINKS) {
+                throw new UnsupportedOperationException(option + " not supported");
+            }
         }
-        
-        if (!fs.exists(resourcePath)) {
+    }
+
+    private static void checkFile(ResourceFileSystem fs, ResourcePath path) throws IOException {
+        if (!fs.exists(path)) {
             throw new NoSuchFileException(path.toString());
         }
-        
-        if (fs.isDirectory(resourcePath)) {
-            throw new IOException("Cannot open directory as byte channel: " + path);
+        if (fs.isDirectory(path)) {
+            throw new FileSystemException(path.toString(), null, "Is a directory");
         }
-        
-        // Read entire resource into memory
-        byte[] content = fs.readResource(resourcePath);
-        
-        return new ReadOnlyByteChannel(content);
+    }
+
+    /**
+     * A stream over the resource as it is read: a resource of any size can be read this way
+     * (Files.newInputStream(), Files.copy(), Files.lines()...), never held in memory.
+     */
+    @Override
+    public InputStream newInputStream(Path path, OpenOption... options) throws IOException {
+        checkPath(path);
+        checkReadOnlyOptions(Set.of(options));
+        ResourcePath resourcePath = (ResourcePath) toAbsolutePath(path);
+        ResourceFileSystem fs = resourcePath.getFileSystem();
+        checkFile(fs, resourcePath);
+        return fs.openResource(resourcePath);
     }
     
     @Override
     public DirectoryStream<Path> newDirectoryStream(Path dir, DirectoryStream.Filter<? super Path> filter)
             throws IOException {
         checkPath(dir);
-        dir = toAbsolutePath(dir);
-        ResourcePath resourceDir = (ResourcePath) dir;
+        ResourcePath resourceDir = (ResourcePath) toAbsolutePath(dir);
         ResourceFileSystem fs = (ResourceFileSystem) resourceDir.getFileSystem();
         
         if (!fs.exists(resourceDir)) {
@@ -171,8 +205,8 @@ public class ResourceFileSystemProvider extends AbstractFileSystemProvider {
             throw new NotDirectoryException(dir.toString());
         }
         
-        // Get all entries in this directory
-        List<Path> entries = fs.listDirectory(resourceDir);
+        // Get all entries in this directory, as dir.resolve(name) (Files.newDirectoryStream())
+        List<Path> entries = fs.listDirectory((ResourcePath) dir);
         
         // Apply filter
         List<Path> filtered = new ArrayList<>();
@@ -188,45 +222,28 @@ public class ResourceFileSystemProvider extends AbstractFileSystemProvider {
     
     @Override
     public void createDirectory(Path dir, FileAttribute<?>... attrs) throws IOException {
+        checkPath(dir);
         throw new ReadOnlyFileSystemException();
     }
-    
+
     @Override
     public void delete(Path path) throws IOException {
+        checkPath(path);
         throw new ReadOnlyFileSystemException();
     }
     
     @Override
     public void copy(Path source, Path target, CopyOption... options) throws IOException {
         checkPath(source);
-        source = toAbsolutePath(source);
-        
-        // Allow copying FROM resource to another filesystem
-        if (target.getFileSystem() != source.getFileSystem()) {
-            // Copy to different filesystem using InputStream
-            try (InputStream in = Files.newInputStream(source)) {
-                Files.copy(in, target, options);
-            }
-            return;
-        }
-        
-        // Copying within Resource filesystem not allowed (read-only)
-        throw new ReadOnlyFileSystemException();
+        checkPath(target);
+        // Out to another resource filesystem: ReadOnlyFileSystemException
+        copyOutOfReadOnly(source, target, options);
     }
-    
+
     @Override
     public void move(Path source, Path target, CopyOption... options) throws IOException {
+        checkPath(source);
         throw new ReadOnlyFileSystemException();
-    }
-    
-    @Override
-    public boolean isSameFile(Path path, Path path2) throws IOException {
-        checkPath(path);
-        path = toAbsolutePath(path);
-        if (path.getFileSystem() != path2.getFileSystem()) {
-            return false;
-        }
-        return path.toAbsolutePath().equals(path2.toAbsolutePath());
     }
     
     @Override
@@ -284,11 +301,13 @@ public class ResourceFileSystemProvider extends AbstractFileSystemProvider {
     @Override
     public void setAttribute(Path path, String attribute, Object value, LinkOption... options)
             throws IOException {
+        checkPath(path);
         throw new ReadOnlyFileSystemException();
     }
-    
+
     @Override
     protected void setTimes(Path path, FileTime lastModifiedTime, FileTime lastAccessTime, FileTime createTime) throws IOException {
+        checkPath(path);
         throw new ReadOnlyFileSystemException();
     }
     
@@ -306,7 +325,8 @@ public class ResourceFileSystemProvider extends AbstractFileSystemProvider {
         public ResourceFileAttributes(ResourceFileSystem fs, ResourcePath path) {
             this.fs = fs;
             this.path = path;
-            this.key = path.toString();
+            // The normalized path: "/a/../b.txt" and "/b.txt" are the same file
+            this.key = "/" + fs.normalizePath(path.toString());
             this.directory = fs.isDirectory(path);
         }
         

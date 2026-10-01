@@ -136,6 +136,14 @@ public class FileFileSystem extends AbstractFileSystem {
         }
     }
     
+    /**
+     * The views of the host filesystem: attributes are read and written on the host files.
+     */
+    @Override
+    public java.util.Set<String> supportedFileAttributeViews() {
+        return java.nio.file.FileSystems.getDefault().supportedFileAttributeViews();
+    }
+
     @Override
     protected AbstractPath createPath(String path) {
         return new FilePath(this, path);

@@ -27,7 +27,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class MemoryFileNode {
     
-    private final String name;
+    // Not final: a move within a filesystem renames the node itself (open channels keep
+    // writing to the moved file, and its fileKey stays the same)
+    private volatile String name;
     private final boolean directory;
     // Largest array the JVM reliably allocates
     private static final int MAX_SIZE = Integer.MAX_VALUE - 8;
@@ -41,14 +43,19 @@ public class MemoryFileNode {
     private boolean hidden;
     private boolean readable = true;
     private boolean writable = true;
-    private boolean executable = false;
+    // A directory is searchable, as on POSIX (Files.isExecutable(dir) is true)
+    private boolean executable;
     private Map<String, Object> properties;
+    // The space counter of the filesystem whose index holds this node (null when detached):
+    // the filesystem keeps a running total instead of summing every file
+    private java.util.concurrent.atomic.AtomicLong usage;
     
     public MemoryFileNode(String name, boolean directory) {
         this.name = name;
         this.directory = directory;
         this.content = directory ? null : new byte[0];
         this.children = directory ? new ConcurrentHashMap<>() : null;
+        this.executable = directory;
         long now = System.currentTimeMillis();
         this.creationTime = FileTime.fromMillis(now);
         this.lastModifiedTime = FileTime.fromMillis(now);
@@ -57,6 +64,37 @@ public class MemoryFileNode {
     
     public String getName() {
         return name;
+    }
+
+    void setName(String name) {
+        this.name = name;
+    }
+
+    /**
+     * Start counting the size of this file in a filesystem's space counter.
+     */
+    synchronized void attach(java.util.concurrent.atomic.AtomicLong counter) {
+        if (usage != null) {
+            usage.addAndGet(-size);
+        }
+        usage = counter;
+        if (counter != null) {
+            counter.addAndGet(size);
+        }
+    }
+
+    /**
+     * Stop counting this file (it was deleted, or moved out of its filesystem).
+     */
+    synchronized void detach() {
+        attach(null);
+    }
+
+    // Called with the node lock held, whenever the size changes
+    private void sizeChanged(int oldSize) {
+        if (usage != null && oldSize != size) {
+            usage.addAndGet(size - oldSize);
+        }
     }
     
     public boolean isDirectory() {
@@ -82,8 +120,10 @@ public class MemoryFileNode {
         if (directory) {
             throw new IllegalStateException("Cannot set content of directory");
         }
+        int oldSize = size;
         this.content = content;
         this.size = content.length;
+        sizeChanged(oldSize);
         updateModifiedTime();
     }
     
@@ -93,6 +133,10 @@ public class MemoryFileNode {
      */
     synchronized int read(long position, ByteBuffer dst) {
         updateAccessTime();
+        // Nothing to read into: 0, even at the end of the file (as a FileChannel does)
+        if (!dst.hasRemaining()) {
+            return 0;
+        }
         if (position >= size) {
             return -1;
         }
@@ -112,6 +156,10 @@ public class MemoryFileNode {
             position = size;
         }
         int length = src.remaining();
+        if (length == 0) {
+            // Writing nothing never extends the file, even past its end
+            return position;
+        }
         long end = position + length;
         if (end > MAX_SIZE) {
             throw new IOException("File too large for an in-memory file: " + end + " bytes");
@@ -125,15 +173,24 @@ public class MemoryFileNode {
             Arrays.fill(content, size, (int) position, (byte) 0);
         }
         src.get(content, (int) position, length);
+        int oldSize = size;
         size = Math.max(size, (int) end);
+        sizeChanged(oldSize);
         updateModifiedTime();
         return end;
     }
     
     synchronized void truncate(long newSize) {
         if (newSize < size) {
-            Arrays.fill(content, (int) newSize, size, (byte) 0);
+            int oldSize = size;
+            if (content.length > 4096 && newSize < content.length / 4) {
+                // Give the memory back: the array used to keep its largest size forever
+                content = Arrays.copyOf(content, (int) newSize);
+            } else {
+                Arrays.fill(content, (int) newSize, size, (byte) 0);
+            }
             size = (int) newSize;
+            sizeChanged(oldSize);
             updateModifiedTime();
         }
     }

@@ -21,9 +21,9 @@ import java.nio.file.AccessDeniedException;
 import java.nio.file.AccessMode;
 import java.nio.file.CopyOption;
 import java.nio.file.DirectoryStream;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -33,6 +33,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.FileAttributeView;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,7 +48,8 @@ import org.monflabs.filesystem.Sandbox;
 
 /**
  * FileSystemProvider that delegates to another Path as root.
- * This allows creating a sandboxed view of any filesystem.
+ * This allows creating a sandboxed view of any filesystem (see {@link Sandbox} for what
+ * the sandbox does and does not protect against).
  */
 public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider {
     
@@ -105,6 +107,30 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         // Lexical check, then symbolic links followed (dangling ones included)
         Sandbox.checkInside(path.toDelegatePath(), fs.getRootPath(), fs.getRealRootPath(), path);
     }
+
+    /**
+     * Validate a path whose last element is not followed (NOFOLLOW_LINKS, delete, move): only
+     * its parent must stay within the root.
+     */
+    private void validateParent(PathDelegatingPath path) throws IOException {
+        PathDelegatingFileSystem fs = (PathDelegatingFileSystem) path.getFileSystem();
+        Sandbox.checkParentInside(path.toDelegatePath(), fs.getRootPath(), fs.getRealRootPath(), path);
+    }
+
+    private void validate(PathDelegatingPath path, boolean followLinks) throws IOException {
+        if (followLinks) {
+            validatePath(path);
+        } else {
+            validateParent(path);
+        }
+    }
+
+    /**
+     * The exception with the paths of this filesystem, not the paths of the delegate.
+     */
+    private static IOException translate(FileSystemException e, Path file, Path other) {
+        return Sandbox.withPaths(e, file, other);
+    }
     
     @Override
     public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options,
@@ -119,19 +145,22 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         
         // CREATE creates the file, never its missing parents: that is NoSuchFileException
         Path delegatePath = delPath.toDelegatePath();
-        return Files.newByteChannel(delegatePath, options, attrs);
+        try {
+            return Files.newByteChannel(delegatePath, options, attrs);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
     }
     
     @Override
     public DirectoryStream<Path> newDirectoryStream(Path dir, DirectoryStream.Filter<? super Path> filter)
             throws IOException {
         checkPath(dir);
-        dir = toAbsolutePath(dir);
-        PathDelegatingPath delPath = (PathDelegatingPath) dir;
+        PathDelegatingPath delPath = (PathDelegatingPath) toAbsolutePath(dir);
         validatePath(delPath);
-        
+
         Path delegatePath = delPath.toDelegatePath();
-        
+
         if (!Files.exists(delegatePath)) {
             throw new NoSuchFileException(dir.toString());
         }
@@ -142,7 +171,8 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         List<Path> paths = new ArrayList<>();
         try (DirectoryStream<Path> delegateStream = Files.newDirectoryStream(delegatePath)) {
             for (Path delegateEntry : delegateStream) {
-                // Convert back to our path
+                // Convert back to our path: dir.resolve(name), as Files.newDirectoryStream()
+                // specifies (a relative directory lists relative entries)
                 String fileName = delegateEntry.getFileName().toString();
                 Path entry = dir.resolve(fileName);
                 
@@ -163,12 +193,12 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         PathDelegatingPath delPath = (PathDelegatingPath) dir;
         validatePath(delPath);
         Path delegatePath = delPath.toDelegatePath();
-        
-        if (Files.exists(delegatePath)) {
-            throw new FileAlreadyExistsException(dir.toString());
+
+        try {
+            Files.createDirectory(delegatePath, attrs);
+        } catch (FileSystemException e) {
+            throw translate(e, dir, null);
         }
-        
-        Files.createDirectory(delegatePath, attrs);
     }
     
     @Override
@@ -176,15 +206,15 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         checkPath(path);
         path = toAbsolutePath(path);
         PathDelegatingPath delPath = (PathDelegatingPath) path;
-        validatePath(delPath);
-        
-        Path delegatePath = delPath.toDelegatePath();
-        
-        if (!Files.exists(delegatePath)) {
-            throw new NoSuchFileException(path.toString());
+        // Deleting a link deletes the link, never its target: only the parent is checked.
+        // No Files.exists() first: it follows links, so a dangling link could not be deleted
+        validateParent(delPath);
+
+        try {
+            Files.delete(delPath.toDelegatePath());
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
         }
-        
-        Files.delete(delegatePath);
     }
     
     @Override
@@ -196,17 +226,18 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         PathDelegatingPath srcPath = (PathDelegatingPath) source;
         PathDelegatingPath tgtPath = (PathDelegatingPath) target;
         
-        validatePath(srcPath);
+        // With NOFOLLOW_LINKS, a link is copied as a link: it is not followed
+        validate(srcPath, !Sandbox.noFollow((Object[]) options));
         validatePath(tgtPath);
-        
+
         Path delegateSrc = srcPath.toDelegatePath();
         Path delegateTgt = tgtPath.toDelegatePath();
-        
-        if (!Files.exists(delegateSrc)) {
-            throw new NoSuchFileException(source.toString());
+
+        try {
+            Files.copy(delegateSrc, delegateTgt, options);
+        } catch (FileSystemException e) {
+            throw translate(e, source, target);
         }
-        
-        Files.copy(delegateSrc, delegateTgt, options);
     }
     
     @Override
@@ -218,17 +249,18 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         PathDelegatingPath srcPath = (PathDelegatingPath) source;
         PathDelegatingPath tgtPath = (PathDelegatingPath) target;
         
-        validatePath(srcPath);
-        validatePath(tgtPath);
-        
+        // A move renames a link itself and replaces a target link without following it
+        validateParent(srcPath);
+        validateParent(tgtPath);
+
         Path delegateSrc = srcPath.toDelegatePath();
         Path delegateTgt = tgtPath.toDelegatePath();
-        
-        if (!Files.exists(delegateSrc)) {
-            throw new NoSuchFileException(source.toString());
+
+        try {
+            Files.move(delegateSrc, delegateTgt, options);
+        } catch (FileSystemException e) {
+            throw translate(e, source, target);
         }
-        
-        Files.move(delegateSrc, delegateTgt, options);
     }
     
     @Override
@@ -254,11 +286,16 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         if (!(path2 instanceof PathDelegatingPath) || path2.getFileSystem().provider() != this) {
             return false;
         }
+        checkPath(path2);
         PathDelegatingPath p1 = (PathDelegatingPath) toAbsolutePath(path);
         PathDelegatingPath p2 = (PathDelegatingPath) toAbsolutePath(path2);
         validatePath(p1);
         validatePath(p2);
-        return Files.isSameFile(p1.toDelegatePath(), p2.toDelegatePath());
+        try {
+            return Files.isSameFile(p1.toDelegatePath(), p2.toDelegatePath());
+        } catch (FileSystemException e) {
+            throw translate(e, path, path2);
+        }
     }
 
     @Override
@@ -267,8 +304,12 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         path = toAbsolutePath(path);
         PathDelegatingPath delPath = (PathDelegatingPath) path;
         validatePath(delPath);
-        
-        return Files.getFileStore(delPath.toDelegatePath());
+
+        try {
+            return Files.getFileStore(delPath.toDelegatePath());
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
     }
     
     @Override
@@ -312,9 +353,61 @@ public class PathDelegatingFileSystemProvider extends AbstractFileSystemProvider
         checkPath(path);
         path = toAbsolutePath(path);
         PathDelegatingPath delPath = (PathDelegatingPath) path;
-        validatePath(delPath);
-        
-        return Files.readAttributes(delPath.toDelegatePath(), type, options);
+        // With NOFOLLOW_LINKS the link's own attributes are read, even for a link pointing
+        // outside the root (Files.isSymbolicLink(), Files.walk()...)
+        validate(delPath, !Sandbox.noFollow((Object[]) options));
+
+        try {
+            return Files.readAttributes(delPath.toDelegatePath(), type, options);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
+    }
+
+    /**
+     * The attributes of the delegate file, of any view the delegate filesystem supports
+     * (the String form used to accept "basic" only, while the Class form passed any type).
+     */
+    @Override
+    public Map<String, Object> readAttributes(Path path, String attributes, LinkOption... options)
+            throws IOException {
+        checkPath(path);
+        PathDelegatingPath delPath = (PathDelegatingPath) toAbsolutePath(path);
+        validate(delPath, !Sandbox.noFollow((Object[]) options));
+        try {
+            return Files.readAttributes(delPath.toDelegatePath(), attributes, options);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
+    }
+
+    @Override
+    public void setAttribute(Path path, String attribute, Object value, LinkOption... options)
+            throws IOException {
+        checkPath(path);
+        PathDelegatingPath delPath = (PathDelegatingPath) toAbsolutePath(path);
+        validate(delPath, !Sandbox.noFollow((Object[]) options));
+        try {
+            Files.setAttribute(delPath.toDelegatePath(), attribute, value, options);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
+    }
+
+    @Override
+    public <V extends FileAttributeView> V getFileAttributeView(Path path, Class<V> type,
+                                                                  LinkOption... options) {
+        if (type == BasicFileAttributeView.class) {
+            return super.getFileAttributeView(path, type, options);
+        }
+        checkPath(path);
+        PathDelegatingPath p = (PathDelegatingPath) toAbsolutePath(path);
+        boolean follow = !Sandbox.noFollow((Object[]) options);
+        // Any view of the delegate (posix, dos, owner...), the sandbox checked on every call
+        return Sandbox.delegatedView(type, p.toDelegatePath(), () -> {
+            validate(p, follow);
+            return p.toDelegatePath();
+        }, options);
     }
     
     @Override

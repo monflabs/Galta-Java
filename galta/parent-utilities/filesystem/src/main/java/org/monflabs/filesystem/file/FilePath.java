@@ -39,18 +39,10 @@ public class FilePath extends AbstractPath {
     
     @Override
     public URI toUri() {
-        File root = getFileSystem().getRoot();
-        if (root != null) {
-            // For sandboxed filesystem, use the scheme with sandboxed path (encoded)
-            try {
-                // Normalized, so the URI never shows a ".." climbing above the root
-                return new URI(getFileSystem().provider().getScheme(), "", toUriPath(toAbsolutePath().normalize()), null, null);
-            } catch (java.net.URISyntaxException e) {
-                throw new IllegalArgumentException(e);
-            }
-        } else {
-            return toFile().toURI();
-        }
+        // The provider's scheme, for a sandboxed path (the virtual path, normalized so it
+        // never shows a ".." climbing above the root) as for an unsandboxed one (the absolute
+        // host path): a "file:" URI could not be mapped back by this provider's getPath(URI)
+        return buildUri(toUriPath(toAbsolutePath().normalize()));
     }
     
     @Override

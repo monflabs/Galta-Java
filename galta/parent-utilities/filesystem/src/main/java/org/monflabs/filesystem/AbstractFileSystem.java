@@ -93,7 +93,8 @@ public abstract class AbstractFileSystem extends FileSystem {
     public PathMatcher getPathMatcher(String syntaxAndPattern) {
     	checkOpen();
         int colonIndex = syntaxAndPattern.indexOf(':');
-        if (colonIndex <= 0 || colonIndex == syntaxAndPattern.length() - 1) {
+        // An empty pattern is valid ("glob:" matches the empty path), as with the JDK
+        if (colonIndex <= 0) {
             throw new IllegalArgumentException("syntaxAndPattern must be in form 'syntax:pattern'");
         }
         
@@ -141,6 +142,33 @@ public abstract class AbstractFileSystem extends FileSystem {
         if (!open) {
             throw new ClosedFileSystemException();
         }
+    }
+    
+    /**
+     * Whether a name read from an archive or a manifest is a safe relative path: non empty
+     * segments separated by "/", none of them "." or "..", no leading "/" and no backslash.
+     * An entry such as "../x" or "a/./b" would register a "." or ".." child, making
+     * Files.walk() loop forever or letting a path climb out of the filesystem.
+     */
+    public static boolean isSafeRelativeName(String name) {
+        if (name.isEmpty() || name.startsWith("/") || name.indexOf('\\') >= 0 || name.indexOf('\0') >= 0) {
+            return false;
+        }
+        int start = 0;
+        int len = name.length();
+        for (int i = 0; i <= len; i++) {
+            if (i == len || name.charAt(i) == '/') {
+                int segLen = i - start;
+                if (segLen == 0) {
+                    return false;
+                }
+                if (name.charAt(start) == '.' && (segLen == 1 || (segLen == 2 && name.charAt(start + 1) == '.'))) {
+                    return false;
+                }
+                start = i + 1;
+            }
+        }
+        return true;
     }
     
     /**
@@ -226,16 +254,28 @@ public abstract class AbstractFileSystem extends FileSystem {
                         }
                         String cls = glob.substring(i + 1, end);
                         regex.append('[');
-                        if (cls.startsWith("!")) {
+                        boolean negated = cls.startsWith("!");
+                        if (negated) {
                             regex.append('^');
                             cls = cls.substring(1);
                         }
                         for (int j = 0; j < cls.length(); j++) {
                             char cc = cls.charAt(j);
+                            // A class never matches the name separator (JDK behaviour)
+                            if (cc == '/' || separator.indexOf(cc) >= 0) {
+                                throw new java.util.regex.PatternSyntaxException("Explicit 'name separator' in class", glob, i + 1 + j);
+                            }
                             if (cc == '\\' || cc == '[' || cc == ']' || cc == '^' || cc == '&') {
                                 regex.append('\\');
                             }
                             regex.append(cc);
+                        }
+                        if (negated) {
+                            // "[!a]" matches any character but "a" and the separator
+                            regex.append("\\/");
+                            if (separator.equals("\\")) {
+                                regex.append("\\\\");
+                            }
                         }
                         regex.append(']');
                         i = end;

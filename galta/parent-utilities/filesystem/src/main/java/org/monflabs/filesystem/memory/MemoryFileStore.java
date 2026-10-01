@@ -25,7 +25,6 @@ import java.nio.file.attribute.FileStoreAttributeView;
 public class MemoryFileStore extends FileStore {
     
     private final MemoryFileSystem fileSystem;
-    private static final long MAX_SPACE = 1024L * 1024L * 1024L; // 1 GB max
     
     public MemoryFileStore(MemoryFileSystem fileSystem) {
         this.fileSystem = fileSystem;
@@ -46,14 +45,21 @@ public class MemoryFileStore extends FileStore {
         return false;
     }
     
+    /**
+     * The files live in the Java heap: its maximum size bounds them (an arbitrary 1 GB was
+     * reported, with a negative usable space past it).
+     */
     @Override
     public long getTotalSpace() throws IOException {
-        return MAX_SPACE;
+        return Runtime.getRuntime().maxMemory();
     }
-    
+
+    /**
+     * What the heap can still give to files, never negative.
+     */
     @Override
     public long getUsableSpace() throws IOException {
-        return MAX_SPACE - fileSystem.getTotalUsedSpace();
+        return Math.max(0, getTotalSpace() - fileSystem.getTotalUsedSpace());
     }
     
     @Override
@@ -63,7 +69,8 @@ public class MemoryFileStore extends FileStore {
     
     @Override
     public boolean supportsFileAttributeView(Class<? extends FileAttributeView> type) {
-        return false;
+        // Same answer as supportsFileAttributeView("basic")
+        return type == java.nio.file.attribute.BasicFileAttributeView.class;
     }
     
     @Override
@@ -87,6 +94,8 @@ public class MemoryFileStore extends FileStore {
                 return getUnallocatedSpace();
             case "nodeCount":
                 return fileSystem.getTotalNodeCount();
+            case "usedSpace":
+                return fileSystem.getTotalUsedSpace();
             default:
                 throw new UnsupportedOperationException("Attribute not supported: " + attribute);
         }

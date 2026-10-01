@@ -175,7 +175,27 @@ public class PathFileSystem extends AbstractFileSystem {
         if (rootPath == null) {
             return;
         }
-        Sandbox.checkInside(osPath, rootPath, realRoot.get(), osPath);
+        Sandbox.checkInside(osPath, rootPath, realRoot.get(), toDisplayPath(osPath));
+    }
+
+    /**
+     * Same as {@link #checkSandbox(java.nio.file.Path)} for a path whose last element is not
+     * followed: only its parent must stay inside the root.
+     */
+    public void checkSandboxParent(java.nio.file.Path osPath) throws IOException {
+        if (rootPath == null) {
+            return;
+        }
+        Sandbox.checkParentInside(osPath, rootPath, realRoot.get(), toDisplayPath(osPath));
+    }
+
+    // The virtual path in error messages, not the host path
+    private String toDisplayPath(java.nio.file.Path osPath) {
+        try {
+            return toVirtualPath(osPath);
+        } catch (IllegalArgumentException e) {
+            return osPath.getFileName() != null ? osPath.getFileName().toString() : "/";
+        }
     }
     
     /**
@@ -253,6 +273,14 @@ public class PathFileSystem extends AbstractFileSystem {
         }
     }
     
+    /**
+     * The views of the host filesystem: attributes are read and written on the host files.
+     */
+    @Override
+    public java.util.Set<String> supportedFileAttributeViews() {
+        return FileSystems.getDefault().supportedFileAttributeViews();
+    }
+
     @Override
     protected AbstractPath createPath(String path) {
         return new PathPath(this, path);

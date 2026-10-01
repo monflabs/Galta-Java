@@ -17,11 +17,16 @@ package org.monflabs.filesystem.memory;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.FileStore;
+import java.nio.file.FileSystemException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.monflabs.filesystem.AbstractFileSystem;
 import org.monflabs.filesystem.AbstractPath;
@@ -71,6 +76,8 @@ public class MemoryFileSystem extends AbstractFileSystem {
 	public static final URI DEFAULT_URI = URI.create(MemoryFileSystemProvider.SCHEME + ":///");
     
     private final Map<String, MemoryFileNode> nodes = new ConcurrentHashMap<>();
+    // Bytes held by the files of the index, kept up to date by the nodes themselves
+    private final AtomicLong usedSpace = new AtomicLong();
     // Guards structural changes (create/delete/move): a check-then-create sequence in
     // the provider must hold it, or two CREATE_NEW opens of the same path both succeed
     final Object structureLock = new Object();
@@ -105,8 +112,71 @@ public class MemoryFileSystem extends AbstractFileSystem {
      * Get the node at the given path.
      */
     public MemoryFileNode getNode(MemoryPath path) {
-        String normalizedPath = normalizePath(path.toString());
-        return nodes.get(normalizedPath);
+        String p = path.toString();
+        if (!p.startsWith("/")) {
+            p = "/" + p;
+        }
+        if (needsNormalization(p)) {
+            try {
+                p = resolveDots(p);
+            } catch (IOException e) {
+                // "/d/x/.." with /d/x a file, or missing: no such node
+                return null;
+            }
+        }
+        return nodes.get(normalizePath(p));
+    }
+
+    /**
+     * The path of the node a path names: absolute, with "." and ".." resolved against the
+     * actual nodes, as an operating system does. "/d/x/../y" is "/d/y" only when /d/x is an
+     * existing directory: a lexical normalization used to accept it with /d/x a file, or
+     * missing (so delete("/d/x/..") deleted /d).
+     *
+     * @throws NoSuchFileException if a directory followed by "." or ".." does not exist
+     * @throws FileSystemException ("Not a directory") if it is a file
+     */
+    public MemoryPath resolveNodePath(MemoryPath path) throws IOException {
+        MemoryPath absolute = (MemoryPath) path.toAbsolutePath();
+        String p = absolute.toString();
+        if (!needsNormalization(p)) {
+            return absolute;
+        }
+        return (MemoryPath) createPath(resolveDots(p));
+    }
+
+    private String resolveDots(String absolutePath) throws IOException {
+        List<String> names = new ArrayList<>();
+        int len = absolutePath.length();
+        int start = 0;
+        for (int i = 0; i <= len; i++) {
+            if (i == len || absolutePath.charAt(i) == '/') {
+                String segment = absolutePath.substring(start, i);
+                start = i + 1;
+                if (segment.isEmpty()) {
+                    continue;
+                }
+                boolean dot = segment.equals(".");
+                boolean dotDot = segment.equals("..");
+                if (dot || dotDot) {
+                    // What precedes "." or ".." must be an existing directory
+                    String current = "/" + String.join("/", names);
+                    MemoryFileNode node = nodes.get(current);
+                    if (node == null) {
+                        throw new NoSuchFileException(absolutePath);
+                    }
+                    if (!node.isDirectory()) {
+                        throw new FileSystemException(absolutePath, null, "Not a directory");
+                    }
+                    if (dotDot && !names.isEmpty()) {
+                        names.remove(names.size() - 1);
+                    }
+                } else {
+                    names.add(segment);
+                }
+            }
+        }
+        return "/" + String.join("/", names);
     }
     
     /**
@@ -116,6 +186,7 @@ public class MemoryFileSystem extends AbstractFileSystem {
      */
     private void indexSubtree(String nodePath, MemoryFileNode node) {
         nodes.put(nodePath, node);
+        node.attach(usedSpace);
         if (node.isDirectory()) {
             String prefix = nodePath.equals("/") ? "/" : nodePath + "/";
             for (Map.Entry<String, MemoryFileNode> e : node.getChildren().entrySet()) {
@@ -126,6 +197,7 @@ public class MemoryFileSystem extends AbstractFileSystem {
     
     private void unindexSubtree(String nodePath, MemoryFileNode node) {
         nodes.remove(nodePath);
+        node.detach();
         if (node.isDirectory()) {
             String prefix = nodePath.equals("/") ? "/" : nodePath + "/";
             for (Map.Entry<String, MemoryFileNode> e : node.getChildren().entrySet()) {
@@ -160,6 +232,36 @@ public class MemoryFileSystem extends AbstractFileSystem {
         indexSubtree(normalizedPath, node);
     }
     
+    /**
+     * Move a node within this filesystem: the node itself is unlinked from its parent and
+     * linked under the new one with the target's name, and its subtree re-indexed. Nothing
+     * is copied, so the move is O(number of nodes) whatever the size of the files, open
+     * channels keep reading and writing the moved file, and its fileKey is unchanged.
+     * The target must not exist and its parent must be an existing directory.
+     */
+    void moveNode(MemoryPath source, MemoryPath target) {
+        synchronized (structureLock) {
+            source = (MemoryPath) source.toAbsolutePath().normalize();
+            target = (MemoryPath) target.toAbsolutePath().normalize();
+            String sourcePath = normalizePath(source.toString());
+            String targetPath = normalizePath(target.toString());
+            MemoryFileNode node = nodes.get(sourcePath);
+            if (node == null) {
+                return;
+            }
+            MemoryFileNode sourceParent = nodes.get(normalizePath(source.getParent().toString()));
+            MemoryFileNode targetParent = nodes.get(normalizePath(target.getParent().toString()));
+            unindexSubtree(sourcePath, node);
+            if (sourceParent != null) {
+                sourceParent.removeChild(source.getFileName().toString());
+            }
+            String name = target.getFileName().toString();
+            node.setName(name);
+            targetParent.addChild(name, node);
+            indexSubtree(targetPath, node);
+        }
+    }
+
     /**
      * Delete the node at the given path.
      */
@@ -238,13 +340,9 @@ public class MemoryFileSystem extends AbstractFileSystem {
      * Get total number of bytes used by all files.
      */
     public long getTotalUsedSpace() {
-        long total = 0;
-        for (MemoryFileNode node : nodes.values()) {
-            if (node.isFile()) {
-                total += node.getSize();
-            }
-        }
-        return total;
+        // A running total: summing the sizes of all the nodes made every
+        // FileStore.getUsableSpace() call O(number of files)
+        return usedSpace.get();
     }
     
     /**

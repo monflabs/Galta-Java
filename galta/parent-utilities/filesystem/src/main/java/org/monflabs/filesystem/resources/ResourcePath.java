@@ -39,14 +39,11 @@ public class ResourcePath extends AbstractPath {
     
     @Override
     public URI toUri() {
-        // resource://basepath!/path/to/resource
+        // resource:///basepath!/path/to/resource, which the provider's getPath(URI) maps back
+        // (it used to be "resource:basepath!/...": a relative path in an absolute URI, so
+        // toUri() always threw IllegalArgumentException)
         ResourceFileSystem fs = getFileSystem();
-        String basePath = fs.getBasePath();
-        try {
-            return new URI(fs.provider().getScheme(), "", basePath + "!" + toAbsolutePath().toString(), null, null);
-        } catch (java.net.URISyntaxException e) {
-            throw new IllegalArgumentException(e);
-        }
+        return buildUri(fs.getIdentityPath() + "!" + toAbsolutePath().toString());
     }
     
     @Override

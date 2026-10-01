@@ -53,6 +53,7 @@ public class ResourceFileSystem extends AbstractFileSystem {
 		
 		private ClassLoader classLoader;
 		private String root;
+		private Long maxEntrySize;
 		
 		public Builder provider(ResourceFileSystemProvider provider) {
 			this.provider = provider;
@@ -74,13 +75,28 @@ public class ResourceFileSystem extends AbstractFileSystem {
 			this.manifest = manifest;
 			return this;
 		}
+		/**
+		 * The largest resource a random-access channel (Files.newByteChannel(),
+		 * Files.readAllBytes(), Files.readString()...) reads into memory; default
+		 * {@link org.monflabs.filesystem.zip.ZipFileSystemProvider#DEFAULT_MAX_ENTRY_SIZE}.
+		 * Files.newInputStream() streams a resource of any size.
+		 */
+		public Builder maxEntrySize(long maxEntrySize) {
+			this.maxEntrySize = maxEntrySize;
+			return this;
+		}
 		
 		@Override
 		protected ResourceFileSystem _build() {
 			try {
 				ResourceFileSystemProvider p = provider!=null ? provider : DEFAULT_PROVIDER;
-				URI u = uri!=null ? uri : DEFAULT_URI;
+				// Without a URI, "resource:///<root>": the URIs of the resources then name the
+				// root ("resource:///<root>!/a.txt")
+				URI u = uri!=null ? uri : identityUri(root);
 				HashMap<String,Object> env = new HashMap<>();
+				if (maxEntrySize != null) {
+					env.put(ResourceFileSystemProvider.MAX_ENTRY_SIZE_PARAM, maxEntrySize);
+				}
 		        env.put(ResourceFileSystemProvider.CLASSLOADER_PARAM, classLoader);
 		        env.put(ResourceFileSystemProvider.BASE_PATH_PARAM, root);
 		        env.put(ResourceFileSystemProvider.MANIFEST_FILE_PARAM, manifest);
@@ -93,6 +109,24 @@ public class ResourceFileSystem extends AbstractFileSystem {
 	
 	public static Builder newBuilder() {
 		return new Builder();
+	}
+
+	/**
+	 * The URI identifying the filesystem of a root: "resource:///" followed by the root.
+	 */
+	public static URI identityUri(String root) {
+		String r = root != null ? root : "";
+		while (r.startsWith("/")) {
+			r = r.substring(1);
+		}
+		while (r.endsWith("/")) {
+			r = r.substring(0, r.length() - 1);
+		}
+		try {
+			return new URI(ResourceFileSystemProvider.SCHEME, "", "/" + r, null, null);
+		} catch (java.net.URISyntaxException e) {
+			throw new IllegalArgumentException(e);
+		}
 	}
 	
 	public static final ResourceFileSystemProvider DEFAULT_PROVIDER = new ResourceFileSystemProvider(false);
@@ -109,13 +143,21 @@ public class ResourceFileSystem extends AbstractFileSystem {
     private final Map<String, URL> urls = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, Long> sizes = new java.util.concurrent.ConcurrentHashMap<>();
     private final ResourceFileStore fileStore;
-    
-    public ResourceFileSystem(ResourceFileSystemProvider provider, URI uri, 
-                             ClassLoader classLoader, String basePath, String manifestFile) 
+    private final long maxEntrySize;
+
+    public ResourceFileSystem(ResourceFileSystemProvider provider, URI uri,
+                             ClassLoader classLoader, String basePath, String manifestFile)
+            throws IOException {
+        this(provider, uri, classLoader, basePath, manifestFile, ResourceFileSystemProvider.DEFAULT_MAX_ENTRY_SIZE);
+    }
+
+    public ResourceFileSystem(ResourceFileSystemProvider provider, URI uri,
+                             ClassLoader classLoader, String basePath, String manifestFile, long maxEntrySize)
             throws IOException {
         super(provider, uri, "/");
         this.classLoader = classLoader;
         this.basePath = basePath;
+        this.maxEntrySize = maxEntrySize;
         this.resourcePaths = loadManifest(manifestFile);
         this.fileStore = new ResourceFileStore(this);
         indexDirectories();
@@ -178,8 +220,13 @@ public class ResourceFileSystem extends AbstractFileSystem {
 					String fileName = parts[0].trim();
 					//long length = parts.length>=2 ? Long.parseLong(parts[1].trim()) : -1L;
 					//long date = parts.length>=3 ? Instant.parse(parts[2].trim()).toEpochMilli() : -1L;
-                    if (fileName.startsWith("/")) {
+                    while (fileName.startsWith("/")) {
                     	fileName = fileName.substring(1);
+                    }
+                    // Same rule as ZIP entries: "../x", "./x", "a//b" (or "a/" ) are skipped. They
+                    // registered "." or ".." children, so Files.walk() never ended
+                    if (!isSafeRelativeName(fileName)) {
+                    	continue;
                     }
                     if (paths.add(fileName) && origin != null) {
                     	origins.put(fileName, origin);
@@ -200,12 +247,37 @@ public class ResourceFileSystem extends AbstractFileSystem {
     
     @Override
     public Iterable<Path> getRootDirectories() {
+        checkOpen();
         return Collections.singletonList(new ResourcePath(this, "/"));
     }
-    
+
     @Override
     public Iterable<FileStore> getFileStores() {
+        checkOpen();
         return Collections.singletonList(fileStore);
+    }
+
+    /**
+     * The largest resource a random-access channel reads into memory.
+     */
+    public long getMaxEntrySize() {
+        return maxEntrySize;
+    }
+
+    /**
+     * The path naming this filesystem in the URIs of its resources, before the "!": the path
+     * of the filesystem's URI, or "/" and the root when the filesystem has a bare
+     * "resource:///" URI.
+     */
+    String getIdentityPath() {
+        String p = uri != null ? uri.getPath() : null;
+        if (p != null && !p.isEmpty() && !p.equals("/")) {
+            while (p.length() > 1 && p.endsWith("/")) {
+                p = p.substring(0, p.length() - 1);
+            }
+            return p;
+        }
+        return identityUri(basePath).getPath();
     }
     
     @Override
@@ -274,7 +346,13 @@ public class ResourceFileSystem extends AbstractFileSystem {
      */
     public byte[] readResource(ResourcePath path) throws IOException {
         try (InputStream is = openResource(path)) {
-            return is.readAllBytes();
+            // Up to maxEntrySize: a larger resource throws instead of exhausting the heap
+            byte[] content = is.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, maxEntrySize + 1));
+            if (content.length > maxEntrySize) {
+                throw new java.nio.file.FileSystemException(path.toString(), null,
+                    "Resource larger than the " + maxEntrySize + " bytes a random-access channel reads into memory: read it with Files.newInputStream()");
+            }
+            return content;
         }
     }
     
@@ -307,13 +385,20 @@ public class ResourceFileSystem extends AbstractFileSystem {
                     return length;
                 }
             }
-            return readResource(path).length;
+            // Counted while streaming, never held in memory
+            try (InputStream is = openResource(path)) {
+                return is.transferTo(java.io.OutputStream.nullOutputStream());
+            }
         } catch (IOException e) {
             return 0;
         }
     }
     
-    private InputStream openResource(ResourcePath path) throws IOException {
+    /**
+     * A stream over a resource file (no size limit).
+     */
+    public InputStream openResource(ResourcePath path) throws IOException {
+        checkOpen();
         String pathStr = normalizePath(path.toString());
         
         if (!resourcePaths.contains(pathStr)) {
@@ -381,7 +466,7 @@ public class ResourceFileSystem extends AbstractFileSystem {
     /**
      * Normalize a path string (remove leading slash).
      */
-    private String normalizePath(String path) {
+    String normalizePath(String path) {
         // "." and ".." resolved: "/a/../a/b.txt" is "a/b.txt"
         path = createPath(path.startsWith("/") ? path : "/" + path).normalize().toString();
         if (path.startsWith("/")) {
@@ -438,6 +523,7 @@ public class ResourceFileSystem extends AbstractFileSystem {
         
         @Override
         public long getTotalSpace() throws IOException {
+            fs.checkOpen();
             // Sum up all resource sizes
             long total = 0;
             for (String resource : fs.resourcePaths) {
@@ -448,11 +534,13 @@ public class ResourceFileSystem extends AbstractFileSystem {
         
         @Override
         public long getUsableSpace() throws IOException {
+            fs.checkOpen();
             return 0; // Read-only
         }
-        
+
         @Override
         public long getUnallocatedSpace() throws IOException {
+            fs.checkOpen();
             return 0; // Read-only
         }
         

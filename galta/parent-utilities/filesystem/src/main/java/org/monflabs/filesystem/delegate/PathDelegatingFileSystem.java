@@ -118,6 +118,14 @@ public class PathDelegatingFileSystem extends AbstractFileSystem {
         }
     }
     
+    /**
+     * The views of the delegate filesystem: attributes are read and written on its files.
+     */
+    @Override
+    public java.util.Set<String> supportedFileAttributeViews() {
+        return rootPath.getFileSystem().supportedFileAttributeViews();
+    }
+
     @Override
     protected AbstractPath createPath(String path) {
         return new PathDelegatingPath(this, path);

@@ -17,8 +17,6 @@ package org.monflabs.filesystem.zip;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.nio.ByteBuffer;
-import java.nio.channels.NonWritableChannelException;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AccessMode;
@@ -26,6 +24,7 @@ import java.nio.file.CopyOption;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -59,6 +58,13 @@ public class ZipFileSystemProvider extends AbstractFileSystemProvider {
 
     public static final String SCHEME = "zip";
     public static final String ZIP_FILE_PARAM = "zipFile";
+    /**
+     * Environment parameter (a Number or a String): the largest entry a random-access
+     * channel reads into memory. Files.newInputStream() streams entries of any size.
+     */
+    public static final String MAX_ENTRY_SIZE_PARAM = "maxEntrySize";
+    /** The default {@link #MAX_ENTRY_SIZE_PARAM}: 256 MB. */
+    public static final long DEFAULT_MAX_ENTRY_SIZE = 256L * 1024 * 1024;
     
     public ZipFileSystemProvider(boolean registered) {
     	super(registered);
@@ -100,10 +106,51 @@ public class ZipFileSystemProvider extends AbstractFileSystemProvider {
             throw new IOException("Not a regular file: " + zipPath);
         }
         
+        long maxEntrySize = maxEntrySize(env);
+
         // Open the ZIP file
         ZipFile zipFile = new ZipFile(zipPath.toFile());
-        
-        return new ZipFileSystem(this, uri, zipFile);
+
+        return new ZipFileSystem(this, uri, zipFile, maxEntrySize);
+    }
+
+    /**
+     * The {@link #MAX_ENTRY_SIZE_PARAM} of an environment, or the default.
+     */
+    public static long maxEntrySize(Map<String, ?> env) {
+        Object v = env != null ? env.get(MAX_ENTRY_SIZE_PARAM) : null;
+        long max = DEFAULT_MAX_ENTRY_SIZE;
+        if (v instanceof Number) {
+            max = ((Number) v).longValue();
+        } else if (v instanceof String) {
+            max = Long.parseLong(((String) v).trim());
+        }
+        if (max < 0) {
+            throw new IllegalArgumentException(MAX_ENTRY_SIZE_PARAM + " must not be negative: " + max);
+        }
+        return max;
+    }
+
+    /**
+     * Refuse the options a read-only filesystem can't honour.
+     */
+    static void checkReadOnlyOptions(Set<? extends OpenOption> options) {
+        for (OpenOption option : options) {
+            if (option == null) {
+                throw new NullPointerException();
+            }
+            if (option == StandardOpenOption.WRITE ||
+                option == StandardOpenOption.APPEND ||
+                option == StandardOpenOption.CREATE ||
+                option == StandardOpenOption.CREATE_NEW ||
+                option == StandardOpenOption.DELETE_ON_CLOSE ||
+                option == StandardOpenOption.TRUNCATE_EXISTING) {
+                throw new ReadOnlyFileSystemException();
+            }
+            if (!(option instanceof StandardOpenOption) && option != LinkOption.NOFOLLOW_LINKS) {
+                throw new UnsupportedOperationException(option + " not supported");
+            }
+        }
     }
     
     @Override
@@ -119,39 +166,47 @@ public class ZipFileSystemProvider extends AbstractFileSystemProvider {
         ZipPath zipPath = (ZipPath) path;
         ZipFileSystem fs = (ZipFileSystem) path.getFileSystem();
         
-        // Check for write options - ZIP filesystem is read-only
-        for (OpenOption option : options) {
-            if (option == StandardOpenOption.WRITE ||
-                option == StandardOpenOption.APPEND ||
-                option == StandardOpenOption.CREATE ||
-                option == StandardOpenOption.CREATE_NEW ||
-                option == StandardOpenOption.DELETE_ON_CLOSE ||
-                option == StandardOpenOption.TRUNCATE_EXISTING) {
-                throw new ReadOnlyFileSystemException();
-            }
-        }
-        
-        ZipEntry entry = fs.getEntry(zipPath);
+        // ZIP filesystem is read-only
+        checkReadOnlyOptions(options);
+
+        ZipEntry entry = fileEntry(fs, zipPath);
+
+        // A random-access channel holds the entry in memory, up to the filesystem's
+        // maxEntrySize (FileSystemException beyond)
+        byte[] content = fs.readEntry(entry);
+
+        return new ReadOnlyByteChannel(content);
+    }
+
+    private static ZipEntry fileEntry(ZipFileSystem fs, ZipPath path) throws IOException {
+        ZipEntry entry = fs.getEntry(path);
         if (entry == null) {
             throw new NoSuchFileException(path.toString());
         }
-        
         if (entry.isDirectory()) {
-            throw new IOException("Cannot open directory as byte channel: " + path);
+            throw new FileSystemException(path.toString(), null, "Is a directory");
         }
-        
-        // Read entire entry into memory (ZIP entries must be fully read)
-        byte[] content = fs.readEntry(entry);
-        
-        return new ReadOnlyByteChannel(content);
+        return entry;
+    }
+
+    /**
+     * A stream inflating the entry as it is read: an entry of any size can be read this way
+     * (Files.newInputStream(), Files.copy(), Files.lines()...), never held in memory.
+     */
+    @Override
+    public InputStream newInputStream(Path path, OpenOption... options) throws IOException {
+        checkPath(path);
+        checkReadOnlyOptions(Set.of(options));
+        ZipPath zipPath = (ZipPath) toAbsolutePath(path);
+        ZipFileSystem fs = zipPath.getFileSystem();
+        return fs.openEntry(fileEntry(fs, zipPath));
     }
     
     @Override
     public DirectoryStream<Path> newDirectoryStream(Path dir, DirectoryStream.Filter<? super Path> filter)
             throws IOException {
         checkPath(dir);
-        dir = toAbsolutePath(dir);
-        ZipPath zipDir = (ZipPath) dir;
+        ZipPath zipDir = (ZipPath) toAbsolutePath(dir);
         ZipFileSystem fs = (ZipFileSystem) zipDir.getFileSystem();
         
         ZipEntry entry = fs.getEntry(zipDir);
@@ -162,8 +217,8 @@ public class ZipFileSystemProvider extends AbstractFileSystemProvider {
             throw new NotDirectoryException(dir.toString());
         }
         
-        // Get all entries in this directory
-        List<Path> entries = fs.listDirectory(zipDir);
+        // Get all entries in this directory, as dir.resolve(name) (Files.newDirectoryStream())
+        List<Path> entries = fs.listDirectory((ZipPath) dir);
         
         // Apply filter
         List<Path> filtered = new ArrayList<>();
@@ -179,45 +234,27 @@ public class ZipFileSystemProvider extends AbstractFileSystemProvider {
     
     @Override
     public void createDirectory(Path dir, FileAttribute<?>... attrs) throws IOException {
+        checkPath(dir);
         throw new ReadOnlyFileSystemException();
     }
-    
+
     @Override
     public void delete(Path path) throws IOException {
+        checkPath(path);
         throw new ReadOnlyFileSystemException();
     }
     
     @Override
     public void copy(Path source, Path target, CopyOption... options) throws IOException {
         checkPath(source);
-        source = toAbsolutePath(source);
-        
-        // Allow copying FROM zip to another filesystem
-        if (target.getFileSystem() != source.getFileSystem()) {
-            // Copy to different filesystem using InputStream
-            try (InputStream in = Files.newInputStream(source)) {
-                Files.copy(in, target, options);
-            }
-            return;
-        }
-        
-        // Copying within ZIP filesystem not allowed (read-only)
-        throw new ReadOnlyFileSystemException();
+        checkPath(target);
+        copyOutOfReadOnly(source, target, options);
     }
-    
+
     @Override
     public void move(Path source, Path target, CopyOption... options) throws IOException {
+        checkPath(source);
         throw new ReadOnlyFileSystemException();
-    }
-    
-    @Override
-    public boolean isSameFile(Path path, Path path2) throws IOException {
-        checkPath(path);
-        path = toAbsolutePath(path);
-        if (path.getFileSystem() != path2.getFileSystem()) {
-            return false;
-        }
-        return path.toAbsolutePath().equals(path2.toAbsolutePath());
     }
     
     @Override
@@ -270,18 +307,22 @@ public class ZipFileSystemProvider extends AbstractFileSystemProvider {
         if (entry == null) {
             throw new NoSuchFileException(path.toString());
         }
-        
-        return type.cast(new ZipFileAttributes(entry));
+
+        // The key of the normalized path: "/a/../b.txt" and "/b.txt" are the same file, and
+        // so are an implicit directory and its explicit entry
+        return type.cast(new ZipFileAttributes(entry, "/" + ZipFileSystem.entryName(zipPath)));
     }
     
     @Override
     public void setAttribute(Path path, String attribute, Object value, LinkOption... options)
             throws IOException {
+        checkPath(path);
         throw new ReadOnlyFileSystemException();
     }
-    
+
     @Override
     protected void setTimes(Path path, FileTime lastModifiedTime, FileTime lastAccessTime, FileTime createTime) throws IOException {
+        checkPath(path);
         throw new ReadOnlyFileSystemException();
     }
     
@@ -290,9 +331,11 @@ public class ZipFileSystemProvider extends AbstractFileSystemProvider {
      */
     private static class ZipFileAttributes implements BasicFileAttributes {
         private final ZipEntry entry;
-        
-        public ZipFileAttributes(ZipEntry entry) {
+        private final String key;
+
+        public ZipFileAttributes(ZipEntry entry, String key) {
             this.entry = entry;
+            this.key = key;
         }
         
         // Synthetic entries (the root, implicit directories) carry no times and a size of -1
@@ -343,7 +386,7 @@ public class ZipFileSystemProvider extends AbstractFileSystemProvider {
         
         @Override
         public Object fileKey() {
-            return entry.getName();
+            return key;
         }
     }
 }

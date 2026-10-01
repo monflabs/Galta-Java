@@ -21,11 +21,10 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AccessMode;
 import java.nio.file.CopyOption;
-import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.DirectoryStream;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -35,6 +34,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.FileAttributeView;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,22 +49,23 @@ import org.monflabs.filesystem.Sandbox;
 
 /**
  * FileSystemProvider that delegates to java.io.File API.
- * Supports optional root directory for sandboxing.
+ * Supports optional root directory for sandboxing (see {@link Sandbox} for what the
+ * sandbox does and does not protect against).
  */
 public class FileFileSystemProvider extends AbstractFileSystemProvider {
-    
+
     public static final String SCHEME = "file-impl";
     public static final String ROOT_PARAM = "root";
-    
+
     public FileFileSystemProvider(boolean registered) {
     	super(registered);
     }
-    
+
     @Override
     public String getScheme() {
         return SCHEME;
     }
-    
+
     @Override
     protected AbstractFileSystem createFileSystem(URI uri, Map<String, ?> env) throws IOException {
         // Check if a root directory is specified
@@ -76,15 +77,16 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
             } else if (rootObj instanceof String) {
                 root = new File((String) rootObj);
             }
-            
+
             if (root != null) {
-                // Expand ~ to user home
+                // Expand "~" and "~/..." to the user home. "~root" is a file name ("~root"
+                // used to expand to "<home>root")
                 String rootPath = root.getPath();
-                if (rootPath.startsWith("~")) {
+                if (rootPath.equals("~") || rootPath.startsWith("~/") || rootPath.startsWith("~" + File.separator)) {
                     rootPath = System.getProperty("user.home") + rootPath.substring(1);
                     root = new File(rootPath);
                 }
-                
+
                 // Ensure root exists and is a directory
                 if (!root.exists()) {
                     throw new IOException("Root directory does not exist: " + root);
@@ -92,20 +94,32 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
                 if (!root.isDirectory()) {
                     throw new IOException("Root must be a directory: " + root);
                 }
-                
+
                 // Get canonical path for security
                 root = root.getCanonicalFile();
             }
         }
-        
+
         return new FileFileSystem(this, uri, root);
     }
-    
+
     @Override
     protected AbstractPath createPath(FileSystem fs, String path) {
         return new FilePath((FileFileSystem) fs, path);
     }
-    
+
+    @Override
+    public Path getPath(URI uri) {
+        String path = uri.getPath();
+        // An unsandboxed Windows path has a URI path of "/C:/dir/file"
+        if (path != null && "\\".equals(File.separator) && path.length() >= 3 && path.charAt(0) == '/'
+                && Character.isLetter(path.charAt(1)) && path.charAt(2) == ':') {
+            checkUri(uri);
+            return createPath(getFileSystem(uri), path.substring(1));
+        }
+        return super.getPath(uri);
+    }
+
     /**
      * Validate that the resolved file is within the root (if a root is set).
      */
@@ -118,38 +132,37 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
             Sandbox.checkInside(path.toFile().toPath(), fs.getRoot().toPath(), fs.getRealRootPath(), path);
         }
     }
-    
+
     /**
-     * Convert an absolute File path to a filesystem-relative path string.
-     * For sandboxed filesystems, strips the root prefix.
-     * For non-sandboxed filesystems, returns the absolute path.
+     * Validate a path whose last element is not followed (NOFOLLOW_LINKS, delete, move): only
+     * its parent must stay within the root.
      */
-    private String toFileSystemPath(FileFileSystem fs, File file) {
-        File root = fs.getRoot();
-        if (root == null) {
-            // Not sandboxed - use absolute path
-            return file.getAbsolutePath();
+    private void validateParent(FilePath path) throws IOException {
+        FileFileSystem fs = (FileFileSystem) path.getFileSystem();
+        if (fs.getRoot() != null) {
+            Sandbox.checkParentInside(path.toFile().toPath(), fs.getRoot().toPath(), fs.getRealRootPath(), path);
         }
-        
-        // Sandboxed - convert to filesystem-relative path
-        String absolutePath = file.getAbsolutePath();
-        String rootPath = root.getAbsolutePath();
-        
-        if (absolutePath.equals(rootPath) || absolutePath.startsWith(rootPath + File.separator)) {
-            String relativePath = absolutePath.substring(rootPath.length());
-            
-            // Ensure path starts with separator
-            if (relativePath.isEmpty() || !relativePath.startsWith(fs.getSeparator())) {
-                relativePath = fs.getSeparator() + relativePath;
-            }
-            
-            return relativePath;
-        }
-        
-        // Fallback: use absolute path (shouldn't happen if validation is correct)
-        return absolutePath;
     }
-    
+
+    private void validate(FilePath path, boolean followLinks) throws IOException {
+        if (followLinks) {
+            validatePath(path);
+        } else {
+            validateParent(path);
+        }
+    }
+
+    /**
+     * The exception with the paths of this filesystem, not the host paths of a sandbox.
+     */
+    private static IOException translate(FileSystemException e, Path file, Path other) {
+        FileFileSystem fs = (FileFileSystem) file.getFileSystem();
+        if (fs.getRoot() == null) {
+            return e;
+        }
+        return Sandbox.withPaths(e, file, other);
+    }
+
     @Override
     public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options,
                                                FileAttribute<?>... attrs) throws IOException {
@@ -157,120 +170,120 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
         path = toAbsolutePath(path);
         validatePath((FilePath) path);
         File file = ((FilePath) path).toFile();
-        return Files.newByteChannel(file.toPath(), options, attrs);
+        try {
+            return Files.newByteChannel(file.toPath(), options, attrs);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
     }
-    
+
     @Override
     public DirectoryStream<Path> newDirectoryStream(Path dir, DirectoryStream.Filter<? super Path> filter)
             throws IOException {
         checkPath(dir);
-        dir = toAbsolutePath(dir);
-        validatePath((FilePath) dir);
-        File file = ((FilePath) dir).toFile();
-        
+        Path absolute = toAbsolutePath(dir);
+        validatePath((FilePath) absolute);
+        File file = ((FilePath) absolute).toFile();
+
         if (!file.exists()) {
             throw new NoSuchFileException(dir.toString());
         }
         if (!file.isDirectory()) {
             throw new NotDirectoryException(dir.toString());
         }
-        
-        File[] files = file.listFiles();
-        if (files == null) {
+
+        String[] names = file.list();
+        if (names == null) {
             throw new IOException("Cannot list directory: " + dir);
         }
-        
-        FileFileSystem fs = (FileFileSystem) dir.getFileSystem();
+
         List<Path> paths = new ArrayList<>();
-        for (File f : files) {
-            // Convert absolute File path to filesystem-relative path
-            String fsPath = toFileSystemPath(fs, f);
-            Path p = new FilePath(fs, fsPath);
+        for (String name : names) {
+            // dir.resolve(name), as Files.newDirectoryStream() specifies: a relative directory
+            // lists relative entries
+            Path p = dir.resolve(name);
             // An IOException from the filter is the caller's error to see, not a reason to skip
             if (filter.accept(p)) {
                 paths.add(p);
             }
         }
-        
+
         return new ListDirectoryStream(paths);
     }
-    
+
     @Override
     public void createDirectory(Path dir, FileAttribute<?>... attrs) throws IOException {
         checkPath(dir);
         dir = toAbsolutePath(dir);
         validatePath((FilePath) dir);
         File file = ((FilePath) dir).toFile();
-        if (file.exists()) {
-            throw new FileAlreadyExistsException(dir.toString());
-        }
-        if (!file.mkdir()) {
-            throw new IOException("Failed to create directory: " + dir);
+        // Files.createDirectory() reports why it failed (NoSuchFileException for a missing
+        // parent, AccessDeniedException...), where File.mkdir() only returned false
+        try {
+            Files.createDirectory(file.toPath(), attrs);
+        } catch (FileSystemException e) {
+            throw translate(e, dir, null);
         }
     }
-    
+
     @Override
     public void delete(Path path) throws IOException {
         checkPath(path);
         path = toAbsolutePath(path);
-        validatePath((FilePath) path);
+        // Deleting a symbolic link deletes the link, never its target: only the parent has
+        // to be inside the root, so a link pointing outside can be deleted
+        validateParent((FilePath) path);
         File file = ((FilePath) path).toFile();
-        if (!file.exists()) {
-            throw new NoSuchFileException(path.toString());
-        }
-        
-        // Check if it's a non-empty directory
-        if (file.isDirectory()) {
-            String[] contents = file.list();
-            if (contents != null && contents.length > 0) {
-                throw new DirectoryNotEmptyException(path.toString());
-            }
-        }
-        
-        if (!file.delete()) {
-            throw new IOException("Failed to delete: " + path);
+        // NoSuchFileException, DirectoryNotEmptyException, AccessDeniedException...
+        try {
+            Files.delete(file.toPath());
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
         }
     }
-    
+
     @Override
     public void copy(Path source, Path target, CopyOption... options) throws IOException {
         checkPath(source);
         checkPath(target);
         source = toAbsolutePath(source);
         target = toAbsolutePath(target);
-        validatePath((FilePath) source);
+        // With NOFOLLOW_LINKS, a link is copied as a link: it is not followed
+        validate((FilePath) source, !Sandbox.noFollow((Object[]) options));
         validatePath((FilePath) target);
         File sourceFile = ((FilePath) source).toFile();
         File targetFile = ((FilePath) target).toFile();
-        
-        if (!sourceFile.exists()) {
-            throw new NoSuchFileException(source.toString());
-        }
-        
+
         // Files.copy() implements the spec: REPLACE_EXISTING, a non-empty target directory, ...
-        Files.copy(sourceFile.toPath(), targetFile.toPath(), options);
+        try {
+            Files.copy(sourceFile.toPath(), targetFile.toPath(), options);
+        } catch (FileSystemException e) {
+            throw translate(e, source, target);
+        }
     }
-    
+
     @Override
     public void move(Path source, Path target, CopyOption... options) throws IOException {
         checkPath(source);
         checkPath(target);
         source = toAbsolutePath(source);
         target = toAbsolutePath(target);
-        validatePath((FilePath) source);
-        validatePath((FilePath) target);
+        // A move renames the link itself, never its target, and replaces a target link
+        // without following it
+        validateParent((FilePath) source);
+        validateParent((FilePath) target);
         File sourceFile = ((FilePath) source).toFile();
         File targetFile = ((FilePath) target).toFile();
-        
-        if (!sourceFile.exists()) {
-            throw new NoSuchFileException(source.toString());
-        }
-        
+
         // Files.move() honours ATOMIC_MOVE and reports a failed cross-device move of a
         // non-empty directory; renameTo() + copy + an unchecked delete() did neither
-        Files.move(sourceFile.toPath(), targetFile.toPath(), options);
+        try {
+            Files.move(sourceFile.toPath(), targetFile.toPath(), options);
+        } catch (FileSystemException e) {
+            throw translate(e, source, target);
+        }
     }
-    
+
     @Override
     protected void setTimes(Path path, FileTime lastModifiedTime, FileTime lastAccessTime, FileTime createTime) throws IOException {
         checkPath(path);
@@ -279,7 +292,7 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
         Files.getFileAttributeView(((FilePath) path).toFile().toPath(), BasicFileAttributeView.class)
             .setTimes(lastModifiedTime, lastAccessTime, createTime);
     }
-    
+
     /**
      * Two paths locate the same file when the underlying files are the same, which a
      * lexical comparison misses (symbolic links, case-insensitive volumes, two
@@ -294,11 +307,16 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
         if (!(path2 instanceof FilePath) || path2.getFileSystem().provider() != this) {
             return false;
         }
+        checkPath(path2);
         path = toAbsolutePath(path);
         path2 = toAbsolutePath(path2);
         validatePath((FilePath) path);
         validatePath((FilePath) path2);
-        return Files.isSameFile(((FilePath) path).toFile().toPath(), ((FilePath) path2).toFile().toPath());
+        try {
+            return Files.isSameFile(((FilePath) path).toFile().toPath(), ((FilePath) path2).toFile().toPath());
+        } catch (FileSystemException e) {
+            throw translate(e, path, path2);
+        }
     }
 
     @Override
@@ -309,7 +327,7 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
         File file = ((FilePath) path).toFile();
         return file.isHidden();
     }
-    
+
     @Override
     public FileStore getFileStore(Path path) throws IOException {
         checkPath(path);
@@ -318,20 +336,24 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
         File file = ((FilePath) path).toFile();
         // The store of the file itself (NoSuchFileException if it does not exist, as
         // Files.getFileStore() specifies), not of the root of the host filesystem
-        return new FileBasedFileStore(Files.getFileStore(file.toPath()));
+        try {
+            return new FileBasedFileStore(Files.getFileStore(file.toPath()));
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
     }
-    
+
     @Override
     public void checkAccess(Path path, AccessMode... modes) throws IOException {
         checkPath(path);
         path = toAbsolutePath(path);
         validatePath((FilePath) path);
         File file = ((FilePath) path).toFile();
-        
+
         if (!file.exists()) {
             throw new NoSuchFileException(path.toString());
         }
-        
+
         for (AccessMode mode : modes) {
             switch (mode) {
                 case READ:
@@ -352,17 +374,64 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
             }
         }
     }
-    
+
+    /**
+     * The attributes of the host file, of any type the host supports (basic, posix...). With
+     * NOFOLLOW_LINKS, a link is not followed: its own attributes are read, even for a link
+     * pointing outside the root (Files.isSymbolicLink(), Files.walk()...).
+     */
     @Override
     public <A extends BasicFileAttributes> A readAttributes(Path path, Class<A> type,
                                                              LinkOption... options) throws IOException {
         checkPath(path);
         path = toAbsolutePath(path);
-        validatePath((FilePath) path);
-        if (type == BasicFileAttributes.class) {
-            File file = ((FilePath) path).toFile();
-            return Files.readAttributes(file.toPath(), type, options);
+        validate((FilePath) path, !Sandbox.noFollow((Object[]) options));
+        try {
+            return Files.readAttributes(((FilePath) path).toFile().toPath(), type, options);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
         }
-        throw new UnsupportedOperationException("Attribute type not supported: " + type);
+    }
+
+    @Override
+    public Map<String, Object> readAttributes(Path path, String attributes, LinkOption... options)
+            throws IOException {
+        checkPath(path);
+        path = toAbsolutePath(path);
+        validate((FilePath) path, !Sandbox.noFollow((Object[]) options));
+        try {
+            return Files.readAttributes(((FilePath) path).toFile().toPath(), attributes, options);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
+    }
+
+    @Override
+    public void setAttribute(Path path, String attribute, Object value, LinkOption... options)
+            throws IOException {
+        checkPath(path);
+        path = toAbsolutePath(path);
+        validate((FilePath) path, !Sandbox.noFollow((Object[]) options));
+        try {
+            Files.setAttribute(((FilePath) path).toFile().toPath(), attribute, value, options);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
+    }
+
+    @Override
+    public <V extends FileAttributeView> V getFileAttributeView(Path path, Class<V> type,
+                                                                  LinkOption... options) {
+        if (type == BasicFileAttributeView.class) {
+            return super.getFileAttributeView(path, type, options);
+        }
+        checkPath(path);
+        FilePath p = (FilePath) toAbsolutePath(path);
+        boolean follow = !Sandbox.noFollow((Object[]) options);
+        // Any view of the host (posix, dos, owner...), the sandbox checked on every call
+        return Sandbox.delegatedView(type, p.toFile().toPath(), () -> {
+            validate(p, follow);
+            return p.toFile().toPath();
+        }, options);
     }
 }

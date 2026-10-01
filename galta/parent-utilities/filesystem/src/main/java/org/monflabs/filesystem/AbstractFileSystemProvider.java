@@ -16,6 +16,7 @@
 package org.monflabs.filesystem;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.CopyOption;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystemAlreadyExistsException;
 import java.nio.file.FileSystemNotFoundException;
@@ -141,18 +142,32 @@ public abstract class AbstractFileSystemProvider extends FileSystemProvider {
         return createPath(getFileSystem(uri), path);
     }
 
+    /**
+     * The Files.isSameFile() contract: two equal paths are the same file without any check;
+     * otherwise both files must exist (NoSuchFileException), and two files of different
+     * filesystems are different. The comparison is lexical, on the normalized absolute
+     * paths: right for the filesystems without links (zip, resources); the others override it.
+     */
     @Override
     public boolean isSameFile(Path path, Path path2) throws IOException {
-        // A lexical comparison: right for the filesystems without links (memory, zip,
-        // resources); the ones over real files override it
+        checkPath(path);
         if (path.equals(path2)) {
             return true;
         }
-        if (path2 == null || path.getFileSystem().provider() != path2.getFileSystem().provider()) {
+        if (path2 == null) {
+            throw new NullPointerException();
+        }
+        if (!(path2 instanceof AbstractPath) || path2.getFileSystem().provider() != this) {
             return false;
         }
-        Path normalized1 = path.toAbsolutePath().normalize();
-        Path normalized2 = path2.toAbsolutePath().normalize();
+        checkPath(path2);
+        checkAccess(path);
+        checkAccess(path2);
+        if (path.getFileSystem() != path2.getFileSystem()) {
+            return false;
+        }
+        Path normalized1 = toAbsolutePath(path).normalize();
+        Path normalized2 = toAbsolutePath(path2).normalize();
         return normalized1.equals(normalized2);
     }
     
@@ -282,6 +297,51 @@ public abstract class AbstractFileSystemProvider extends FileSystemProvider {
         }
     }
     
+    /**
+     * Copy a file of a read-only filesystem to another filesystem of the same provider (a
+     * copy to another provider never reaches the provider: Files.copy() streams it). A target
+     * in a read-only filesystem is ReadOnlyFileSystemException, whatever the options
+     * (COPY_ATTRIBUTES used to fail with UnsupportedOperationException first).
+     */
+    protected void copyOutOfReadOnly(Path source, Path target, CopyOption... options) throws IOException {
+        boolean replace = false;
+        boolean copyAttributes = false;
+        for (CopyOption option : options) {
+            if (option == null) {
+                throw new NullPointerException();
+            }
+            if (option == java.nio.file.StandardCopyOption.REPLACE_EXISTING) {
+                replace = true;
+            } else if (option == java.nio.file.StandardCopyOption.COPY_ATTRIBUTES) {
+                copyAttributes = true;
+            } else if (option != LinkOption.NOFOLLOW_LINKS) {
+                throw new UnsupportedOperationException("Unsupported copy option: " + option);
+            }
+        }
+        if (target.getFileSystem().isReadOnly()) {
+            throw new java.nio.file.ReadOnlyFileSystemException();
+        }
+        BasicFileAttributes attrs = readAttributes(source, BasicFileAttributes.class);
+        if (attrs.isDirectory()) {
+            // A directory copy creates the directory only
+            if (replace) {
+                java.nio.file.Files.deleteIfExists(target);
+            }
+            java.nio.file.Files.createDirectory(target);
+        } else {
+            try (java.io.InputStream in = newInputStream(source)) {
+                if (replace) {
+                    java.nio.file.Files.copy(in, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                } else {
+                    java.nio.file.Files.copy(in, target);
+                }
+            }
+        }
+        if (copyAttributes) {
+            java.nio.file.Files.setLastModifiedTime(target, attrs.lastModifiedTime());
+        }
+    }
+
     protected void checkUri(URI uri) {
         if (!uri.getScheme().equalsIgnoreCase(getScheme())) {
             throw new IllegalArgumentException("URI scheme must be " + getScheme());
@@ -299,6 +359,9 @@ public abstract class AbstractFileSystemProvider extends FileSystemProvider {
         if (abstractPath.getFileSystem().provider() != this) {
             throw new ProviderMismatchException();
         }
+        // A closed filesystem refuses every operation, also through paths obtained before
+        // it was closed (ClosedFileSystemException)
+        abstractPath.getFileSystem().checkOpen();
     }
     
     void removeFileSystem(AbstractFileSystem fs) {

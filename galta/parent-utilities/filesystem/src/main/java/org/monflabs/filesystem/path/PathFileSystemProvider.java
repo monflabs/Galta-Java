@@ -24,6 +24,7 @@ import java.nio.file.CopyOption;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -33,6 +34,7 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.FileAttributeView;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,11 +45,15 @@ import org.monflabs.filesystem.AbstractFileSystem;
 import org.monflabs.filesystem.AbstractFileSystemProvider;
 import org.monflabs.filesystem.AbstractPath;
 import org.monflabs.filesystem.ListDirectoryStream;
+import org.monflabs.filesystem.Sandbox;
 
 /**
  * FileSystemProvider for PathFileSystem.
  * 
  * Delegates to underlying NIO.2 filesystem but normalizes paths to always use "/".
+ * With a root, every path is confined to it (see {@link Sandbox} for what the sandbox
+ * does and does not protect against). Without one, a relative path is resolved against
+ * "/", not against the working directory (unlike an unsandboxed FileFileSystem).
  * 
  * URI format: pathfs:///[identifier]
  * 
@@ -94,9 +100,13 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
             }
         }
         
-        // Verify root path exists if specified
+        // Verify root path exists if specified, and is a directory: a regular file as the root
+        // made every path "/x" a child of a file
         if (rootPath != null && !Files.exists(rootPath)) {
             throw new IOException("Root path does not exist: " + rootPath);
+        }
+        if (rootPath != null && !Files.isDirectory(rootPath)) {
+            throw new IOException("Root must be a directory: " + rootPath);
         }
         
         return new PathFileSystem(this, uri, rootPath);
@@ -115,31 +125,44 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         
         PathPath pathPath = (PathPath) path;
         java.nio.file.Path osPath = pathPath.toOSPathChecked();
-        
-        return Files.newByteChannel(osPath, options, attrs);
+
+        try {
+            return Files.newByteChannel(osPath, options, attrs);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
+    }
+
+    /**
+     * The exception with the paths of this filesystem, not the host paths of a sandbox.
+     */
+    private static IOException translate(FileSystemException e, Path file, Path other) {
+        if (((PathPath) file).getFileSystem().getRootPath() == null) {
+            return e;
+        }
+        return Sandbox.withPaths(e, file, other);
     }
     
     @Override
     public DirectoryStream<Path> newDirectoryStream(Path dir, DirectoryStream.Filter<? super Path> filter)
             throws IOException {
         checkPath(dir);
-        dir = toAbsolutePath(dir);
-        
-        PathPath pathPath = (PathPath) dir;
-        PathFileSystem pfs = pathPath.getFileSystem();
+        PathPath pathPath = (PathPath) toAbsolutePath(dir);
         java.nio.file.Path osPath = pathPath.toOSPathChecked();
-        
-        // Convert OS paths to virtual paths. The OS stream is closed even when the filter
-        // throws, and an IOException from the filter reaches the caller
+
+        // The entries are dir.resolve(name), as Files.newDirectoryStream() specifies (a
+        // relative directory lists relative entries). The OS stream is closed even when the
+        // filter throws, and an IOException from the filter reaches the caller
         List<Path> virtualPaths = new ArrayList<>();
         try (DirectoryStream<java.nio.file.Path> osStream = Files.newDirectoryStream(osPath)) {
             for (java.nio.file.Path osEntry : osStream) {
-                String virtualPath = pfs.toVirtualPath(osEntry);
-                Path virtualPathObj = new PathPath(pfs, virtualPath);
+                Path virtualPathObj = dir.resolve(osEntry.getFileName().toString());
                 if (filter.accept(virtualPathObj)) {
                     virtualPaths.add(virtualPathObj);
                 }
             }
+        } catch (FileSystemException e) {
+            throw translate(e, dir, null);
         }
         
         return new ListDirectoryStream(virtualPaths);
@@ -152,8 +175,12 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         
         PathPath pathPath = (PathPath) dir;
         java.nio.file.Path osPath = pathPath.toOSPathChecked();
-        
-        Files.createDirectory(osPath, attrs);
+
+        try {
+            Files.createDirectory(osPath, attrs);
+        } catch (FileSystemException e) {
+            throw translate(e, dir, null);
+        }
     }
     
     @Override
@@ -162,9 +189,14 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         path = toAbsolutePath(path);
         
         PathPath pathPath = (PathPath) path;
-        java.nio.file.Path osPath = pathPath.toOSPathChecked();
-        
-        Files.delete(osPath);
+        // Deleting a link deletes the link, never its target: only the parent is checked
+        java.nio.file.Path osPath = pathPath.toOSPathChecked(false);
+
+        try {
+            Files.delete(osPath);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
     }
     
     @Override
@@ -177,10 +209,15 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         PathPath sourcePath = (PathPath) source;
         PathPath targetPath = (PathPath) target;
         
-        java.nio.file.Path osSource = sourcePath.toOSPathChecked();
+        // With NOFOLLOW_LINKS, a link is copied as a link: it is not followed
+        java.nio.file.Path osSource = sourcePath.toOSPathChecked(!Sandbox.noFollow((Object[]) options));
         java.nio.file.Path osTarget = targetPath.toOSPathChecked();
-        
-        Files.copy(osSource, osTarget, options);
+
+        try {
+            Files.copy(osSource, osTarget, options);
+        } catch (FileSystemException e) {
+            throw translate(e, source, target);
+        }
     }
     
     @Override
@@ -193,15 +230,27 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         PathPath sourcePath = (PathPath) source;
         PathPath targetPath = (PathPath) target;
         
-        java.nio.file.Path osSource = sourcePath.toOSPathChecked();
-        java.nio.file.Path osTarget = targetPath.toOSPathChecked();
-        
-        Files.move(osSource, osTarget, options);
+        // A move renames a link itself and replaces a target link without following it
+        java.nio.file.Path osSource = sourcePath.toOSPathChecked(false);
+        java.nio.file.Path osTarget = targetPath.toOSPathChecked(false);
+
+        try {
+            Files.move(osSource, osTarget, options);
+        } catch (FileSystemException e) {
+            throw translate(e, source, target);
+        }
     }
     
     @Override
     public boolean isSameFile(Path path, Path path2) throws IOException {
         checkPath(path);
+        if (path.equals(path2)) {
+            return true;
+        }
+        // A path of another provider is another file (not a ProviderMismatchException)
+        if (!(path2 instanceof PathPath) || path2.getFileSystem().provider() != this) {
+            return false;
+        }
         checkPath(path2);
         path = toAbsolutePath(path);
         path2 = toAbsolutePath(path2);
@@ -211,8 +260,12 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         
         java.nio.file.Path osPath1 = pathPath1.toOSPathChecked();
         java.nio.file.Path osPath2 = pathPath2.toOSPathChecked();
-        
-        return Files.isSameFile(osPath1, osPath2);
+
+        try {
+            return Files.isSameFile(osPath1, osPath2);
+        } catch (FileSystemException e) {
+            throw translate(e, path, path2);
+        }
     }
     
     @Override
@@ -233,8 +286,12 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         
         PathPath pathPath = (PathPath) path;
         java.nio.file.Path osPath = pathPath.toOSPathChecked();
-        
-        return Files.getFileStore(osPath);
+
+        try {
+            return Files.getFileStore(osPath);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
     }
     
     @Override
@@ -278,9 +335,15 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         path = toAbsolutePath(path);
         
         PathPath pathPath = (PathPath) path;
-        java.nio.file.Path osPath = pathPath.toOSPathChecked();
-        
-        return Files.readAttributes(osPath, type, options);
+        // With NOFOLLOW_LINKS the link's own attributes are read, even for a link pointing
+        // outside the root (Files.isSymbolicLink(), Files.walk()...)
+        java.nio.file.Path osPath = pathPath.toOSPathChecked(!Sandbox.noFollow((Object[]) options));
+
+        try {
+            return Files.readAttributes(osPath, type, options);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
     }
     
     @Override
@@ -290,9 +353,13 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         path = toAbsolutePath(path);
         
         PathPath pathPath = (PathPath) path;
-        java.nio.file.Path osPath = pathPath.toOSPathChecked();
-        
-        return Files.readAttributes(osPath, attributes, options);
+        java.nio.file.Path osPath = pathPath.toOSPathChecked(!Sandbox.noFollow((Object[]) options));
+
+        try {
+            return Files.readAttributes(osPath, attributes, options);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
     }
     
     @Override
@@ -302,9 +369,26 @@ public class PathFileSystemProvider extends AbstractFileSystemProvider {
         path = toAbsolutePath(path);
         
         PathPath pathPath = (PathPath) path;
-        java.nio.file.Path osPath = pathPath.toOSPathChecked();
-        
-        Files.setAttribute(osPath, attribute, value, options);
+        java.nio.file.Path osPath = pathPath.toOSPathChecked(!Sandbox.noFollow((Object[]) options));
+
+        try {
+            Files.setAttribute(osPath, attribute, value, options);
+        } catch (FileSystemException e) {
+            throw translate(e, path, null);
+        }
+    }
+
+    @Override
+    public <V extends FileAttributeView> V getFileAttributeView(Path path, Class<V> type,
+                                                                  LinkOption... options) {
+        if (type == BasicFileAttributeView.class) {
+            return super.getFileAttributeView(path, type, options);
+        }
+        checkPath(path);
+        PathPath p = (PathPath) toAbsolutePath(path);
+        boolean follow = !Sandbox.noFollow((Object[]) options);
+        // Any view of the host (posix, dos, owner...), the sandbox checked on every call
+        return Sandbox.delegatedView(type, p.toOSPath(), () -> p.toOSPathChecked(follow), options);
     }
     
     @Override

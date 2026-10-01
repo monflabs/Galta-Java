@@ -66,12 +66,8 @@ public class PathDelegatingPath extends AbstractPath {
     
     @Override
     public URI toUri() {
-        // Return URI with our scheme; the multi-argument constructor encodes spaces, '#', '%'...
-        try {
-            return new URI(getFileSystem().provider().getScheme(), "", toUriPath(toAbsolutePath()), null, null);
-        } catch (java.net.URISyntaxException e) {
-            throw new IllegalArgumentException(e);
-        }
+        // A URI with our scheme, normalized so it never shows a ".." climbing above the root
+        return buildUri(toUriPath(toAbsolutePath().normalize()));
     }
     
     @Override
@@ -94,7 +90,7 @@ public class PathDelegatingPath extends AbstractPath {
         
         // Validate we're within the sandbox
         if (!realDelegate.startsWith(realRoot)) {
-            throw new IOException("Path escapes filesystem root: " + path);
+            throw new java.nio.file.AccessDeniedException("Path escapes filesystem root: " + path);
         }
         
         // Return path relative to sandbox root

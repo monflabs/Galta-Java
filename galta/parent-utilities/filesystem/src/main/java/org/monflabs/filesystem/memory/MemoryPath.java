@@ -33,12 +33,9 @@ public class MemoryPath extends AbstractPath {
     
     @Override
     public URI toUri() {
-        // The multi-argument constructor encodes spaces, '#', '%'...
-        try {
-            return new URI("memory", "", toAbsolutePath().toString(), null, null);
-        } catch (java.net.URISyntaxException e) {
-            throw new IllegalArgumentException(e);
-        }
+        // With the authority of the filesystem's URI: "memory://tenant1/a.txt" used to come
+        // out as "memory:///a.txt", the URI of a file of another filesystem
+        return buildUri(toAbsolutePath().toString());
     }
     
     @Override

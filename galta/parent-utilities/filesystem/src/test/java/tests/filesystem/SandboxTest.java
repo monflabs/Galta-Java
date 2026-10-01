@@ -215,7 +215,19 @@ public class SandboxTest extends ProjectTestCase {
                 assertFalse(name, Files.exists(fs.getPath("/..\\..\\outside\\secret.txt")));
                 assertFalse(name, Files.exists(fs.getPath("..\\sb2\\secret.txt")));
                 assertFalse(name, Files.exists(fs.getPath("/../SB2/secret.txt")));
-                assertTrue(name, Files.exists(fs.getPath("\\..\\inside.txt")));
+                if (fs.getSeparator().equals("\\") || File.separator.equals("\\")) {
+                    // A backslash is a separator on Windows
+                    assertTrue(name, Files.exists(fs.getPath("\\..\\inside.txt")));
+                } else {
+                    // On a "/" filesystem a backslash is an ordinary character, as for the
+                    // JDK on Unix: "\..\inside.txt" is one file name, inside the root
+                    Path literal = fs.getPath("\\..\\inside.txt");
+                    assertEquals(name, 1, literal.getNameCount());
+                    assertFalse(name, Files.exists(literal));
+                    Files.write(literal, "x".getBytes());
+                    assertTrue(name, new File(root, "\\..\\inside.txt").exists());
+                    Files.delete(literal);
+                }
             }
         } finally {
             closeAll(all);

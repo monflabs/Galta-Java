@@ -18,6 +18,8 @@ package tests;
 import doc_examples.filesystem.FileSystemsExamples;
 import junit.framework.TestSuite;
 import tests.filesystem.FileFileSystemTest;
+import tests.filesystem.FileSystemFixesTest;
+import tests.filesystem.JdkConformanceTest;
 import tests.filesystem.MemoryFileSystemTest;
 import tests.filesystem.PathDelegatingFileSystemTest;
 import tests.filesystem.PathFileSystemTest;
@@ -39,6 +41,8 @@ public class AllFilesystemTests extends TestSuite {
 		suite.addTestSuite(PathFileSystemTest.class);
 		suite.addTestSuite(SandboxTest.class);
 		suite.addTestSuite(UnsandboxedFileFileSystemTest.class);
+		suite.addTestSuite(JdkConformanceTest.class);
+		suite.addTestSuite(FileSystemFixesTest.class);
 
 		// Samples of docs/Utilities/FileSystems.md
 		suite.addTestSuite(FileSystemsExamples.class);

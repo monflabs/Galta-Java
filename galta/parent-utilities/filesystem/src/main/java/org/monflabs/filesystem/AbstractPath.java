@@ -15,7 +15,9 @@
  */
 package org.monflabs.filesystem;
 import java.io.IOException;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.nio.file.ProviderMismatchException;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
@@ -25,6 +27,12 @@ import java.util.List;
 
 /**
  * Abstract base Path implementation with common path manipulation logic.
+ * <p>
+ * The syntax follows the JDK's own paths: the empty path has one empty name element and
+ * {@link #normalize()} turns "." or "a/.." into the empty path. On a filesystem whose
+ * separator is "/", a backslash is an ordinary character of a file name, as it is for
+ * the JDK on Unix; on a filesystem whose separator is a backslash (Windows), "/" is
+ * accepted as a separator too.
  */
 public abstract class AbstractPath implements Path {
     
@@ -35,6 +43,9 @@ public abstract class AbstractPath implements Path {
     protected AbstractPath(AbstractFileSystem fileSystem, String path) {
         this.fileSystem = fileSystem;
         this.separator = fileSystem.getSeparator();
+        if (path != null && path.indexOf('\0') >= 0) {
+            throw new InvalidPathException(path, "Nul character not allowed");
+        }
         this.path = normalizePath(path);
     }
     
@@ -42,8 +53,12 @@ public abstract class AbstractPath implements Path {
         if (path == null || path.isEmpty()) {
             return "";
         }
-        // Normalize separators
-        path = path.replace('/', separator.charAt(0)).replace('\\', separator.charAt(0));
+        // On a backslash filesystem (Windows) "/" is a separator too. On a "/" filesystem a
+        // backslash is an ordinary character: converting it made "a\b" two names, unlike the
+        // JDK on Unix
+        if (separator.equals("\\")) {
+            path = path.replace('/', '\\');
+        }
         
         // Collapse repeated separators ("a//b" is "a/b")
         String doubleSep = separator + separator;
@@ -67,6 +82,27 @@ public abstract class AbstractPath implements Path {
     protected String toUriPath(Path p) {
         String s = p.toString();
         return separator.equals("/") ? s : s.replace(separator, "/");
+    }
+
+    /**
+     * A URI of the provider's scheme for a path of this filesystem, carrying the authority
+     * of the filesystem's URI ("memory://tenant1/a.txt"), so that the provider's
+     * getPath(URI) finds this filesystem again. The path is encoded as needed.
+     *
+     * @param uriPath the URI path, starting with "/"
+     */
+    protected java.net.URI buildUri(String uriPath) {
+        java.net.URI fsUri = fileSystem.getUri();
+        String authority = fsUri != null ? fsUri.getAuthority() : null;
+        if (!uriPath.startsWith("/")) {
+            uriPath = "/" + uriPath;
+        }
+        try {
+            // The multi-argument constructor encodes spaces, '#', '%'...
+            return new java.net.URI(fileSystem.provider().getScheme(), authority != null ? authority : "", uriPath, null, null);
+        } catch (java.net.URISyntaxException e) {
+            throw new IllegalArgumentException(e);
+        }
     }
 
     @Override
@@ -118,7 +154,11 @@ public abstract class AbstractPath implements Path {
     
     @Override
     public Path getFileName() {
-        if (path.isEmpty() || path.equals(separator)) {
+        if (path.isEmpty()) {
+            // The empty path has one, empty, name (as with the JDK)
+            return this;
+        }
+        if (path.equals(separator)) {
             return null;
         }
         int lastSep = path.lastIndexOf(separator);
@@ -153,11 +193,14 @@ public abstract class AbstractPath implements Path {
     
     @Override
     public int getNameCount() {
-        return getNameComponents().size();
+        return path.isEmpty() ? 1 : getNameComponents().size();
     }
     
     @Override
     public Path getName(int index) {
+        if (path.isEmpty() && index == 0) {
+            return this;
+        }
         List<String> names = getNameComponents();
         if (index < 0 || index >= names.size()) {
             throw new IllegalArgumentException("Invalid index: " + index);
@@ -167,6 +210,9 @@ public abstract class AbstractPath implements Path {
     
     @Override
     public Path subpath(int beginIndex, int endIndex) {
+        if (path.isEmpty() && beginIndex == 0 && endIndex == 1) {
+            return this;
+        }
         List<String> names = getNameComponents();
         if (beginIndex < 0 || beginIndex >= names.size() || 
             endIndex <= beginIndex || endIndex > names.size()) {
@@ -279,11 +325,27 @@ public abstract class AbstractPath implements Path {
             normalized.append(parts.get(i));
         }
         
-        return createPath(normalized.length() == 0 ? "." : normalized.toString());
+        // "." and "a/.." normalize to the empty path, as with the JDK
+        return createPath(normalized.toString());
+    }
+    
+    /**
+     * The other path as one of this filesystem's kind. A path of another provider cannot
+     * be combined with this one: ProviderMismatchException, as the JDK's paths do.
+     */
+    protected AbstractPath checkSameKind(Path other) {
+        if (other == null) {
+            throw new NullPointerException();
+        }
+        if (!(other instanceof AbstractPath) || other.getClass() != getClass()) {
+            throw new ProviderMismatchException();
+        }
+        return (AbstractPath) other;
     }
     
     @Override
     public Path resolve(Path other) {
+        checkSameKind(other);
         if (other.isAbsolute()) {
             return other;
         }
@@ -322,45 +384,59 @@ public abstract class AbstractPath implements Path {
         return resolveSibling(createPath(other));
     }
     
+    /**
+     * The relative path from this path to the other, following the JDK's algorithm: both
+     * paths are normalized first, and a base whose remaining names contain ".." cannot be
+     * relativized (IllegalArgumentException). For any two paths p and q of the same type,
+     * {@code p.resolve(p.relativize(q)).normalize()} equals {@code q.normalize()}.
+     */
     @Override
     public Path relativize(Path other) {
-        if (!(other instanceof AbstractPath)) {
-            throw new IllegalArgumentException("Other path must be AbstractPath");
-        }
-        if (this.isAbsolute() != other.isAbsolute()) {
-            throw new IllegalArgumentException("Paths must both be absolute or both be relative");
-        }
-        
-        if (this.equals(other)) {
+        AbstractPath child = checkSameKind(other);
+        if (path.equals(child.path)) {
             return createPath("");
         }
-        
-        List<String> thisNames = getNameComponents();
-        List<String> otherNames = ((AbstractPath) other).getNameComponents();
-        
-        // Find common prefix
-        int commonPrefix = 0;
-        while (commonPrefix < Math.min(thisNames.size(), otherNames.size()) &&
-               thisNames.get(commonPrefix).equals(otherNames.get(commonPrefix))) {
-            commonPrefix++;
+        if (this.isAbsolute() != child.isAbsolute()) {
+            throw new IllegalArgumentException("'other' is different type of Path");
+        }
+        if (isAbsolute() && !rootPrefix().equals(child.rootPrefix())) {
+            throw new IllegalArgumentException("'other' has different root");
+        }
+        if (path.isEmpty()) {
+            return child;
         }
         
-        // Build relative path
+        List<String> baseNames = ((AbstractPath) normalize()).getNameComponents();
+        List<String> childNames = ((AbstractPath) child.normalize()).getNameComponents();
+        
+        // Skip the common names
+        int common = 0;
+        int n = Math.min(baseNames.size(), childNames.size());
+        while (common < n && baseNames.get(common).equals(childNames.get(common))) {
+            common++;
+        }
+        
+        // ".." cannot be undone: "../a" has no relative path to "a"
+        for (int i = common; i < baseNames.size(); i++) {
+            if (baseNames.get(i).equals("..")) {
+                throw new IllegalArgumentException("Unable to compute relative path from " + this + " to " + other);
+            }
+        }
+        
         StringBuilder relative = new StringBuilder();
-        for (int i = commonPrefix; i < thisNames.size(); i++) {
+        for (int i = common; i < baseNames.size(); i++) {
             if (relative.length() > 0) {
                 relative.append(separator);
             }
             relative.append("..");
         }
-        for (int i = commonPrefix; i < otherNames.size(); i++) {
+        for (int i = common; i < childNames.size(); i++) {
             if (relative.length() > 0) {
                 relative.append(separator);
             }
-            relative.append(otherNames.get(i));
+            relative.append(childNames.get(i));
         }
-        
-        return createPath(relative.length() == 0 ? "." : relative.toString());
+        return createPath(relative.toString());
     }
     
     @Override
@@ -386,6 +462,9 @@ public abstract class AbstractPath implements Path {
     
     @Override
     public Iterator<Path> iterator() {
+        if (path.isEmpty()) {
+            return java.util.Collections.<Path>singletonList(this).iterator();
+        }
         List<String> names = getNameComponents();
         List<Path> paths = new ArrayList<>();
         for (String name : names) {
@@ -396,7 +475,11 @@ public abstract class AbstractPath implements Path {
     
     @Override
     public int compareTo(Path other) {
-        return this.path.compareTo(other.toString());
+        // Paths of different providers cannot be compared (ClassCastException, as with the JDK)
+        if (other.getClass() != getClass()) {
+            throw new ClassCastException(other.getClass().getName() + " cannot be compared with " + getClass().getName());
+        }
+        return this.path.compareTo(((AbstractPath) other).path);
     }
     
     @Override
