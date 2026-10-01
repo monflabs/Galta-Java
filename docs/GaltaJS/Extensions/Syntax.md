@@ -107,7 +107,7 @@ Calling `strictMode(true)` directly also sets `mustDeclareAllVariables` and clea
 ## Other details
 
 - A `#!` shebang line at the start of a script is skipped.
-- Decorators (`@decorator class {}`) are parsed; the `accessor` keyword is accepted without runtime semantics (Known Gaps).
+- Decorators (`@decorator class {}`) are parsed and only partially run (see [Known Gaps](/GaltaJS/KnownGaps)); auto-accessors (`accessor x`, `accessor #x`) are fully implemented.
 
 ## Gotchas
 

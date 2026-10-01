@@ -85,6 +85,8 @@ First public release: Galta is published to Maven Central under the
   and `new async function () {}` (a `TypeError` at run time) now parse as the
   specification says. `new X[n]` still creates a Java array when `X` is a Java
   class. The JavaCC grammar generates without warnings.
+- A decorated private class member (`@dec #x`, `@dec accessor #x`) no longer
+  fails the class definition: the decorator context names it `"#x"`.
 - `Reflect.defineProperty` returns `false` instead of throwing when the
   property cannot be defined, and a proxy `set` trap returning false throws
   a `TypeError` in strict code.

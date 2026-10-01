@@ -110,3 +110,22 @@ class Blocks {
 assertEquals(2, Blocks.seen);
 assertEquals(1, new Blocks().read());
 assertEquals(2, Blocks.readY());
+
+// Decorated private members: the decorator context names them "#x" (they once
+// crashed the class definition). Transpiled code doesn't run decorators yet,
+// hence the empty case.
+{
+	const names = [];
+	function dec(value, ctx) { names.push(ctx.kind + ":" + ctx.name + ":" + ctx.private); }
+	class Decorated {
+		@dec accessor #x = 1;
+		@dec #f = 2;
+		@dec #m() { return 3; }
+		@dec static accessor #s = 4;
+		read() { return [this.#x, this.#f, this.#m(), Decorated.#s].join(","); }
+	}
+	assertEquals("1,2,3,4", new Decorated().read());
+	if (names.length > 0) {
+		assertEquals("accessor:#x:true,field:#f:true,method:#m:true,accessor:#s:true", names.join(","));
+	}
+}

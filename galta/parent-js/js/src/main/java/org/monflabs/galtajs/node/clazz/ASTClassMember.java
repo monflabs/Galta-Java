@@ -133,7 +133,11 @@ public abstract class ASTClassMember extends ASTNode {
 			Object decoratorFn = d.evaluateValue(context, new JSResult());
 			JSObject ctx = JSObject.create(env);
 			ctx.setOwnProperty("kind", kind);
-			ctx.setOwnProperty("name", name instanceof Symbol ? name : RuntimeUtil.toString(env, name));
+			// A private member's name is its description ("#x")
+			Object ctxName = name instanceof Symbol ? name
+					: name instanceof org.monflabs.galtajs.rt.builtins.privatename.PrivateName pn ? pn.getDescription()
+					: RuntimeUtil.toString(env, name);
+			ctx.setOwnProperty("name", ctxName);
 			ctx.setOwnProperty("static", isStatic);
 			ctx.setOwnProperty("private", isPrivate);
 			ctx.setOwnProperty("addInitializer", new BaseMethod(env, "addInitializer", 1) {

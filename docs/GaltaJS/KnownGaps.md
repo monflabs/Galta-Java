@@ -44,13 +44,24 @@ methods return the ISO string.
 
 ## Language
 
-### `accessor #x` (private auto-accessor) behaves as a plain private field
+### Decorators (Stage 3 proposal) are only partially run
 
-Public auto-accessors (`accessor x = 1`, static or not, computed names
-included) are implemented per the decorators proposal. A *private* one
-(`accessor #x = 1`) is parsed but stored as an ordinary private field - no
-private getter/setter pair is minted. Unobservable from outside the class
-body (a private name is only reachable inside it), so deliberately left as is.
+The decorators proposal is not part of ECMAScript yet; test262 only checks its
+syntax, which GaltaJS accepts entirely (auto-accessors, public and private,
+are fully implemented). Running the decorators is partial:
+
+- interpreted mode calls them with the proposal's `kind`, `name` (`"#x"` for a
+  private member), `static` and `private`; a method, getter, setter or class
+  decorator returning a function replaces the decorated value;
+- an accessor decorator receives `undefined` instead of `{ get, set }` and its
+  return value is ignored, a field decorator's returned initializer is
+  ignored, the context has no `access`, and `addInitializer()` does nothing;
+- transpiled code does not call decorators at all.
+
+```js
+function dec(value, ctx) { console.log(ctx.kind, ctx.name); }
+class C { @dec m() {} }   // interpreted: logs "method m" -- transpiled: nothing
+```
 
 ## GaltaJS extension: import and export in scripts
 
