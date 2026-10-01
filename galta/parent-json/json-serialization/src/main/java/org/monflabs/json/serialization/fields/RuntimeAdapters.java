@@ -15,7 +15,6 @@
  */
 package org.monflabs.json.serialization.fields;
 
-import org.monflabs.json.JsonException;
 import org.monflabs.json.serialization.ClassAdapter;
 import org.monflabs.json.serialization.JsonRegistry;
 import org.monflabs.json.serialization.classes.SimpleClassAdapter;
@@ -32,15 +31,15 @@ public final class RuntimeAdapters {
 	 * The adapter to serialize a value with. A value whose declared type is a POJO (a field
 	 * declared as <code>Shape</code> holding a <code>Circle</code>) is serialized with the
 	 * adapter of its actual class, so the data of the subclass is not lost. The declared
-	 * adapter is used when the actual class has no adapter in the registry. The JSON is not
+	 * adapter is used when the actual class has no adapter in the registry. This applies to
+	 * fields, record components, and the items of arrays, collections and maps. The JSON is not
 	 * typed: the value is read back as the declared type.
 	 */
 	public static ClassAdapter forValue(JsonRegistry registry, ClassAdapter declared, Object value) {
 		if(registry!=null && declared instanceof SimpleClassAdapter<?> && value.getClass()!=declared.getAdaptedClazz()) {
-			try {
-				return registry.findAdapter(value.getClass());
-			} catch(JsonException ex) {
-				// No adapter for the actual class
+			ClassAdapter a = registry.findAdapterOrNull(value.getClass());
+			if(a!=null) {
+				return a;
 			}
 		}
 		return declared;

@@ -19,27 +19,34 @@ import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 
-import org.monflabs.json.JsonException;
 import org.monflabs.json.serialization.ClassAdapter;
 import org.monflabs.json.serialization.JsonRegistry;
+import org.monflabs.json.serialization.fields.GenericTypeResolver;
 import org.monflabs.json.serialization.fields.ReflectionFieldAdapter;
 import org.monflabs.json.serialization.fields.RuntimeAdapters;
 
+/**
+ * Adapter of a field holding an object, converted by the registry adapter of the field type.
+ * A JSON null assigns null (an empty <code>Optional</code> to an <code>Optional</code> field).
+ */
 public class ObjectFieldAdapter extends ReflectionFieldAdapter {
-	
+
 	private ClassAdapter adapter;
 	private JsonRegistry registry;
-	
+	// Only the adapter of a generic type receives generic parameters
+	private final boolean generic;
+
 	public ObjectFieldAdapter(Field field) {
 		super(field);
+		this.generic = GenericTypeResolver.typeParameters(field.getType()).length>0;
 	}
-	
+
 	@Override
 	protected void _init(JsonRegistry registry, ClassAdapter parent) {
-		this.registry = registry;
 		this.adapter = registry.findAdapter(field.getType());
+		this.registry = registry;
 	}
-	
+
 	public Type[] getGenericParams() {
 		Type gtype = field.getGenericType();
 		if(gtype instanceof ParameterizedType pt) {
@@ -47,7 +54,7 @@ public class ObjectFieldAdapter extends ReflectionFieldAdapter {
 		}
 		return null;
 	}
-	
+
 	public Type getGenericParam(int index) {
 		Type[] genericParams = getGenericParams();
 		if(genericParams!=null && index<genericParams.length) {
@@ -55,31 +62,19 @@ public class ObjectFieldAdapter extends ReflectionFieldAdapter {
 		}
 		return null;
 	}
-	
+
 	@Override
 	public Object readProperty(Object _this, ClassAdapter[] genericParams) {
-		try {
-			Object value = field.get(_this);
-			if(value!=null) {
-				// A subclass of the declared type is serialized with its own adapter
-				Object v = RuntimeAdapters.forValue(registry, adapter, value).serialize(value, genericParams);
-				return v;
-			}
-			return null;
-		} catch(IllegalAccessException ex) {
-			throw new JsonException(ex);
+		Object value = get(_this);
+		if(value!=null) {
+			// A subclass of the declared type is serialized with its own adapter
+			return RuntimeAdapters.forValue(registry, adapter, value).serialize(value, generic ? genericParams : null);
 		}
+		return null;
 	}
-	
+
 	@Override
 	public void writeProperty(Object _this, Object jsonValue, ClassAdapter[] genericParams) {
-		try {
-			if(jsonValue!=null) {
-				Object v = adapter.deserialize(jsonValue, genericParams);
-				field.set(_this, v);
-			}
-		} catch(IllegalAccessException ex) {
-			throw new JsonException(ex);
-		}
+		set(_this, jsonValue!=null ? adapter.deserialize(jsonValue, generic ? genericParams : null) : null);
 	}
 }

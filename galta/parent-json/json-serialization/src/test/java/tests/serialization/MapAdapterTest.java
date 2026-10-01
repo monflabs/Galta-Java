@@ -51,7 +51,7 @@ public class MapAdapterTest extends ProjectTestCase {
 			reg.deserialize(Map.class, JsonArray.of(1), params);
 			fail("An array is not a map");
 		} catch(JsonException e) {
-			assertTrue(e.getMessage(), e.getMessage().contains("not an object"));
+			assertTrue(e.getMessage(), e.getMessage().contains("a JSON object is expected"));
 		}
 	}
 }

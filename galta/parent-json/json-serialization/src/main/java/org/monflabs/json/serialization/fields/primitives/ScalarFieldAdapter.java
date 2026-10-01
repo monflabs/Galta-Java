@@ -20,6 +20,7 @@ import java.util.function.Function;
 
 import org.monflabs.json.JsonException;
 import org.monflabs.json.serialization.ClassAdapter;
+import org.monflabs.json.serialization.JsonRegistry;
 import org.monflabs.json.serialization.classes.primitives.ScalarClassAdapter;
 import org.monflabs.json.serialization.fields.ReflectionFieldAdapter;
 
@@ -30,6 +31,7 @@ import org.monflabs.json.serialization.fields.ReflectionFieldAdapter;
 public class ScalarFieldAdapter extends ReflectionFieldAdapter {
 
 	private final Function<Object,Object> converter;
+	private boolean nonFiniteAsStrings;
 
 	public ScalarFieldAdapter(Field field) {
 		super(field);
@@ -40,9 +42,14 @@ public class ScalarFieldAdapter extends ReflectionFieldAdapter {
 	}
 
 	@Override
+	protected void _init(JsonRegistry registry, ClassAdapter parent) {
+		this.nonFiniteAsStrings = registry.isNonFiniteNumbersAsStrings();
+	}
+
+	@Override
 	public Object readProperty(Object _this, ClassAdapter[] genericParams) {
 		try {
-			return ScalarClassAdapter.toJson(field.get(_this));
+			return ScalarClassAdapter.toJson(field.get(_this), nonFiniteAsStrings);
 		} catch(IllegalAccessException ex) {
 			throw new JsonException(ex);
 		}
@@ -52,8 +59,10 @@ public class ScalarFieldAdapter extends ReflectionFieldAdapter {
 	public void writeProperty(Object _this, Object jsonValue, ClassAdapter[] genericParams) {
 		try {
 			if(jsonValue==null) {
-				if(field.getType().isPrimitive()) {
-					throw new JsonException(null, "A null JSON value cannot be assigned to the {0} field {1}", field.getType().getName(), field.getName());
+				Class<?> t = field.getType();
+				if(t.isPrimitive()) {
+					String hint = t==double.class || t==float.class ? " (NaN and the infinities are written as null, unless the registry has the nonFiniteNumbersAsStrings option)" : "";
+					throw new JsonException(null, "A null JSON value cannot be assigned to the {0} field {1}{2}", t.getName(), field.getName(), hint);
 				}
 				field.set(_this, null);
 			} else {

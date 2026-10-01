@@ -17,7 +17,6 @@ package org.monflabs.json.serialization.fields.json;
 
 import java.lang.reflect.Field;
 
-import org.monflabs.json.JsonException;
 import org.monflabs.json.serialization.ClassAdapter;
 import org.monflabs.json.serialization.JsonRegistry;
 import org.monflabs.json.serialization.fields.GenericTypeResolver;
@@ -36,7 +35,9 @@ import org.monflabs.json.serialization.fields.RuntimeAdapters;
  * The type variable is resolved against the adapted class: it is either one of
  * its own type parameters (bound at runtime through the generic parameters), or
  * a type parameter of a superclass, bound through the generic superclass chain
- * (class Sub extends Container&lt;String&gt;).
+ * (class Sub extends Container&lt;String&gt;). An unbound variable resolves to its bound.
+ * It also holds the generic arrays (T[], List&lt;String&gt;[]) and the inner classes of
+ * generic classes (Outer&lt;String&gt;.Inner).
  * 
  * @author priand
  *
@@ -66,27 +67,15 @@ public class TypedFieldAdapter extends ReflectionFieldAdapter {
 	
 	@Override
 	public Object readProperty(Object _this, ClassAdapter[] genericParams) {
-		try {
-			Object value = field.get(_this);
-			if(value!=null) {
-				Object v = RuntimeAdapters.forValue(registry, resolvedType.resolve(genericParams), value).serialize(value);
-				return v;
-			}
-			return null;
-		} catch(IllegalAccessException ex) {
-			throw new JsonException(ex);
+		Object value = get(_this);
+		if(value!=null) {
+			return RuntimeAdapters.forValue(registry, resolvedType.resolve(genericParams), value).serialize(value);
 		}
+		return null;
 	}
 	
 	@Override
 	public void writeProperty(Object _this, Object jsonValue, ClassAdapter[] genericParams) {
-		try {
-			if(jsonValue!=null) {
-				Object v = resolvedType.resolve(genericParams).deserialize(jsonValue);
-				field.set(_this, v);
-			}
-		} catch(IllegalAccessException ex) {
-			throw new JsonException(ex);
-		}
+		set(_this, jsonValue!=null ? resolvedType.resolve(genericParams).deserialize(jsonValue) : null);
 	}
 }

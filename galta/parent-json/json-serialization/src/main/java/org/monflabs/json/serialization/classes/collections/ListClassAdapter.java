@@ -15,84 +15,30 @@
  */
 package org.monflabs.json.serialization.classes.collections;
 
-import java.util.ArrayList;
 import java.util.List;
-
-import org.monflabs.json.JsonArray;
-import org.monflabs.json.JsonException;
-import org.monflabs.json.serialization.ClassAdapter;
-import org.monflabs.json.serialization.CycleGuard;
-import org.monflabs.json.serialization.JsonRegistry;
-import org.monflabs.json.serialization.classes.BaseClassAdapter;
 
 /**
  * Adapter for <code>java.util.List</code>, serialized as a JSON array.
  * <p>
  * The element adapter is the first generic parameter; without one (a raw list, or a list
- * serialized at the top level), the elements are kept as is.
+ * serialized at the top level), the elements are kept as is. The default adapter reads the
+ * lists back as <code>ArrayList</code>.
  */
-public class ListClassAdapter extends BaseClassAdapter {
-	
-	private Class<? extends List<?>> listClass;
-	private ClassAdapter objectAdapter;
-	
+public class ListClassAdapter extends CollectionClassAdapter {
+
+	/**
+	 * The adapter of the <code>List</code> interface, read back as an <code>ArrayList</code>.
+	 */
 	public ListClassAdapter() {
 		this(null);
 	}
-	public ListClassAdapter(Class<? extends List<?>> listClass) {
-		super(List.class);
-		this.listClass = listClass;
-	}
-	
-	@Override
-	public void init(JsonRegistry registry) {
-		super.init(registry);
-		this.objectAdapter = registry.findAdapter(Object.class);
-	}
-	
-	@Override
-	public Object serialize(Object value, ClassAdapter[] genericParams) {
-		if(value!=null) {
-			ClassAdapter item = CollectionUtil.params(genericParams, 1, objectAdapter)[0];
-			// Any Iterable (a Collection or Iterable field uses this adapter)
-			Iterable<?> l = (Iterable<?>)value;
-			CycleGuard.enter(value);
-			try {
-				JsonArray a = l instanceof java.util.Collection<?> c ? JsonArray.create(c.size()) : JsonArray.create();
-				for(Object v: l) {
-					a.add(item.serialize(v));
-				}
-				return a;
-			} finally {
-				CycleGuard.exit(value);
-			}
-		}
-		return null;
-	}
 
-	@Override
-	public Object deserialize(Object jsonValue, ClassAdapter[] genericParams) {
-		if(jsonValue instanceof JsonArray a) {
-			ClassAdapter item = CollectionUtil.params(genericParams, 1, objectAdapter)[0];
-			try {
-				int len = a.size();
-				List<Object> v = createCollection();
-				for(int i=0; i<len; i++) {
-					v.add(item.deserialize(a.get(i)));
-				}
-				return v;
-			} catch(InstantiationException|IllegalAccessException e) {
-				throw new JsonException(e,"Cannot instanciate class {0}",listClass);
-			}
-		} else if(jsonValue==null) {
-			return null;
-		} else {
-			throw new JsonException(null,"JsonValue is not an array");
-		}
-	}
-	
-	protected List<Object> createCollection() throws InstantiationException, IllegalAccessException {
-		return listClass!=null ? CollectionUtil.newInstance(listClass) 
-				               : new ArrayList<Object>();
+	/**
+	 * The adapter of a list class, registered for this class only and read back as an
+	 * instance of it if it can be instantiated (or else a compatible standard list). A null
+	 * class is the <code>List</code> interface.
+	 */
+	public ListClassAdapter(Class<? extends List<?>> listClass) {
+		super(listClass!=null ? listClass : List.class, CollectionUtil.implementation(listClass!=null ? listClass : List.class, false));
 	}
 }

@@ -153,10 +153,12 @@ public class SerializationRegressionTest extends ProjectTestCase {
 		assertEquals(JsonObject.of("k", 1), reg.serialize(hm));
 		assertEquals(JsonArray.of("a"), reg.findAdapter(List.class).serialize(List.of("a"), null));
 		
-		// JSON containers stay JSON containers
+		// JSON containers stay JSON containers, deep copied
 		JsonObject o = JsonObject.of("a", 1);
-		assertSame(o, reg.serialize(o));
-		assertSame(arr, reg.serialize(arr));
+		assertEquals(o, reg.serialize(o));
+		assertNotSame(o, reg.serialize(o));
+		assertEquals(arr, reg.serialize(arr));
+		assertNotSame(arr, reg.serialize(arr));
 	}
 	
 	public void testConcreteCollectionFields() throws Exception {
@@ -617,6 +619,9 @@ public class SerializationRegressionTest extends ProjectTestCase {
 		d.shapes = List.of(new Shape(), new Circle());
 		JsonObject json = reg.serialize(d);
 		assertEquals(2.0, json.getObject("main").getDouble("radius"));
+		// The list items too
+		assertFalse(json.getArray("shapes").getObject(0).containsKey("radius"));
+		assertEquals(2.0, json.getArray("shapes").getObject(1).getDouble("radius"));
 		// Read back as the declared type: the JSON is not typed
 		Drawing back = reg.deserialize(Drawing.class, JsonObject.of("main", JsonObject.of("kind", "k")));
 		assertEquals(Shape.class, back.main.getClass());

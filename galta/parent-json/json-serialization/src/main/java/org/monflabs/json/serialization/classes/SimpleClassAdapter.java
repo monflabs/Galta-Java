@@ -24,7 +24,10 @@ import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -36,6 +39,7 @@ import org.monflabs.json.serialization.CycleGuard;
 import org.monflabs.json.serialization.FieldAdapter;
 import org.monflabs.json.serialization.JsonRegistry;
 import org.monflabs.json.serialization.LambdaFieldAdapter;
+import org.monflabs.json.serialization.SerializationException;
 import org.monflabs.json.serialization.fields.BaseFieldAdapter;
 import org.monflabs.json.serialization.fields.RecordComponentAdapter;
 import org.monflabs.json.serialization.fields.ReflectionFieldAdapter;
@@ -64,12 +68,19 @@ public class SimpleClassAdapter<C> extends BaseClassAdapter {
 			readRecord(clazz, map, filter);
 			return;
 		}
+		if(!isReflectable(clazz)) {
+			throw new JsonException(null, "Cannot read the fields of {0} by reflection, its package is not open (a JDK class?): register an adapter for this class", clazz.getName());
+		}
+		// The hierarchy walk stops at the first class that cannot be reflected (a JDK class,
+		// like Exception or AbstractList): its fields are not serialized
 		List<Class<?>> chain = new ArrayList<>();
-		for(Class<?> c=clazz; c!=null; c=c.getSuperclass()) {
+		for(Class<?> c=clazz; c!=null && c!=Object.class && isReflectable(c); c=c.getSuperclass()) {
 			chain.add(c);
 		}
-		// The most derived eligible field wins for a given name
+		// The most derived field wins for a given name, even when the filter rejects it: it
+		// then hides the superclass fields with the same name
 		Map<String,Field> winners = new HashMap<>();
+		Set<String> seen = new HashSet<>();
 		for(Class<?> c: chain) {
 			for(Field f: c.getDeclaredFields()) {
 				int mod = f.getModifiers();
@@ -77,7 +88,7 @@ public class SimpleClassAdapter<C> extends BaseClassAdapter {
 					// serialVersionUID, constants, outer class references (this$0)...
 					continue;
 				}
-				if(!map.containsKey(f.getName()) && !winners.containsKey(f.getName())) {
+				if(!map.containsKey(f.getName()) && seen.add(f.getName())) {
 					if(filter==null || filter.test(f)) {
 						winners.put(f.getName(), f);
 					}
@@ -91,6 +102,14 @@ public class SimpleClassAdapter<C> extends BaseClassAdapter {
 				}
 			}
 		}
+	}
+
+	/**
+	 * True if the fields of a class can be made accessible: its package is open to this
+	 * module (always true for a class on the class path, false for the JDK classes).
+	 */
+	private static boolean isReflectable(Class<?> c) {
+		return c.getModule().isOpen(c.getPackageName(), SimpleClassAdapter.class.getModule());
 	}
 
 	/**
@@ -143,13 +162,33 @@ public class SimpleClassAdapter<C> extends BaseClassAdapter {
 			fields.put(name, adapter);
 			return this;
 		}
+		/**
+		 * Add a property defined by lambdas. The reader returns a JSON value (or a value
+		 * that the registry can serialize, converted like a value declared as
+		 * <code>Object</code>) and the writer receives the raw JSON value, null included.
+		 */
 		public <V> Builder<C> add(String name, LambdaFieldAdapter.PropertyReader<C,V> reader, LambdaFieldAdapter.PropertyWriter<C,V> writer) {
 			fields.put(name, new LambdaFieldAdapter<C,V>(reader, writer));
+			return this;
+		}
+		/**
+		 * Add a typed property defined by lambdas. The reader returns a Java value of the
+		 * given type, serialized with its registry adapter; the writer receives the Java
+		 * value deserialized by this adapter (null for a JSON null).
+		 */
+		public <V> Builder<C> add(String name, Class<V> type, LambdaFieldAdapter.PropertyReader<C,V> reader, LambdaFieldAdapter.PropertyWriter<C,V> writer) {
+			if(type==null) {
+				throw new IllegalArgumentException("The type of the property "+name+" is null");
+			}
+			fields.put(name, new LambdaFieldAdapter<C,V>(type, reader, writer));
 			return this;
 		}
 
 		@Override
 		public SimpleClassAdapter<C> _build() {
+			if(clazz.isRecord() && factory!=null) {
+				throw new JsonException(null, "{0} is a record: it is created with its canonical constructor, a factory() is not supported", clazz.getName());
+			}
 			return new SimpleClassAdapter<C>(this);
 		}
 	}
@@ -188,14 +227,14 @@ public class SimpleClassAdapter<C> extends BaseClassAdapter {
 			}
 			return;
 		}
-		this.registry = registry;
-
+		// The registry is bound once everything is initialized: a failure can be retried
 		for(FieldAdapter a: fields.values()) {
 			if(a instanceof BaseFieldAdapter ba) {
 				ba.init(registry,this);
 			}
 		}
 		resolveConstructor();
+		this.registry = registry;
 	}
 
 	private void resolveConstructor() {
@@ -230,8 +269,12 @@ public class SimpleClassAdapter<C> extends BaseClassAdapter {
 		try {
 			JsonObject o = JsonObject.create();
 			for(Map.Entry<String,FieldAdapter> e: fields.entrySet()) {
-				Object v = e.getValue().readProperty(_this, genericParams);
-				o.put(e.getKey(), v);
+				try {
+					Object v = e.getValue().readProperty(_this, genericParams);
+					o.put(e.getKey(), v);
+				} catch(RuntimeException ex) {
+					throw SerializationException.atProperty(ex, e.getKey());
+				}
 			}
 			return o;
 		} finally {
@@ -244,49 +287,72 @@ public class SimpleClassAdapter<C> extends BaseClassAdapter {
 		if(jsonValue==null) {
 			return null;
 		}
-		if(jsonValue instanceof JsonObject o) {
+		if(!(jsonValue instanceof JsonObject o)) {
+			throw new JsonException(null,"Cannot deserialize {0} into a {1}: a JSON object is expected",SerializationException.describe(jsonValue),getAdaptedClazz().getName());
+		}
+		CycleGuard.enterRead();
+		try {
 			if(recordTypes!=null) {
 				return finalize(createRecord(o, genericParams));
 			}
 			Object _this = create();
 			for(Map.Entry<String,Object> e: o.entrySet()) {
 				Object value = e.getValue();
-				if(value==null) {
-					continue;
-				}
-
 				FieldAdapter fa = fields.get(e.getKey());
 				if(fa==null) {
-					throw new JsonException(null,"Object doesn't have a field named {0}",e.getKey());
+					if(value==null) {
+						// A null value for an unknown key is ignored
+						continue;
+					}
+					throw new JsonException(null,"{0} doesn't have a field named {1}",getAdaptedClazz().getName(),e.getKey());
 				}
-
-				fa.writeProperty(_this,  value, genericParams);
+				try {
+					// A JSON null assigns null (a primitive field rejects it)
+					fa.writeProperty(_this, value, genericParams);
+				} catch(RuntimeException ex) {
+					throw SerializationException.atProperty(ex, e.getKey());
+				}
 			}
 			return finalize(_this);
+		} finally {
+			CycleGuard.exitRead();
 		}
-		throw new IllegalStateException();
 	}
 
 	private Object createRecord(JsonObject o, ClassAdapter[] genericParams) {
 		Object[] args = new Object[recordTypes.length];
 		for(Map.Entry<String,Object> e: o.entrySet()) {
 			Object value = e.getValue();
-			if(value==null) {
-				continue;
-			}
 			FieldAdapter fa = fields.get(e.getKey());
 			if(fa==null) {
-				throw new JsonException(null,"Object doesn't have a field named {0}",e.getKey());
+				if(value==null) {
+					continue;
+				}
+				throw new JsonException(null,"{0} doesn't have a field named {1}",getAdaptedClazz().getName(),e.getKey());
 			}
 			if(!(fa instanceof RecordComponentAdapter rc)) {
 				throw new JsonException(null,"The property {0} of the record {1} is not a component",e.getKey(),getAdaptedClazz().getName());
 			}
-			args[rc.getIndex()] = rc.toJava(value, genericParams);
+			try {
+				if(value==null) {
+					if(recordTypes[rc.getIndex()].isPrimitive()) {
+						throw new JsonException(null, "A null JSON value cannot be assigned to the {0} component {1}", recordTypes[rc.getIndex()].getName(), e.getKey());
+					}
+					continue;
+				}
+				args[rc.getIndex()] = rc.toJava(value, genericParams);
+			} catch(RuntimeException ex) {
+				throw SerializationException.atProperty(ex, e.getKey());
+			}
 		}
 		for(int i=0; i<args.length; i++) {
-			if(args[i]==null && recordTypes[i].isPrimitive()) {
-				// The default value of the primitive type (0, false...)
-				args[i] = Array.get(Array.newInstance(recordTypes[i], 1), 0);
+			if(args[i]==null) {
+				if(recordTypes[i].isPrimitive()) {
+					// A missing component: the default value of the primitive type (0, false...)
+					args[i] = Array.get(Array.newInstance(recordTypes[i], 1), 0);
+				} else if(recordTypes[i]==Optional.class) {
+					args[i] = Optional.empty();
+				}
 			}
 		}
 		return newInstance(args);

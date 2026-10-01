@@ -25,6 +25,7 @@ import tests.serialization.MultiDimArrayTest;
 import tests.serialization.NestedGenericsTest;
 import tests.serialization.ReflectionFieldsTest;
 import tests.serialization.RegistryWriterTest;
+import tests.serialization.SerializationHardeningTest;
 import tests.serialization.SerializationRegressionTest;
 
 public class AllJsonSerializationTests extends TestSuite {
@@ -41,6 +42,7 @@ public class AllJsonSerializationTests extends TestSuite {
 		suite.addTestSuite(MapAdapterTest.class);
 		suite.addTestSuite(BigDecimalAdapterTest.class);
 		suite.addTestSuite(SerializationRegressionTest.class);
+		suite.addTestSuite(SerializationHardeningTest.class);
 
 		suite.addTestSuite(SerializationExamples.class);
 

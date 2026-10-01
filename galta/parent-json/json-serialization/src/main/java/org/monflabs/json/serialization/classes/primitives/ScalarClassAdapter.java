@@ -25,6 +25,7 @@ import java.util.function.Function;
 import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonUtil;
 import org.monflabs.json.serialization.ClassAdapter;
+import org.monflabs.json.serialization.JsonRegistry;
 import org.monflabs.json.serialization.NumberConverter;
 import org.monflabs.json.serialization.classes.BaseClassAdapter;
 
@@ -32,7 +33,10 @@ import org.monflabs.json.serialization.classes.BaseClassAdapter;
  * Adapter of a scalar type: the boxed primitives, <code>BigInteger</code>,
  * <code>BigDecimal</code> and <code>String</code> are JSON values as is, and are converted
  * back from the JSON value (exactly for the numbers, see {@link NumberConverter}). A
- * <code>Character</code> is a one character JSON string.
+ * <code>Character</code> is a one character JSON string. A <code>float</code> or a
+ * <code>double</code> is also read from the strings "NaN", "Infinity" and "-Infinity", and
+ * written as these strings when the registry has the <code>nonFiniteNumbersAsStrings</code>
+ * option.
  */
 public class ScalarClassAdapter extends BaseClassAdapter {
 
@@ -74,6 +78,23 @@ public class ScalarClassAdapter extends BaseClassAdapter {
 		return value instanceof Character c ? c.toString() : value;
 	}
 
+	/**
+	 * The JSON value of a scalar, the NaN and infinite <code>float</code>/<code>double</code>
+	 * values being written as the strings "NaN", "Infinity" and "-Infinity" if
+	 * <code>nonFiniteAsStrings</code> is true.
+	 */
+	public static Object toJson(Object value, boolean nonFiniteAsStrings) {
+		if(nonFiniteAsStrings) {
+			if(value instanceof Double d && (d.isNaN() || d.isInfinite())) {
+				return d.toString();
+			}
+			if(value instanceof Float f && (f.isNaN() || f.isInfinite())) {
+				return f.toString();
+			}
+		}
+		return toJson(value);
+	}
+
 	private static Object toChar(Object jsonValue) {
 		if(jsonValue instanceof String s && s.length()==1) {
 			return s.charAt(0);
@@ -101,6 +122,7 @@ public class ScalarClassAdapter extends BaseClassAdapter {
 	}
 
 	private final Function<Object,Object> converter;
+	private boolean nonFiniteAsStrings;
 
 	public ScalarClassAdapter(Class<?> clazz) {
 		super(clazz);
@@ -111,8 +133,14 @@ public class ScalarClassAdapter extends BaseClassAdapter {
 	}
 
 	@Override
+	public void init(JsonRegistry registry) {
+		super.init(registry);
+		this.nonFiniteAsStrings = registry.isNonFiniteNumbersAsStrings();
+	}
+
+	@Override
 	public Object serialize(Object value, ClassAdapter[] genericParams) {
-		return toJson(value);
+		return toJson(value, nonFiniteAsStrings);
 	}
 
 	@Override

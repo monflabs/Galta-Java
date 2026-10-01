@@ -40,15 +40,44 @@ public final class NumberConverter {
 		throw new JsonException(null, "JSON value {0} is not a number, cannot convert it to {1}", value, type);
 	}
 	
-	private static BigInteger exactInteger(Number n, String type) {
+	/**
+	 * The maximum number of integer digits of a JSON number converted to a BigInteger. A
+	 * number like 1e10000000 is a few bytes of JSON but would materialize ten million digits.
+	 */
+	public static final int MAX_BIGINTEGER_DIGITS = 10_000;
+
+	/**
+	 * The exact integer value of a number, checked against the maximum number of digits of the
+	 * target type before it is materialized.
+	 */
+	private static BigInteger exactInteger(Number n, String type, int maxDigits) {
 		if(n instanceof Integer || n instanceof Long || n instanceof Short || n instanceof Byte) {
 			return BigInteger.valueOf(n.longValue());
 		}
 		if(n instanceof BigInteger bi) {
+			if(bi.bitLength()>maxDigits*4L) {
+				// More than maxDigits decimal digits (log2(10)>3.3)
+				throw outOfRange(n, type);
+			}
 			return bi;
 		}
+		BigDecimal bd = toBigDecimal(n);
+		if(bd.signum()==0) {
+			return BigInteger.ZERO;
+		}
+		// The number of digits before the decimal point (<=0 for a number lower than 1)
+		long intDigits = (long)bd.precision() - bd.scale();
+		if(intDigits<=0) {
+			throw new JsonException(null, "Number {0} has a fraction, cannot convert it to {1}", n, type);
+		}
+		if(intDigits>maxDigits) {
+			throw outOfRange(n, type);
+		}
+		if(bd.scale()>0 && bd.stripTrailingZeros().scale()>0) {
+			throw new JsonException(null, "Number {0} has a fraction, cannot convert it to {1}", n, type);
+		}
 		try {
-			return toBigDecimal(n).toBigIntegerExact();
+			return bd.toBigIntegerExact();
 		} catch(ArithmeticException ex) {
 			throw new JsonException(null, "Number {0} has a fraction, cannot convert it to {1}", n, type);
 		}
@@ -61,7 +90,7 @@ public final class NumberConverter {
 		Number n = checkNumber(value, "byte");
 		if(n instanceof Byte b) return b;
 		try {
-			return exactInteger(n, "byte").byteValueExact();
+			return exactInteger(n, "byte", 3).byteValueExact();
 		} catch(ArithmeticException ex) {
 			throw outOfRange(n, "byte");
 		}
@@ -70,7 +99,7 @@ public final class NumberConverter {
 		Number n = checkNumber(value, "short");
 		if(n instanceof Short s) return s;
 		try {
-			return exactInteger(n, "short").shortValueExact();
+			return exactInteger(n, "short", 5).shortValueExact();
 		} catch(ArithmeticException ex) {
 			throw outOfRange(n, "short");
 		}
@@ -79,7 +108,7 @@ public final class NumberConverter {
 		Number n = checkNumber(value, "int");
 		if(n instanceof Integer i) return i;
 		try {
-			return exactInteger(n, "int").intValueExact();
+			return exactInteger(n, "int", 10).intValueExact();
 		} catch(ArithmeticException ex) {
 			throw outOfRange(n, "int");
 		}
@@ -89,15 +118,39 @@ public final class NumberConverter {
 		if(n instanceof Long l) return l;
 		if(n instanceof Integer i) return i;
 		try {
-			return exactInteger(n, "long").longValueExact();
+			return exactInteger(n, "long", 19).longValueExact();
 		} catch(ArithmeticException ex) {
 			throw outOfRange(n, "long");
 		}
 	}
 	public static BigInteger toBigInteger(Object value) {
-		return exactInteger(checkNumber(value, "BigInteger"), "BigInteger");
+		return exactInteger(checkNumber(value, "BigInteger"), "BigInteger", MAX_BIGINTEGER_DIGITS);
 	}
+	/**
+	 * The non finite value named by a JSON string ("NaN", "Infinity", "-Infinity"), or null.
+	 * NaN and the infinities are not JSON numbers: they can be written as these strings.
+	 */
+	public static Double nonFinite(Object value) {
+		if(value instanceof String s) {
+			switch(s) {
+				case "NaN": return Double.NaN;
+				case "Infinity": return Double.POSITIVE_INFINITY;
+				case "-Infinity": return Double.NEGATIVE_INFINITY;
+				default: return null;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Convert a JSON number to a float. The strings "NaN", "Infinity" and "-Infinity" are
+	 * also accepted.
+	 */
 	public static float toFloat(Object value) {
+		Double nf = nonFinite(value);
+		if(nf!=null) {
+			return nf.floatValue();
+		}
 		Number n = checkNumber(value, "float");
 		if(n instanceof Float f) return f;
 		double d = n.doubleValue();
@@ -107,7 +160,15 @@ public final class NumberConverter {
 		}
 		return f;
 	}
+	/**
+	 * Convert a JSON number to a double. The strings "NaN", "Infinity" and "-Infinity" are
+	 * also accepted.
+	 */
 	public static double toDouble(Object value) {
+		Double nf = nonFinite(value);
+		if(nf!=null) {
+			return nf;
+		}
 		Number n = checkNumber(value, "double");
 		double d = n.doubleValue();
 		if(Double.isInfinite(d) && (n instanceof BigDecimal || n instanceof BigInteger)) {

@@ -27,6 +27,8 @@ public class ParameterizedFieldAdapter extends BaseFieldAdapter {
 	private Type[] params;
 	private GenericTypeResolver.ResolvedType[] resolvedParams;
 	private ClassAdapter[] paramAdapters;
+	// The last dynamic resolution: {genericParams, adapters}
+	private volatile Object[] last;
 	
 	public ParameterizedFieldAdapter(FieldAdapter rawAdapter, Type[] params) {
 		this.rawAdapter = rawAdapter;
@@ -57,10 +59,16 @@ public class ParameterizedFieldAdapter extends BaseFieldAdapter {
 		if(paramAdapters!=null) {
 			return paramAdapters;
 		}
+		// The enclosing adapter usually passes the same parameters again and again
+		Object[] l = last;
+		if(l!=null && GenericTypeResolver.sameParams((ClassAdapter[])l[0], genericParams)) {
+			return (ClassAdapter[])l[1];
+		}
 		ClassAdapter[] p = new ClassAdapter[resolvedParams.length];
 		for(int i=0; i<resolvedParams.length; i++) {
 			p[i] = resolvedParams[i].resolve(genericParams);
 		}
+		last = new Object[] { genericParams!=null ? genericParams.clone() : null, p };
 		return p;
 	}
 	

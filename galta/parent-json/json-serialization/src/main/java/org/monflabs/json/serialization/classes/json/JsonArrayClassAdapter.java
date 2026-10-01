@@ -16,23 +16,37 @@
 package org.monflabs.json.serialization.classes.json;
 
 import org.monflabs.json.JsonArray;
+import org.monflabs.json.JsonException;
 import org.monflabs.json.serialization.ClassAdapter;
+import org.monflabs.json.serialization.SerializationException;
 import org.monflabs.json.serialization.classes.BaseClassAdapter;
 
+/**
+ * Adapter of the <code>JsonArray</code> values (fields declared as <code>JsonArray</code>).
+ * <p>
+ * The value is deep copied in both directions, so the JSON produced by a serialization and
+ * the objects produced by a deserialization do not share mutable state.
+ */
 public class JsonArrayClassAdapter extends BaseClassAdapter {
-	
+
 	public JsonArrayClassAdapter() {
 		super(JsonArray.class);
 	}
-	
+
 	@Override
 	public Object serialize(Object value, ClassAdapter[] genericParams) {
-		// Cast to ensure the proper type
-		return (JsonArray)value;
+		return JsonObjectClassAdapter.copy(check(value));
 	}
 
 	@Override
 	public Object deserialize(Object jsonValue, ClassAdapter[] genericParams) {
-		return (JsonArray)jsonValue;
+		return JsonObjectClassAdapter.copy(check(jsonValue));
+	}
+
+	private static Object check(Object value) {
+		if(value==null || value instanceof JsonArray) {
+			return value;
+		}
+		throw new JsonException(null, "Cannot convert {0} to a JsonArray: a JSON array is expected", SerializationException.describe(value));
 	}
 }

@@ -26,10 +26,13 @@ public abstract class BaseFieldAdapter implements FieldAdapter {
 	public BaseFieldAdapter() {
 	}
 	
-	public final void init(JsonRegistry registry, ClassAdapter parent) {
+	/**
+	 * Initialize the adapter, once. A failed initialization can be retried.
+	 */
+	public final synchronized void init(JsonRegistry registry, ClassAdapter parent) {
 		if(!initialized) {
-			initialized = true;
 			_init(registry, parent);
+			initialized = true;
 		}
 	}
 	
