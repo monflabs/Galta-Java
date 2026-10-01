@@ -321,6 +321,9 @@ public class MultiSplitLayout implements LayoutManager2 {
 			start += lengths[k] + dividerSize;
 		}
 		int pair = lengths[i] + lengths[i+1];
+		if(pair<=0) {
+			return;	// both neighbours collapsed: no length to share (and a/pair would be NaN)
+		}
 		int minA = minimumLength(s.getChildren().get(i), s.isHorizontal());
 		int minB = minimumLength(s.getChildren().get(i+1), s.isHorizontal());
 		int a = position - start;

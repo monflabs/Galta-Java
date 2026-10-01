@@ -17,18 +17,24 @@ package org.monflabs.ui.converters;
 
 import org.monflabs.json.JsonUtil;
 
-/**	
+/**
  * Converters to/from Text.
+ * A null value converts to a null string and back; the typed converters also
+ * read an empty string (an emptied field) as null.
  *
  * @author priand
  */
 public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStringConverter<T> {
-	
+
+	private static boolean isEmpty(String str) {
+		return str==null || str.isEmpty();
+	}
+		
 	public static class CString implements TextConverter<String> {
 		
 		@Override
 		public String valueToString(String value) {
-			return (String)value;
+			return value;
 		}
 		
 		@Override
@@ -42,12 +48,12 @@ public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStri
 
 		@Override
 		public String valueToString(Boolean value) {
-			return Boolean.toString(((Boolean)value).booleanValue());
+			return value!=null ? Boolean.toString(value.booleanValue()) : null;
 		}
-		
+
 		@Override
 		public Boolean stringToValue(String str) {
-			return JsonUtil.parseBoolean(str);
+			return !isEmpty(str) ? JsonUtil.parseBoolean(str) : null;
 		}
 	}
 	public static final CBoolean booleanConverter = new CBoolean();
@@ -56,12 +62,12 @@ public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStri
 
 		@Override
 		public String valueToString(Integer value) {
-			return JsonUtil.toString(((Number)value).intValue());
+			return value!=null ? JsonUtil.toString(value.intValue()) : null;
 		}
-		
+
 		@Override
 		public Integer stringToValue(String str) {
-			return JsonUtil.parseInt(str);
+			return !isEmpty(str) ? JsonUtil.parseInt(str) : null;
 		}
 	}	
 	public static final CInteger intConverter = new CInteger();
@@ -70,12 +76,12 @@ public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStri
 
 		@Override
 		public String valueToString(Long value) {
-			return JsonUtil.toString(((Number)value).longValue());
+			return value!=null ? JsonUtil.toString(value.longValue()) : null;
 		}
-		
+
 		@Override
 		public Long stringToValue(String str) {
-			return JsonUtil.parseLong(str);
+			return !isEmpty(str) ? JsonUtil.parseLong(str) : null;
 		}
 	}	
 	public static final CLong longConverter = new CLong();
@@ -84,12 +90,12 @@ public interface TextConverter<T> extends StringToValueConverter<T>, ValueToStri
 
 		@Override
 		public String valueToString(Double value) {
-			return JsonUtil.toString(((Number)value).doubleValue());
+			return value!=null ? JsonUtil.toString(value.doubleValue()) : null;
 		}
-		
+
 		@Override
 		public Double stringToValue(String str) {
-			return JsonUtil.parseDouble(str);
+			return !isEmpty(str) ? JsonUtil.parseDouble(str) : null;
 		}
 	}	
 	public static final CDouble doubleConverter = new CDouble();

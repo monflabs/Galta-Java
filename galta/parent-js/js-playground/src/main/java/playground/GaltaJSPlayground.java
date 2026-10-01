@@ -19,6 +19,7 @@ import java.awt.Image;
 import java.awt.Taskbar;
 import java.awt.Toolkit;
 import java.io.File;
+import java.net.URL;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,6 +35,7 @@ import org.monflabs.playground.PlaygroundConfiguration;
 import org.monflabs.playground.PlaygroundException;
 import org.monflabs.playground.SnippetFactory;
 import org.monflabs.ui.swing.ide.IDEApplication;
+import org.monflabs.util.Console;
 
 import com.monflabs.playground.galtajs.GaltaJSExecutionEngine;
 import com.monflabs.playground.swing.PlaygroundFrame;
@@ -52,30 +54,41 @@ public class GaltaJSPlayground {
 	// Remote debug
 	//   java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -jar jsplaygroud.jar
     public static void main(String[] args) {
+    	// Built on the main thread, before any component exists (as FlatLaf
+    	// recommends): reading the OS appearance runs external commands, which
+    	// must not hold the event dispatch thread
+		IDEApplication.newBuilder()
+			.config(null)
+			.build();
     	SwingUtilities.invokeLater( () -> {
-    		IDEApplication.newBuilder()
-				.config(null)
-				.build();
-			
-        	java.net.URL logoUrl = ClassLoader.getSystemResource("swing/icon.png");
-        	Toolkit kit = Toolkit.getDefaultToolkit();
-        	Image img = kit.createImage(logoUrl);
-        	
-            final Taskbar taskbar = Taskbar.getTaskbar();
-            try {
-                taskbar.setIconImage(img);
-            } catch (final UnsupportedOperationException e) {
-                System.out.println("The os does not support: 'taskbar.setIconImage'");
-            } catch (final SecurityException e) {
-                System.out.println("There was a security exception for: 'taskbar.setIconImage'");
-            }
-        	
+            setTaskbarIcon();
             configure();
 
         	PlaygroundFrame f = new GaltaJSPlaygroundFrame();
         	f.initialSize();   
             f.setVisible(true);
     	});
+    }
+
+    /**
+     * Shows the playground logo in the taskbar/dock, where the platform has
+     * one that supports it (not on every desktop, nor headless).
+     */
+    private static void setTaskbarIcon() {
+    	URL logoUrl = GaltaJSPlayground.class.getResource("/swing/icon.png");
+    	if(logoUrl==null || !Taskbar.isTaskbarSupported()) {
+    		return;
+    	}
+    	Taskbar taskbar = Taskbar.getTaskbar();
+    	if(!taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) {
+    		return;
+    	}
+    	try {
+    		Image img = Toolkit.getDefaultToolkit().createImage(logoUrl);
+    		taskbar.setIconImage(img);
+    	} catch(UnsupportedOperationException | SecurityException e) {
+    		Console.log(e);
+    	}
     }
 
     protected static void configure() {

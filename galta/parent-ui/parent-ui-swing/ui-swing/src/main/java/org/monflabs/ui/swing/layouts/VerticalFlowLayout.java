@@ -33,8 +33,7 @@ public class VerticalFlowLayout extends FlowLayout {
 	public static final int MIDDLE = 1;
 	public static final int BOTTOM = 2;
 
-	private int hgap;
-	private int vgap;
+	// The gaps are FlowLayout's own (getHgap()/setHgap(), ...): no shadow copy
 	private boolean hfill;
 	private boolean vfill;
 
@@ -55,9 +54,7 @@ public class VerticalFlowLayout extends FlowLayout {
 	}
 
 	public VerticalFlowLayout(int align, int hgap, int vgap, boolean hfill, boolean vfill) {
-		setAlignment(align);
-		this.hgap = hgap;
-		this.vgap = vgap;
+		super(align, hgap, vgap);
 		this.hfill = hfill;
 		this.vfill = vfill;
 	}
@@ -73,15 +70,15 @@ public class VerticalFlowLayout extends FlowLayout {
 				tarsiz.width = Math.max(tarsiz.width, d.width);
 				// Rows are separated by the vertical gap
 				if (!first) {
-					tarsiz.height += vgap;
+					tarsiz.height += getVgap();
 				}
 				first = false;
 				tarsiz.height += d.height;
 			}
 		}
 		Insets insets = target.getInsets();
-		tarsiz.width += insets.left + insets.right + hgap * 2;
-		tarsiz.height += insets.top + insets.bottom + vgap * 2;
+		tarsiz.width += insets.left + insets.right + getHgap() * 2;
+		tarsiz.height += insets.top + insets.bottom + getVgap() * 2;
 		return tarsiz;
 	}
 
@@ -96,15 +93,15 @@ public class VerticalFlowLayout extends FlowLayout {
 				tarsiz.width = Math.max(tarsiz.width, d.width);
 				// Rows are separated by the vertical gap
 				if (!first) {
-					tarsiz.height += vgap;
+					tarsiz.height += getVgap();
 				}
 				first = false;
 				tarsiz.height += d.height;
 			}
 		}
 		Insets insets = target.getInsets();
-		tarsiz.width += insets.left + insets.right + hgap * 2;
-		tarsiz.height += insets.top + insets.bottom + vgap * 2;
+		tarsiz.width += insets.left + insets.right + getHgap() * 2;
+		tarsiz.height += insets.top + insets.bottom + getVgap() * 2;
 		return tarsiz;
 	}
 
@@ -136,7 +133,7 @@ public class VerticalFlowLayout extends FlowLayout {
 			if (m.isVisible()) {
 				int px = x + (width - md.width) / 2;
 				m.setLocation(px, y);
-				y += vgap + md.height;
+				y += getVgap() + md.height;
 			}
 		}
 	}
@@ -153,11 +150,11 @@ public class VerticalFlowLayout extends FlowLayout {
 		}
 		
 		Insets insets = target.getInsets();
-		int maxheight = target.getSize().height - (insets.top + insets.bottom + vgap * 2);
-		int maxwidth = targetSize - (insets.left + insets.right + hgap * 2);
-//		int maxwidth =  target.getSize().width - (insets.left + insets.right + hgap * 2);
+		int maxheight = target.getSize().height - (insets.top + insets.bottom + getVgap() * 2);
+		int maxwidth = targetSize - (insets.left + insets.right + getHgap() * 2);
+//		int maxwidth =  target.getSize().width - (insets.left + insets.right + getHgap() * 2);
 		int numcomp = target.getComponentCount();
-		int x = insets.left + hgap, y = 0;
+		int x = insets.left + getHgap(), y = 0;
 		int colw = 0, start = 0;
 		for (int i = 0; i < numcomp; i++) {
 			Component m = target.getComponent(i);
@@ -173,19 +170,19 @@ public class VerticalFlowLayout extends FlowLayout {
 					m.setSize(d.width, d.height);
 				}
 				if (y + d.height > maxheight) {
-					placethem(target, x, insets.top + vgap, colw, maxheight - y, start, i);
+					placethem(target, x, insets.top + getVgap(), colw, maxheight - y, start, i);
 					y = d.height;
-					x += hgap + colw;
+					x += getHgap() + colw;
 					colw = d.width;
 					start = i;
 				} else {
 					if (y > 0)
-						y += vgap;
+						y += getVgap();
 					y += d.height;
 					colw = Math.max(colw, d.width);
 				}
 			}
 		}
-		placethem(target, x, insets.top + vgap, colw, maxheight - y, start, numcomp);
+		placethem(target, x, insets.top + getVgap(), colw, maxheight - y, start, numcomp);
 	}
 }

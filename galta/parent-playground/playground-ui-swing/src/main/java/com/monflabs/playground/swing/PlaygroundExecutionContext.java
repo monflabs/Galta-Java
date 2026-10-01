@@ -52,7 +52,11 @@ public abstract class PlaygroundExecutionContext extends ExecutionContext {
 	
 	@Override
 	public String getConsoleText() {
-		return frame.getConsoleTextArea().getText();
+		// everything printed so far, read on the event dispatch thread
+		ps.flush();
+		String[] text = new String[1];
+		PlaygroundFrame.onEdt( () -> text[0] = frame.getConsoleTextArea().getText() );
+		return text[0];
 	}
 	
 	@Override
@@ -64,9 +68,10 @@ public abstract class PlaygroundExecutionContext extends ExecutionContext {
 	public void printlnAtLine(int line, String msg) {
 		try {
     		if(line>=0 && StringUtil.isNotEmpty(msg)) {
-    			// The console is written synchronously (see TextAreaOutputStream): once the
-    			// stream is flushed, the text area holds everything printed so far.
-    			// It must still be read on the event dispatch thread.
+    			// The console is published asynchronously, but flush() waits for it
+    			// (see TextAreaOutputStream): once the stream is flushed, the text area
+    			// holds everything printed so far. It must still be read on the event
+    			// dispatch thread.
     			ps.flush();
     			JTextArea ta = frame.getConsoleTextArea();
     			int[] count = new int[1];

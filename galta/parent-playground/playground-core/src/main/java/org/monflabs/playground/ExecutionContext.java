@@ -45,7 +45,9 @@ public abstract class ExecutionContext {
 		return snippetFs;
 	}
 	
-	public String getContent(String name) {
+	// synchronized with setContent(): the editor writes while the execution
+	// thread reads, and a read must never see a partially written file
+	public synchronized String getContent(String name) {
 		Path f = snippetFs.getPath(name);
 		if(Files.isRegularFile(f)) {
 			return FilesUtil.readString(f,StandardCharsets.UTF_8);

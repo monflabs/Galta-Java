@@ -5,9 +5,10 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
-import java.util.zip.ZipEntry;
 
 import org.fife.rsta.ac.java.PackageMapNode;
 import org.fife.rsta.ac.java.buildpath.ClasspathLibraryInfo;
@@ -21,11 +22,15 @@ import org.fife.rsta.ac.java.classreader.ClassFile;
 /**
  * Information about the JDK 9+ runtime classes to add to the "build path".
  *
- * Note: this introspects the modules delivered as prt of the JDJ, in jmods.
+ * Note: this introspects the modules delivered as part of the JDK, in jmods.
  * A more complete implementation could look into the ct.sym file and rely on
  * a JDK version to find the proper signatures:
  *   https://www.morling.dev/blog/the-anatomy-of-ct-sym-how-javac-ensures-backwards-compatibility/
  *
+ * The jmod files are opened once and stay open, and the package of each class
+ * is indexed to its jmod when the package map is built: a class lookup reads
+ * one entry of one already open jmod, instead of opening and closing every
+ * jmod (~70 of them) in turn.
  *
  * @author Robert Futrell
  * @author Philippe Riand
@@ -36,8 +41,53 @@ import org.fife.rsta.ac.java.classreader.ClassFile;
  */
 public class Jdk9LibraryInfo extends LibraryInfo {
 
-	private File[] jmodFiles;
-	private JarFile[] bulkCreateJmods;
+	/**
+	 * The open jmods and the package index - shared by the clones of this
+	 * library info (LibraryInfo is Cloneable), and guarded by itself.
+	 */
+	private static final class Jmods {
+		final File[] files;
+		final Map<File,JarFile> open = new HashMap<>();
+		Map<String,File> packageIndex;	// "java/lang" -> java.base.jmod
+		PackageMapNode packageMap;
+
+		Jmods(File[] files) {
+			this.files = files;
+		}
+
+		JarFile open(File file) throws IOException {
+			JarFile jar = open.get(file);
+			if(jar==null) {
+				jar = new JarFile(file);
+				open.put(file, jar);
+			}
+			return jar;
+		}
+
+		void index() throws IOException {
+			if(packageIndex!=null) {
+				return;
+			}
+			PackageMapNode root = new PackageMapNode();
+			Map<String,File> index = new HashMap<>();
+			for(File file: files) {
+				JarFile jar = open(file);
+				Enumeration<JarEntry> e = jar.entries();
+				while (e.hasMoreElements()) {
+					String entryName = e.nextElement().getName();
+					if(entryName.startsWith("classes/") && entryName.endsWith(".class")) {
+						entryName = entryName.substring(8);
+						root.add(entryName);
+						index.putIfAbsent(packageOf(entryName), file);
+					}
+				}
+			}
+			packageMap = root;
+			packageIndex = index;
+		}
+	}
+
+	private final Jmods jmods;
 
 	public Jdk9LibraryInfo(File[] jmodFiles) {
 		this(jmodFiles, null);
@@ -45,41 +95,25 @@ public class Jdk9LibraryInfo extends LibraryInfo {
 
 
 	public Jdk9LibraryInfo(File[] jmodFiles, SourceLocation sourceLoc) {
-		setJmodFiles(jmodFiles);
+		checkJmodFiles(jmodFiles);
+		this.jmods = new Jmods(jmodFiles.clone());
 		setSourceLocation(sourceLoc);
 	}
 
+	static String packageOf(String entryName) {
+		int slash = entryName.lastIndexOf('/');
+		return slash>0 ? entryName.substring(0, slash) : "";
+	}
 
+
+	// The jmods stay open: nothing to open or close per bulk
 	@Override
 	public void bulkClassFileCreationEnd() {
-		if(bulkCreateJmods==null) {
-			return;
-		}
-		for( JarFile bulkCreateJar: bulkCreateJmods) {
-			if(bulkCreateJar==null) {
-				continue; // could not be opened
-			}
-			try {
-				bulkCreateJar.close();
-			} catch (IOException ioe) {
-				ioe.printStackTrace();
-			}
-		}
-		bulkCreateJmods = null;
 	}
 
 
 	@Override
 	public void bulkClassFileCreationStart() {
-		bulkCreateJmods = new JarFile[jmodFiles.length];
-		for(int i = 0; i< jmodFiles.length; i++) {
-			File jarFile = jmodFiles[i];
-			try {
-				bulkCreateJmods[i] = new JarFile(jarFile);
-			} catch (IOException ioe) {
-				ioe.printStackTrace();
-			}
-		}
 	}
 
 
@@ -95,46 +129,32 @@ public class Jdk9LibraryInfo extends LibraryInfo {
 		if (info==this) {
 			return 0;
 		}
-		int result = -1;
-		if (info instanceof Jdk9LibraryInfo) {
-			// Only compare the object refs
-			result = this==info ? 0 : -1;
+		if (info instanceof Jdk9LibraryInfo other && other.jmods==jmods) {
+			return 0;	// a clone
 		}
-		return result;
+		return -1;
 	}
 
 
 	@Override
 	public ClassFile createClassFile(String entryName) throws IOException {
-		for(File jarFile: jmodFiles) {
-			try (JarFile jar = new JarFile(jarFile)) {
-				ClassFile c = createClassFileImpl(jar, entryName);
+		synchronized(jmods) {
+			jmods.index();
+			File file = jmods.packageIndex.get(packageOf(entryName));
+			if(file!=null) {
+				ClassFile c = createClassFileImpl(jmods.open(file), entryName);
 				if(c!=null) {
 					return c;
 				}
 			}
 		}
-		System.err.println("ERROR: Invalid entry: " + entryName);
 		return null;
 	}
 
 
 	@Override
 	public ClassFile createClassFileBulk(String entryName) throws IOException {
-		if(bulkCreateJmods==null) {
-			return createClassFile(entryName);
-		}
-		for( JarFile bulkCreateJar: bulkCreateJmods) {
-			if(bulkCreateJar==null) {
-				continue; // could not be opened
-			}
-			ClassFile c = createClassFileImpl(bulkCreateJar, entryName);
-			if(c!=null) {
-				return c;
-			}
-		}
-		System.err.println("ERROR: Invalid entry: " + entryName);
-		return null;
+		return createClassFile(entryName);
 	}
 
 
@@ -144,80 +164,55 @@ public class Jdk9LibraryInfo extends LibraryInfo {
 		if (entry==null) {
 			return null;
 		}
-		DataInputStream in = new DataInputStream(
-				new BufferedInputStream(jar.getInputStream(entry)));
-		ClassFile cf;
-		try {
-			cf = new ClassFile(in);
-		} finally {
-			in.close();
+		try (DataInputStream in = new DataInputStream(
+				new BufferedInputStream(jar.getInputStream(entry)))) {
+			return new ClassFile(in);
 		}
-		return cf;
 	}
 
 
+	/**
+	 * The package map, built once (it is the costly part: every entry of every
+	 * jmod) and then shared.
+	 */
 	@Override
 	public PackageMapNode createPackageMap() throws IOException {
-		PackageMapNode root = new PackageMapNode();
-
-		for( File jarFile: jmodFiles) {
-			try (JarFile jar = new JarFile(jarFile)) {
-
-				Enumeration<JarEntry> e = jar.entries();
-				while (e.hasMoreElements()) {
-					ZipEntry entry = e.nextElement();
-					String entryName = entry.getName();
-					if(entryName.startsWith("classes/")) {
-						entryName = entryName.substring(8);
-						if (entryName.endsWith(".class")) {
-							root.add(entryName);
-						}
-					}
-				}
-
-			}
+		synchronized(jmods) {
+			jmods.index();
+			return jmods.packageMap;
 		}
-
-		return root;
-
 	}
 
 
 	@Override
 	public long getLastModified() {
-		return 0; //jarFile.lastModified();
+		return 0;
 	}
 
 
 	@Override
 	public String getLocationAsString() {
-		return ""; //jarFile.getAbsolutePath();
+		return "";
 	}
 
 
 	@Override
 	public int hashCodeImpl() {
 		int h = 0;
-		for( File jarFile: jmodFiles) {
+		for( File jarFile: jmods.files) {
 			h += jarFile.hashCode();
 		}
 		return h;
 	}
 
 
-	/**
-	 * Sets the jar file location.
-	 *
-	 * @param jmodFiles The jar files location.  This cannot be <code>null</code>.
-	 */
-	private void setJmodFiles(File[] jmodFiles) {
+	private static void checkJmodFiles(File[] jmodFiles) {
 		for( File jarFile: jmodFiles) {
 			if (jarFile==null || !jarFile.exists()) {
 				String name = jarFile==null ? "null" : jarFile.getAbsolutePath();
 				throw new IllegalArgumentException("Jar does not exist: " + name);
 			}
 		}
-		this.jmodFiles = jmodFiles;
 	}
 
 
@@ -229,8 +224,8 @@ public class Jdk9LibraryInfo extends LibraryInfo {
 	 */
 	@Override
 	public String toString() {
-		return "[JarLibraryInfo: " +
-			"jars=" + java.util.Arrays.toString(jmodFiles) +
+		return "[Jdk9LibraryInfo: " +
+			"jmods=" + java.util.Arrays.toString(jmods.files) +
 			"; source=" + getSourceLocation() +
 			"]";
 	}

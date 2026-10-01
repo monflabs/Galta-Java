@@ -21,7 +21,7 @@ import javax.swing.UIManager;
 
 import org.fife.ui.rsyntaxtextarea.Theme;
 import org.fife.ui.rtextarea.RTextArea;
-import org.monflabs.ui.swing.ide.IDEApplication;
+import org.monflabs.util.Console;
 
 /**
  *
@@ -30,12 +30,14 @@ import org.monflabs.ui.swing.ide.IDEApplication;
 public class TextArea extends RTextArea {
 	
 	public TextArea() {
-		try {
-			Theme t = IDEApplication.get().getTheme().getSyntaxAreaTheme();
-			if(t!=null) {
+		Theme t = SyntaxTextArea.syntaxAreaTheme();
+		if(t!=null) {
+			try {
 				apply(t,this);
+			} catch(RuntimeException ex) {
+				Console.log(ex);
 			}
-		} catch(Exception ex) {}
+		}
 	}
 	
     

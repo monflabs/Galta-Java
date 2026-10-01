@@ -23,10 +23,11 @@ public abstract class ExecutionEngine {
 		COMPLETED
 	}
 	
-	private STATE state;
-	
-	private ExecutionContext executionContext;
-	private Thread executionThread;
+	// written by the execution thread, read by others (stop, debugger watchers)
+	private volatile STATE state;
+
+	private volatile ExecutionContext executionContext;
+	private volatile Thread executionThread;
 	
 	protected ExecutionEngine(ExecutionContext context) {
 		this.state = STATE.READY;

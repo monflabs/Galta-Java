@@ -98,6 +98,40 @@ public class SwingComponentsTest extends ProjectTestCase {
 		assertEquals("b", m.getElementAt(1));
 	}
 
+	public void testLookupListModelFollowsTheLookup() throws Exception {
+		StringArrayLookup lookup = new StringArrayLookup("a", "b");
+		LookupListModel<String> m = new LookupListModel<>(lookup);
+		List<String> events = new ArrayList<>();
+		javax.swing.event.ListDataListener l = new javax.swing.event.ListDataListener() {
+			@Override public void intervalAdded(javax.swing.event.ListDataEvent e) { events.add("added"); }
+			@Override public void intervalRemoved(javax.swing.event.ListDataEvent e) { events.add("removed"); }
+			@Override public void contentsChanged(javax.swing.event.ListDataEvent e) { events.add("changed"); }
+		};
+		m.addListDataListener(l);
+		lookup.notifyLookupChanged();		// from a non-EDT thread: forwarded on the EDT
+		SwingUtilities.invokeAndWait(() -> {});
+		assertEquals(List.of("changed"), events);
+		// No more listener on the model: it stops listening to the lookup
+		m.removeListDataListener(l);
+		lookup.notifyLookupChanged();
+		SwingUtilities.invokeAndWait(() -> {});
+		assertEquals(List.of("changed"), events);
+	}
+
+	public void testVerticalFlowLayoutUsesFlowLayoutGaps() {
+		VerticalFlowLayout layout = new VerticalFlowLayout(VerticalFlowLayout.TOP, 3, 7, false, false);
+		// The gaps are FlowLayout's own: the getters report them, the setters change the layout
+		assertEquals(3, layout.getHgap());
+		assertEquals(7, layout.getVgap());
+		JPanel panel = new JPanel(layout);
+		panel.add(fixed(10, 20));
+		panel.add(fixed(10, 20));
+		layout.setVgap(1);
+		layout.setHgap(0);
+		assertEquals(20+1+20+2*1, panel.getPreferredSize().height);
+		assertEquals(10, panel.getPreferredSize().width);
+	}
+
 	public void testMultipartTextFile() {
 		MultipartTextFile f = new MultipartTextFile();
 		String s = f.serialize(ser -> { ser.serialize("a", "one\n"); ser.serialize("b", "two\n"); });
@@ -121,5 +155,78 @@ public class SwingComponentsTest extends ProjectTestCase {
 		String[] text = new String[1];
 		SwingUtilities.invokeAndWait(() -> text[0] = ta.getText());
 		assertEquals("edt;worker;", text[0]);
+	}
+
+	enum Color { RED }
+	record Point(int x, int y) {}
+	static class Node {
+		String name;
+		Node next;
+		Color color = Color.RED;
+		Point point = new Point(1, 2);
+		java.util.concurrent.atomic.AtomicInteger counter = new java.util.concurrent.atomic.AtomicInteger(5);
+		Node(String name) { this.name = name; }
+	}
+
+	public void testAstDescriptionCyclesAndOpaqueTypes() {
+		Node a = new Node("a"), b = new Node("b");
+		a.next = b;
+		b.next = a;	// a cycle: used to recurse until a StackOverflowError
+		org.monflabs.util.TextBuilder tb = new org.monflabs.util.TextBuilder();
+		playground.impl.GaltaJSPlaygroundFrame.readObject(tb, a);
+		String s = tb.toString();
+		assertTrue(s, s.contains("<cycle>"));
+		// enums, records and JDK types print themselves (no reflective access to JDK internals)
+		assertTrue(s, s.contains("color=RED"));
+		assertTrue(s, s.contains("point=Point[x=1, y=2]"));
+		assertTrue(s, s.contains("counter=5"));
+	}
+
+	public void testJdkLibraryInfos() throws Exception {
+		java.io.File home = new java.io.File(System.getProperty("java.home"));
+		java.util.List<org.fife.rsta.ac.java.buildpath.LibraryInfo> infos = new java.util.ArrayList<>();
+		infos.add(new com.monflabs.swing.rtsyntax.JrtLibraryInfo());
+		org.fife.rsta.ac.java.buildpath.LibraryInfo main = com.monflabs.swing.rtsyntax.LibraryInfo2.getJreJarInfo(home);
+		assertNotNull(main);	// jmods when present, else jrt:/
+		infos.add(main);
+		for(org.fife.rsta.ac.java.buildpath.LibraryInfo info: infos) {
+			assertNotNull(info.createPackageMap());
+			assertSame("built once", info.createPackageMap(), info.createPackageMap());
+			org.fife.rsta.ac.java.classreader.ClassFile string = info.createClassFile("java/lang/String.class");
+			assertNotNull(info.toString(), string);
+			assertEquals("java.lang.String", string.getClassName(true));
+			assertNotNull(info.createClassFile("java/util/concurrent/ConcurrentHashMap.class"));
+			assertNull(info.createClassFile("no/such/Clazz.class"));
+		}
+	}
+
+	public void testTextAreaOutputStreamDoesNotWaitForTheEdt() throws Exception {
+		JTextArea ta = new JTextArea();
+		PrintStream ps = TextAreaOutputStream.getPrintStream(ta);
+		// Keep the event dispatch thread busy: a print must not wait for it
+		java.util.concurrent.CountDownLatch edtBusy = new java.util.concurrent.CountDownLatch(1);
+		java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+		SwingUtilities.invokeLater(() -> {
+			edtBusy.countDown();
+			try {
+				release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+			} catch(InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		});
+		assertTrue(edtBusy.await(10, java.util.concurrent.TimeUnit.SECONDS));
+		long start = System.nanoTime();
+		for(int i=0; i<1000; i++) {
+			ps.print("x");
+		}
+		ps.println();
+		long elapsedMs = (System.nanoTime()-start)/1_000_000;
+		release.countDown();
+		assertTrue("printing waited for the EDT: "+elapsedMs+"ms", elapsedMs<5_000);
+		// flush() is the synchronization point: everything is visible afterwards
+		ps.flush();
+		String[] text = new String[1];
+		SwingUtilities.invokeAndWait(() -> text[0] = ta.getText());
+		assertEquals("x".repeat(1000)+System.lineSeparator(), text[0]);
 	}
 }

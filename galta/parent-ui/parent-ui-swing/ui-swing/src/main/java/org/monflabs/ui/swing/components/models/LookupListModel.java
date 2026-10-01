@@ -16,16 +16,23 @@
 package org.monflabs.ui.swing.components.models;
 
 import javax.swing.AbstractListModel;
+import javax.swing.SwingUtilities;
+import javax.swing.event.ListDataListener;
 
 import org.monflabs.ui.lookup.ILookup;
+import org.monflabs.ui.lookup.ILookupChangeListener;
 
 /**
+ * A list model over a lookup, which follows the lookup's changes. It only
+ * listens to the lookup while the model itself has listeners, so a model
+ * dropped by its list is not kept alive by a long-lived lookup.
  */
 @SuppressWarnings("serial")
 public class LookupListModel<T> extends AbstractListModel<T> {
-	
-	private ILookup<T> lookup;
-	
+
+	private final ILookup<T> lookup;
+	private final ILookupChangeListener<T> lookupListener = l -> lookupChanged();
+
 	public LookupListModel(ILookup<T> lookup) {
 		this.lookup = lookup;
 	}
@@ -38,5 +45,30 @@ public class LookupListModel<T> extends AbstractListModel<T> {
 	@Override
 	public T getElementAt(int index) {
 		return lookup.getValue(index);
+	}
+
+	@Override
+	public void addListDataListener(ListDataListener l) {
+		if(getListDataListeners().length==0) {
+			lookup.addLookupChangeListener(lookupListener);
+		}
+		super.addListDataListener(l);
+	}
+
+	@Override
+	public void removeListDataListener(ListDataListener l) {
+		super.removeListDataListener(l);
+		if(getListDataListeners().length==0) {
+			lookup.removeLookupChangeListener(lookupListener);
+		}
+	}
+
+	private void lookupChanged() {
+		if(!SwingUtilities.isEventDispatchThread()) {
+			SwingUtilities.invokeLater(this::lookupChanged);
+			return;
+		}
+		// The whole content may have changed, size included
+		fireContentsChanged(this, 0, Math.max(0, getSize()-1));
 	}
 }

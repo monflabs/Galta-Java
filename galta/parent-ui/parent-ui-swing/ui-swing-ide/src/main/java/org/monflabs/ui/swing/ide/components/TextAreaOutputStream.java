@@ -57,15 +57,29 @@ public class TextAreaOutputStream extends PrintStream {
 	}
 	
 	
-	private static class TextAreaWriter extends WriterOutputStream { 
+	/**
+	 * Buffers the text and publishes it to the text area on the event dispatch
+	 * thread with one coalesced {@code invokeLater()} per burst of writes, so
+	 * a printing script never waits for the UI. {@link #flush()} - an explicit
+	 * flush of the print stream - is the synchronization point: once it
+	 * returns, the text area holds everything written so far.
+	 */
+	private static class TextAreaWriter extends WriterOutputStream {
 
-		private JTextArea textArea;
-	    private int maxSize;
-	    private int bufferSize;
-	
+		private final JTextArea textArea;
+	    private final int maxSize;
+	    private final int bufferSize;
+
+	    // guarded by itself
+	    private final StringBuilder pendingText = new StringBuilder(128);
+	    private final AtomicBoolean pendingInvoke = new AtomicBoolean(false);
+	    // true while write() runs: WriterOutputStream flushes itself after
+	    // every write, and that internal flush must not wait for the UI.
+	    // Only touched under the owning PrintStream's lock.
+	    private boolean writing;
+
 	    private TextAreaWriter(JTextArea textArea) {
 	    	this(textArea,200_000, 20_000);
-	    	
 	    }
 	    private TextAreaWriter(JTextArea textArea, int maxSize, int bufferSize) {
 	    	super(null);
@@ -73,55 +87,72 @@ public class TextAreaOutputStream extends PrintStream {
 	        this.maxSize = maxSize;
 	        this.bufferSize = bufferSize;
 	    }
-	    
-	    private StringBuilder pendingText = new StringBuilder(128);
-	    private AtomicBoolean pendingInvoke = new AtomicBoolean(false);
-	    
-	    private void updateTextArea() {
-	    	if(!pendingInvoke.getAndSet(true)) {
-	    		Runnable flush = () -> {
-					synchronized(pendingText) {
-						try {
-							String s = pendingText.toString();
-							pendingText.setLength(0);
-							if(!StringUtil.isEmpty(s)) {
-								if(textArea.getDocument().getLength()+s.length()>=maxSize) {
-									String newText = textArea.getText()+s;
-									int len = Math.min(newText.length(), maxSize-bufferSize);
-									newText = newText.substring(newText.length()-len,newText.length());
-									textArea.setText(newText);
-								} else {
-									textArea.append(s);
-								}
-							}
-						} finally {
-							// Never leave the flag set, or all later output would stay buffered
-							pendingInvoke.set(false);
+
+	    /**
+	     * Appends the pending text to the text area - event dispatch thread only.
+	     */
+	    private void publishPending() {
+			synchronized(pendingText) {
+				try {
+					String s = pendingText.toString();
+					pendingText.setLength(0);
+					if(!StringUtil.isEmpty(s)) {
+						if(textArea.getDocument().getLength()+s.length()>=maxSize) {
+							String newText = textArea.getText()+s;
+							int len = Math.min(newText.length(), maxSize-bufferSize);
+							newText = newText.substring(newText.length()-len,newText.length());
+							textArea.setText(newText);
+						} else {
+							textArea.append(s);
 						}
 					}
-	    		};
-	    		if(SwingUtilities.isEventDispatchThread()) {
-	    			// invokeAndWait() cannot be called from the EDT
-	    			flush.run();
-	    			return;
-	    		}
-	    		try {
-					SwingUtilities.invokeAndWait(flush);
-	    		} catch(InterruptedException e) {
-	    			// The flush is still queued and will run: just restore the interrupt
-	    			Thread.currentThread().interrupt();
-	    		} catch(Exception e) {
-	    			Console.log(e);
-	    		}
-	    	}
+				} finally {
+					// Never leave the flag set, or all later output would stay buffered
+					pendingInvoke.set(false);
+				}
+			}
 	    }
-	    
+
 	    @Override
 		protected void write(char[] chars, int pos, int len) throws IOException {
 	    	synchronized(pendingText) {
 				pendingText.append(chars,pos,len);
-			};
-			updateTextArea();
+			}
+	    	if(!pendingInvoke.getAndSet(true)) {
+	    		SwingUtilities.invokeLater(this::publishPending);
+	    	}
+	    }
+
+	    @Override
+	    public void write(byte[] b, int off, int len) throws IOException {
+	    	writing = true;
+	    	try {
+	    		super.write(b, off, len);
+	    	} finally {
+	    		writing = false;
+	    	}
+	    }
+
+	    @Override
+	    public void flush() throws IOException {
+	    	super.flush();
+	    	if(writing) {
+	    		return;
+	    	}
+    		if(SwingUtilities.isEventDispatchThread()) {
+    			publishPending();
+    			return;
+    		}
+    		try {
+    			// queued after any pending invokeLater(): when it returns, all
+    			// the text written so far is in the text area
+				SwingUtilities.invokeAndWait(this::publishPending);
+    		} catch(InterruptedException ex) {
+    			// The publication is still queued and will run: just restore the interrupt
+    			Thread.currentThread().interrupt();
+    		} catch(Exception ex) {
+    			Console.log(ex);
+    		}
 	    }
 	}
 }

@@ -16,14 +16,18 @@
 package com.monflabs.swing.rtsyntax;
 
 import java.io.File;
-import java.io.FileFilter;
+import java.nio.file.Path;
 
-import org.fife.rsta.ac.java.buildpath.JarLibraryInfo;
 import org.fife.rsta.ac.java.buildpath.LibraryInfo;
 import org.fife.rsta.ac.java.buildpath.ZipSourceLocation;
 
+/**
+ * Locates the Java runtime classes for the Java code completion - a Java 9+
+ * runtime: its jmods when the JDK has them, else (for the running JVM only)
+ * its module image through jrt:/.
+ */
 public class LibraryInfo2 {
-	
+
 	/**
 	 * The runtime classes of the running JVM, or null if they cannot be located.
 	 */
@@ -31,67 +35,36 @@ public class LibraryInfo2 {
 		String javaHome = System.getProperty("java.home");
 		return getJreJarInfo(new File(javaHome));
 	}
-	
+
+	/**
+	 * The runtime classes of a JDK, or null if they cannot be located.
+	 */
 	public static LibraryInfo getJreJarInfo(File jreHome) {
-		// Check if the Jre is made of modules
+		LibraryInfo info = null;
 		File mods = new File(jreHome,"jmods");
 		if(mods.isDirectory()) {
-			File[] files = mods.listFiles( new FileFilter() {
-				@Override
-				public boolean accept(File pathname) {
-					if(pathname.isFile()) {
-						String name = pathname.getName();
-						return name.endsWith(".jmod") && (name.startsWith("java.") || name.startsWith("jdk."));
-					}
-					return false;
-				}
+			File[] files = mods.listFiles(f -> {
+				String name = f.getName();
+				return f.isFile() && name.endsWith(".jmod") && (name.startsWith("java.") || name.startsWith("jdk."));
 			});
-
-			if(files==null || files.length==0) {
-				return null;
+			if(files!=null && files.length>0) {
+				info = new Jdk9LibraryInfo(files);
 			}
-			LibraryInfo info = new Jdk9LibraryInfo(files);
+		}
+		if(info==null && isRunningJvm(jreHome)) {
+			info = new JrtLibraryInfo();
+		}
+		if(info!=null) {
 			File sourceZip = new File(jreHome,"lib"+File.separator+"src.zip");
-			if (sourceZip.isFile()) { // Make sure our last guess actually exists
-				info.setSourceLocation(new ZipSourceLocation(sourceZip));
-			}
-
-			return info;
-		}
-
-		LibraryInfo info = null;
-
-		File mainJar = new File(jreHome, "lib/rt.jar"); // Sun JRE's
-		File sourceZip;
-
-		if (mainJar.isFile()) { // Sun JRE's
-			sourceZip = new File(jreHome, "src.zip");
-			if (!sourceZip.isFile()) {
-				// Might be a JRE inside a JDK
-				sourceZip = new File(jreHome, "../src.zip");
-			}
-		}
-
-		else { // Might be OS X
-			mainJar = new File(jreHome, "../Classes/classes.jar");
-			// ${java.home}/src.jar is the common location on OS X.
-			sourceZip = new File(jreHome, "src.jar");
-		}
-
-		if (mainJar.isFile()) {
-			info = new JarLibraryInfo(mainJar);
-			if (sourceZip.isFile()) { // Make sure our last guess actually exists
+			if (sourceZip.isFile()) {
 				info.setSourceLocation(new ZipSourceLocation(sourceZip));
 			}
 		}
-		else {
-			System.err.println("[ERROR]: Cannot locate JRE jar in " +
-								jreHome.getAbsolutePath());
-			mainJar = null;
-		}
-
 		return info;
+	}
 
+	private static boolean isRunningJvm(File jreHome) {
+		Path home = Path.of(System.getProperty("java.home")).toAbsolutePath().normalize();
+		return home.equals(jreHome.toPath().toAbsolutePath().normalize());
 	}
 }
-

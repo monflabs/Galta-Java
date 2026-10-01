@@ -137,6 +137,34 @@ public class MultiSplitPaneTest extends ProjectTestCase {
 		assertEquals(200, c.getWidth());
 	}
 
+	public void testMoveDividerBetweenCollapsedPanes() {
+		MultiSplitPane p = new MultiSplitPane(row(pane("a"), pane("b"), pane("c")));
+		p.setDividerSize(0);
+		JPanel a = box(0, 0, 1, 1), b = box(0, 0, 1, 1), c = box(0, 0, 1, 1);
+		p.add(a, "a");
+		p.add(b, "b");
+		p.add(c, "c");
+		layout(p, 300, 10);
+		MultiSplitLayout l = p.getMultiSplitLayout();
+		// Collapse a and b
+		l.moveDivider(l.getDividers().get(1), 0);
+		p.doLayout();
+		l.moveDivider(l.getDividers().get(0), 0);
+		p.doLayout();
+		l.moveDivider(l.getDividers().get(1), 0);
+		p.doLayout();
+		assertEquals(0, a.getWidth());
+		assertEquals(0, b.getWidth());
+		// Moving the divider between the two collapsed panes: nothing to share
+		// (used to turn their shares into NaN)
+		l.moveDivider(l.getDividers().get(0), 50);
+		for(double share: l.getDividers().get(0).getSplit().getShares()) {
+			assertFalse(Double.isNaN(share));
+		}
+		p.doLayout();
+		assertEquals(300, a.getWidth()+b.getWidth()+c.getWidth());
+	}
+
 	public void testMouseDrag() {
 		MultiSplitPane p = new MultiSplitPane(column(pane("top"), pane("bottom")));
 		p.setDividerSize(6);

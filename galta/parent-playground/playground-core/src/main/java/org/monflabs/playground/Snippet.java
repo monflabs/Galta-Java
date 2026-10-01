@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.util.Properties;
 import java.util.stream.Stream;
 
+import org.monflabs.util.Console;
 import org.monflabs.util.path.FilesUtil;
 
 public class Snippet {
@@ -54,6 +55,8 @@ public class Snippet {
 					}
 				});
 			} catch(IOException ex) {
+				// a partial snippet still opens: report what could not be read
+				Console.log(ex);
 			}
 	
 			Path propsPath = folder.resolve(LINK_PROPERTIES);
@@ -61,7 +64,9 @@ public class Snippet {
 				Properties props = new Properties();
 				try(InputStream is=Files.newInputStream(propsPath)) {
 					props.load(is);
-				} catch(IOException ex) {}
+				} catch(IOException ex) {
+					Console.log(ex);
+				}
 				for(Object k: props.keySet()) {
 					String name = (String)k;
 					String path = (String)props.get(k);

@@ -19,7 +19,7 @@ import java.awt.Color;
 import java.awt.Dialog;
 import java.awt.Frame;
 import java.awt.Graphics;
-import java.awt.Rectangle;
+import java.awt.geom.Rectangle2D;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
@@ -50,7 +50,9 @@ import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rtextarea.SearchContext;
 import org.fife.ui.rtextarea.SearchEngine;
 import org.fife.ui.rtextarea.SearchResult;
+import org.monflabs.ui.UIApplication;
 import org.monflabs.ui.swing.ide.IDEApplication;
+import org.monflabs.util.Console;
 import org.monflabs.util.StringFormat;
 
 /**
@@ -66,12 +68,13 @@ public class SyntaxTextArea extends RSyntaxTextArea {
 	private boolean gotoLineAction=true;
 	
 	public SyntaxTextArea() {
-		try {
-			Theme t = IDEApplication.get().getTheme().getSyntaxAreaTheme();
-			if (t != null) {
+		Theme t = syntaxAreaTheme();
+		if (t != null) {
+			try {
 				t.apply(this);
+			} catch (RuntimeException ex) {
+				Console.log(ex);
 			}
-		} catch (Exception ex) {
 		}
 
 		setAnimateBracketMatching(true);
@@ -117,6 +120,18 @@ public class SyntaxTextArea extends RSyntaxTextArea {
 		}
 	}
 	
+    /**
+     * The syntax theme of the running IDE application, or null when there is
+     * none (no IDEApplication, as in tests or when embedded) or it has no
+     * syntax theme.
+     */
+    static Theme syntaxAreaTheme() {
+    	if(!(UIApplication.get() instanceof IDEApplication app) || app.getTheme()==null) {
+    		return null;
+    	}
+    	return app.getTheme().getSyntaxAreaTheme();
+    }
+
     /**
      * The platform menu shortcut modifier: Cmd on macOS, Ctrl elsewhere.
      */
@@ -181,25 +196,23 @@ public class SyntaxTextArea extends RSyntaxTextArea {
 
 	
 	
-	public void displayFind() {
-    }
-
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        if (arrowPosition >= 0) {
+        // The position can be stale (the document shrank since it was set):
+        // nothing to draw then, rather than an exception on every repaint
+        if (arrowPosition >= 0 && arrowPosition <= getDocument().getLength()) {
             try {
-                @SuppressWarnings("deprecation")
-				Rectangle rect = modelToView(arrowPosition);
-                int arrowX = 4 + rect.x - 10; // Adjust as needed
-                int arrowY = rect.y + rect.height / 2; // Center the arrow vertically in the line
-
-                // Example arrow drawing
-                g.setColor(Color.YELLOW); // Arrow color
-                g.fillPolygon(new int[]{arrowX, arrowX + 5, arrowX}, new int[]{arrowY - 5, arrowY, arrowY + 5}, 3);
+				Rectangle2D rect = modelToView2D(arrowPosition);
+				if (rect != null) {
+	                int arrowX = 4 + (int)rect.getX() - 10;
+	                int arrowY = (int)(rect.getY() + rect.getHeight() / 2); // Center the arrow vertically in the line
+	                g.setColor(Color.YELLOW);
+	                g.fillPolygon(new int[]{arrowX, arrowX + 5, arrowX}, new int[]{arrowY - 5, arrowY, arrowY + 5}, 3);
+				}
             } catch (BadLocationException e) {
-                e.printStackTrace();
+                // checked above: cannot happen
             }
         }
     }

@@ -22,23 +22,27 @@ import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
 
 /**
- *
+ * A read-only view of a Markdown document, rendered as HTML (CommonMark).
  */
 @SuppressWarnings("serial")
 public class MarkdownRenderer extends JEditorPane {
-	
+
+	// Both are immutable and thread-safe: built once
+	private static final Parser PARSER = Parser.builder().build();
+	private static final HtmlRenderer RENDERER = HtmlRenderer.builder().build();
+
 	public MarkdownRenderer() {
 		setContentType("text/html");
+		setEditable(false);
 	}
 
 	public void setMarkdown(String markdown) {
-		String html = toHtml(markdown);
-		setText(html);
+		setText(toHtml(markdown));
+		setCaretPosition(0);
 	}
-	private String toHtml(String markdown) {
-		Parser parser = Parser.builder().build();
-		Node document = parser.parse(markdown);
-		HtmlRenderer renderer = HtmlRenderer.builder().build();
-		return renderer.render(document); 
+
+	static String toHtml(String markdown) {
+		Node document = PARSER.parse(markdown!=null ? markdown : "");
+		return RENDERER.render(document);
 	}
 }

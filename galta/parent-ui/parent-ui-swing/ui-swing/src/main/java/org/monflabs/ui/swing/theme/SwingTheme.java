@@ -16,8 +16,9 @@
 package org.monflabs.ui.swing.theme;
 
 import java.awt.Color;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 import javax.swing.JDialog;
@@ -118,53 +119,63 @@ public class SwingTheme {
     	return dark;
     }
     
-    private static boolean isMacOSDark() {
+    // The OS appearance is read from a command at startup: never let a stuck
+    // command hang the application (the theme is typically built while the UI
+    // is starting, possibly on the event dispatch thread)
+    private static final long COMMAND_TIMEOUT_SECONDS = 2;
+
+    /**
+     * Runs a command with a time limit, returning its exit code and standard
+     * output, or null if it could not run or did not finish in time.
+     */
+    static CommandResult runCommand(String... command) {
+    	Process process = null;
         try {
-            Process process = Runtime.getRuntime().exec(
-                new String[]{"defaults", "read", "-g", "AppleInterfaceStyle"}
-            );
-            // "defaults" exits with 0 only when a dark style is set
-            if(!process.waitFor(2, TimeUnit.SECONDS)) {
-            	process.destroy();
-            	return false;
+            process = new ProcessBuilder(command)
+            		.redirectError(ProcessBuilder.Redirect.DISCARD)
+            		.start();
+            process.getOutputStream().close();
+            if(!process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            	return null;
             }
-            return process.exitValue() == 0;
-        } catch (Exception e) {
-            return false;
+            // the output of these queries is a line or two: it fits in the
+            // pipe, so reading it once the process is done cannot block
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            return new CommandResult(process.exitValue(), output);
+        } catch (InterruptedException e) {
+        	Thread.currentThread().interrupt();
+        	return null;
+        } catch (IOException | RuntimeException e) {
+            return null;	// command not available: not dark
+        } finally {
+        	if(process!=null && process.isAlive()) {
+        		process.destroyForcibly();
+        	}
         }
     }
+
+    record CommandResult(int exitCode, String output) {}
+
+    private static boolean isMacOSDark() {
+        // "defaults" exits with 0 only when a dark style is set
+        CommandResult r = runCommand("defaults", "read", "-g", "AppleInterfaceStyle");
+        return r!=null && r.exitCode()==0;
+    }
     private static boolean isWindowsDark() {
-        try {
-            Process process = Runtime.getRuntime().exec(
-                "reg query HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize /v AppsUseLightTheme"
-            );
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.contains("AppsUseLightTheme")) {
-                        // 0x0 = dark, 0x1 = light
-                        return line.contains("0x0");
-                    }
-                }
+        CommandResult r = runCommand("reg", "query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "/v", "AppsUseLightTheme");
+        if(r==null) {
+        	return false;
+        }
+        for(String line: r.output().split("\\R")) {
+            if (line.contains("AppsUseLightTheme")) {
+                // 0x0 = dark, 0x1 = light
+                return line.contains("0x0");
             }
-        } catch (Exception e) {
-            return false;
         }
         return false;
     }
     private static boolean isLinuxDark() {
-        try {
-            Process process = Runtime.getRuntime().exec(
-                new String[]{"gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"}
-            );
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream()))) {
-                String theme = reader.readLine();
-                return theme != null && theme.toLowerCase().contains("dark");
-            }
-        } catch (Exception e) {
-            return false;
-        }
+        CommandResult r = runCommand("gsettings", "get", "org.gnome.desktop.interface", "gtk-theme");
+        return r!=null && r.output().toLowerCase(Locale.ROOT).contains("dark");
     }
 }

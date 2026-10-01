@@ -20,6 +20,7 @@ import java.util.List;
 
 import org.monflabs.ui.converters.BooleanConverter;
 import org.monflabs.ui.converters.LongConverter;
+import org.monflabs.ui.converters.TextConverter;
 import org.monflabs.ui.lookup.ILookupChangeListener;
 import org.monflabs.ui.lookup.StringArrayLookup;
 
@@ -47,6 +48,28 @@ public class ConvertersTest extends ProjectTestCase {
 		assertEquals(7L, c.valueToLong("abc"));
 		assertEquals(7L, c.valueToLong(null));
 		assertEquals("42", c.longToValue(42));
+	}
+
+	public void testTextConvertersNull() {
+		assertNull(TextConverter.stringConverter.valueToString(null));
+		assertNull(TextConverter.stringConverter.stringToValue(null));
+		assertNull(TextConverter.booleanConverter.valueToString(null));
+		assertNull(TextConverter.booleanConverter.stringToValue(null));
+		assertNull(TextConverter.booleanConverter.stringToValue(""));
+		assertNull(TextConverter.intConverter.valueToString(null));
+		assertNull(TextConverter.intConverter.stringToValue(null));
+		assertNull(TextConverter.intConverter.stringToValue(""));
+		assertNull(TextConverter.longConverter.valueToString(null));
+		assertNull(TextConverter.longConverter.stringToValue(null));
+		assertNull(TextConverter.doubleConverter.valueToString(null));
+		assertNull(TextConverter.doubleConverter.stringToValue(null));
+		// values still convert both ways
+		assertEquals("12", TextConverter.intConverter.valueToString(12));
+		assertEquals(Integer.valueOf(12), TextConverter.intConverter.stringToValue("12"));
+		assertEquals(Long.valueOf(12), TextConverter.longConverter.stringToValue("12"));
+		assertEquals(Double.valueOf(1.5), TextConverter.doubleConverter.stringToValue("1.5"));
+		assertEquals("true", TextConverter.booleanConverter.valueToString(true));
+		assertEquals(Boolean.TRUE, TextConverter.booleanConverter.stringToValue("true"));
 	}
 
 	public void testListenerRemovingItself() {

@@ -17,10 +17,9 @@ package playground.impl;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Font;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
@@ -29,11 +28,18 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -46,8 +52,6 @@ import javax.swing.JTextArea;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.JTree;
-import javax.swing.event.TreeSelectionEvent;
-import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 
@@ -69,6 +73,7 @@ import org.monflabs.galtajs.transpiler.JSTranspilerOptions;
 import org.monflabs.js.debugger.ui.DebuggerPanel;
 import org.monflabs.playground.ExecutionResult;
 import org.monflabs.playground.PlaygroundConfiguration;
+import org.monflabs.ui.swing.dialogs.JTreeUtil;
 import org.monflabs.ui.swing.ide.IDEApplication;
 import org.monflabs.ui.swing.ide.syntax.SyntaxTextArea;
 import org.monflabs.util.BaseException;
@@ -92,6 +97,20 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 	private JTextArea textAstNodes;
 	private SyntaxTextArea transpiledCode;
 	private SyntaxTextArea decompiledCode;
+
+	// The analysis views (AST tree, Java transpiler, decompiler) are costly
+	// - a full transpile on every auto-run, i.e. 500ms after each keystroke -
+	// so they are computed lazily, only for the tab actually shown, and off
+	// the event dispatch thread: only the final setText()/setModel() runs on
+	// it. currentScript is written on the event dispatch thread only; the
+	// background reads of it are just early exits.
+	private final List<AnalysisView<?>> analysisViews = new ArrayList<>();
+	private volatile JSInterpretedUnit currentScript;
+	private final ExecutorService analysisExecutor = Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "galtajs-playground-analysis");
+		t.setDaemon(true);
+		return t;
+	});
 	
     private JButton btnDebug;
 	private JButton btnExternalDebugger;
@@ -127,6 +146,9 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 		splitter.setTopComponent(scrollPane1);
 		splitter.setBottomComponent(scrollPane2);
        	getResultTabPane().addTab("AST Tree", null, splitter, null);
+       	analysisViews.add(new AnalysisView<>(splitter,
+       			GaltaJSPlaygroundFrame::createASTTree,
+       			this::setASTTree));
 
        	transpiledCode = new SyntaxTextArea();
 		transpiledCode.setEditable(false);
@@ -134,6 +156,9 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 		RTextScrollPane scrollPane3  = new RTextScrollPane();
 		scrollPane3.setViewportView(transpiledCode);
        	getResultTabPane().addTab("Java Transpiler", null, scrollPane3, null);
+       	analysisViews.add(new AnalysisView<>(scrollPane3,
+       			sc -> sc!=null ? transpiledToJava(sc) : "// No generated code",
+       			code -> setCode(transpiledCode, code)));
 
        	decompiledCode = new SyntaxTextArea();
        	decompiledCode.setEditable(false);
@@ -141,19 +166,20 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 		RTextScrollPane scrollPane4  = new RTextScrollPane();
 		scrollPane4.setViewportView(decompiledCode);
        	getResultTabPane().addTab("Decompiled Nodes", null, scrollPane4, null);
+       	analysisViews.add(new AnalysisView<>(scrollPane4,
+       			sc -> sc!=null ? decompileToJava(sc) : "// No generated code",
+       			code -> setCode(decompiledCode, code)));
 
+       	getResultTabPane().addChangeListener(e -> refreshSelectedAnalysisView());
        	processExecutionResult(null);
-       	
-       	treeAstNodes.addTreeSelectionListener(new TreeSelectionListener() {
-            @Override
-			public void valueChanged(TreeSelectionEvent e) {
-            	ASTTreeNode node = (ASTTreeNode)treeAstNodes.getLastSelectedPathComponent();
-            	if(node!=null) {
-            		textAstNodes.setText(node.node!=null ? node.node.toString()+"\n\n"+getDescriptionString(node.node) : "");
-            	} else {
-            		textAstNodes.setText("");
-            	}
-            }
+
+       	treeAstNodes.addTreeSelectionListener(e -> {
+        	ASTTreeNode node = (ASTTreeNode)treeAstNodes.getLastSelectedPathComponent();
+        	if(node!=null) {
+        		textAstNodes.setText(node.node!=null ? node.node.toString()+"\n\n"+getDescriptionString(node.node) : "");
+        	} else {
+        		textAstNodes.setText("");
+        	}
         });
 	}
 	
@@ -194,22 +220,12 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 
         ckGaltaJS = new JCheckBox("GaltaJS Extension");
         ckGaltaJS.setSelected(true);
-        ckGaltaJS.addActionListener(new ActionListener() {
-        	@Override
-			public void actionPerformed(ActionEvent e) {
-       			executeNow();
-        	}
-        });
+        ckGaltaJS.addActionListener(e -> executeNow());
         getToolbar().add(ckGaltaJS);
 		
         ckStrictMode = new JCheckBox("Strict Mode");
         ckStrictMode.setSelected(true);
-        ckStrictMode.addActionListener(new ActionListener() {
-        	@Override
-			public void actionPerformed(ActionEvent e) {
-       			executeNow();
-        	}
-        });
+        ckStrictMode.addActionListener(e -> executeNow());
         getToolbar().add(ckStrictMode);
 	}
 	@Override
@@ -217,41 +233,78 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 		super.initToolbarRight(toolBar);
 		
         ckOptimizer = new JCheckBox("Optimize Code");
-        ckOptimizer.addActionListener(new ActionListener() {
-        	@Override
-			public void actionPerformed(ActionEvent e) {
-       			executeNow();
-        	}
-        });
+        ckOptimizer.addActionListener(e -> executeNow());
         getToolbar().add(ckOptimizer);
 	}
 	
     @Override
-	public Object getExecutionOption(String key, Object defaultValue) {
-		if(GaltaJSExecutionEngine.OPTION_OPTIMIZE.equals(key)) {
-			return (Boolean)ckOptimizer.isSelected();
-		}
-		if(GaltaJSExecutionEngine.OPTION_GALTAJS.equals(key)) {
-			return (Boolean)ckGaltaJS.isSelected();
-		}
-		if(GaltaJSExecutionEngine.OPTION_STRICTMODE.equals(key)) {
-			return (Boolean)ckStrictMode.isSelected();
-		}
-		return defaultValue;
+	protected void collectExecutionOptions(Map<String,Object> options) {
+    	super.collectExecutionOptions(options);
+		options.put(GaltaJSExecutionEngine.OPTION_OPTIMIZE, ckOptimizer.isSelected());
+		options.put(GaltaJSExecutionEngine.OPTION_GALTAJS, ckGaltaJS.isSelected());
+		options.put(GaltaJSExecutionEngine.OPTION_STRICTMODE, ckStrictMode.isSelected());
 	}
-	
+
     @Override
 	protected void processExecutionResult(ExecutionResult r) {
-    	// We should do this only when the tab is selected
-    	if(r instanceof GaltaJSExecutionResult jr) {
-    		updateASTTree(jr.getScript());
-    		updateJavaCode(jr.getScript());
-    		updateDecompiler(jr.getScript());
-    	} else {
-    		buildASTTree(null);
-    		transpiledCode.setText("// No generated code");
-    		decompiledCode.setText("// No generated code");
+    	currentScript = r instanceof GaltaJSExecutionResult jr ? jr.getScript() : null;
+    	for(AnalysisView<?> v: analysisViews) {
+    		v.stale = true;
     	}
+    	refreshSelectedAnalysisView();
+    }
+
+    /**
+     * Brings the analysis view of the selected result tab, if it is one, up to
+     * date with the current script: computed on a background thread, then
+     * published on the event dispatch thread unless a newer script has
+     * replaced it in the meantime. The other views wait until their tab is
+     * selected.
+     */
+    private void refreshSelectedAnalysisView() {
+    	Component selected = getResultTabPane().getSelectedComponent();
+    	for(AnalysisView<?> v: analysisViews) {
+    		if(v.tab==selected && v.stale) {
+    			v.stale = false;
+    			v.refresh(currentScript);
+    		}
+    	}
+    }
+
+    /**
+     * One lazily computed analysis tab: compute runs on the analysis thread,
+     * publish on the event dispatch thread.
+     */
+    private final class AnalysisView<T> {
+    	final Component tab;
+    	final Function<JSInterpretedUnit,T> compute;
+    	final Consumer<T> publish;
+    	boolean stale = true;   // event dispatch thread only
+
+    	AnalysisView(Component tab, Function<JSInterpretedUnit,T> compute, Consumer<T> publish) {
+    		this.tab = tab;
+    		this.compute = compute;
+    		this.publish = publish;
+    	}
+
+    	void refresh(JSInterpretedUnit script) {
+    		analysisExecutor.execute(() -> {
+    			if(script!=currentScript) {
+    				return;   // superseded before it even started
+    			}
+    			T value = compute.apply(script);
+    			SwingUtilities.invokeLater(() -> {
+    				if(script==currentScript) {
+    					publish.accept(value);
+    				}
+    			});
+    		});
+    	}
+    }
+
+    private static void setCode(SyntaxTextArea area, String code) {
+    	area.setText(code);
+    	area.setCaretPosition(0);
     }
     
 	/**
@@ -361,7 +414,7 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 			// session on completion (only if this hasn't since been
 			// superseded by a newer session) fixes that.
 			final DebuggerImpl startedDebugger = debugger;
-			final Thread watcher = new Thread(() -> {
+			Thread.ofVirtual().name("galtajs-debug-session-watcher").start(() -> {
 				try {
 					startedDebugger.getExecutionThread().join();
 				} catch(InterruptedException e) {
@@ -373,9 +426,7 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 						cancelDebugSession();
 					}
 				});
-			}, "galtajs-debug-session-watcher");
-			watcher.setDaemon(true);
-			watcher.start();
+			});
 		}
 	}
 
@@ -419,9 +470,21 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
     /**
      * Launches Chrome (or another Chromium) on its inspect page. chrome:// is
      * not an OS-registered scheme, so the browser is started with the URL as
-     * an argument, per platform, first candidate that starts winning.
+     * an argument, per platform, first candidate that starts winning. Each
+     * candidate may take up to 2 seconds to tell, so this runs off the event
+     * dispatch thread.
      */
     private void openChromeInspect() {
+    	Thread.ofVirtual().name("galtajs-open-chrome-inspect").start(() -> {
+    		if(!launchChromeInspect()) {
+    			SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this,
+    	    			"Could not launch Chrome. Open chrome://inspect in a Chromium browser yourself;\nthe playground appears under Remote Target.",
+    	    			"Start the debugger server", JOptionPane.INFORMATION_MESSAGE));
+    		}
+    	});
+    }
+
+    private static boolean launchChromeInspect() {
     	final String url = "chrome://inspect/#devices";
     	final String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
     	final List<List<String>> candidates = new ArrayList<>();
@@ -440,18 +503,16 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
     		try {
     			Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
     			if(!process.waitFor(2, TimeUnit.SECONDS) || process.exitValue()==0) {
-    				return;   // still running, or done and content: the browser is on its way
+    				return true;   // still running, or done and content: the browser is on its way
     			}
     		} catch(IOException notThere) {
     			// try the next candidate
     		} catch(InterruptedException interrupted) {
     			Thread.currentThread().interrupt();
-    			return;
+    			return true;
     		}
     	}
-    	JOptionPane.showMessageDialog(this,
-    			"Could not launch Chrome. Open chrome://inspect in a Chromium browser yourself;\nthe playground appears under Remote Target.",
-    			"Start the debugger server", JOptionPane.INFORMATION_MESSAGE);
+    	return false;
     }
 
     // Called both when the window itself is closing and - by the base
@@ -477,20 +538,9 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
     }
 
     
-	protected void updateASTTree(JSInterpretedUnit sc) {
-		sc.getEnvironment().run(() -> {
-	    	buildASTTree(sc.getProgram());
-		});
-    }
-    
-	
 	//
 	// Transpiler
 	//
-	protected void updateJavaCode(JSInterpretedUnit sc) {
-		String code = transpiledToJava(sc);
-		transpiledCode.setText(code);
-    }
 	public String transpiledToJava(JSInterpretedUnit script) {
 		try {
 			JSTranspilerOptions opt = JSTranspilerOptions.newBuilder()
@@ -509,10 +559,6 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 	//
 	// Decompiler
 	//
-	protected void updateDecompiler(JSInterpretedUnit sc) {
-		String code = decompileToJava(sc);
-		decompiledCode.setText(code);
-    }
 	public String decompileToJava(JSInterpretedUnit script) {
 		try {
 			String javaCode = script.getProgram().decompile();
@@ -544,56 +590,38 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 			this.node = node;
 		}
 	}
-	public void buildASTTree(ASTProgram node) {
-		ASTTreeNode root = node != null ? createTreeNode(node) : new ASTTreeNode("<empty>");
-		treeAstNodes.setModel(new DefaultTreeModel(root));
-		expandAllNodes(treeAstNodes);
-	}
-
-	private void expandAllNodes(JTree tree) {
-		int j = tree.getRowCount();
-		int i = 0;
-		while (i < j) {
-			tree.expandRow(i);
-			i += 1;
-			j = tree.getRowCount();
+	/**
+	 * Builds the tree nodes of a script's AST - background work, any thread.
+	 */
+	private static ASTTreeNode createASTTree(JSInterpretedUnit sc) {
+		if(sc==null) {
+			return new ASTTreeNode("<empty>");
 		}
+		ASTTreeNode[] root = new ASTTreeNode[1];
+		sc.getEnvironment().run(() -> {
+			ASTProgram program = sc.getProgram();
+			root[0] = program!=null ? createTreeNode(program) : new ASTTreeNode("<empty>");
+		});
+		return root[0];
 	}
 
-	private ASTTreeNode createTreeNode(ASTNode node) {
-		ASTTreeNode treeNode;
-		treeNode = new ASTTreeNode(node);
+	private void setASTTree(ASTTreeNode root) {
+		treeAstNodes.setModel(new DefaultTreeModel(root));
+		JTreeUtil.expandAllNodes(treeAstNodes);
+	}
+
+	private static ASTTreeNode createTreeNode(ASTNode node) {
+		ASTTreeNode treeNode = new ASTTreeNode(node);
 		addChildren(treeNode);
-//		if (node instanceof ASTUnary) {
-//			ASTUnary n = (ASTUnary) node;
-//			treeNode = new ASTTreeNode(n, n.type.symbol());
-//			addChild(treeNode, n.node);
-//		} else {
-//			throw new ExpressionException(null, "Internal error: invalid ASTNode " + node.getClass());
-//		}
 		return treeNode;
 	}
 
-
-//	private ASTTreeNode addContainer(ASTTreeNode parent, String label) {
-//		String txt = label;
-//		ASTTreeNode treeNode = new ASTTreeNode(txt);
-//		parent.add(treeNode);
-//		return treeNode;
-//	}
-//
-//	private void addValue(ASTTreeNode parent, String label, Object value) {
-//		String txt = label + "=" + (value != null ? value.toString() : "");
-//		ASTTreeNode treeNode = new ASTTreeNode(txt);
-//		parent.add(treeNode);
-//	}
-
-	private void addChild(ASTTreeNode parent, ASTNode child) {
+	private static void addChild(ASTTreeNode parent, ASTNode child) {
 		ASTTreeNode treeNode = createTreeNode(child);
 		parent.add(treeNode);
 	}
 
-	private void addChildren(ASTTreeNode parent) {
+	private static void addChildren(ASTTreeNode parent) {
 		ASTNode node = parent.node;
 		if(node!=null) {
 			int sz = node.getChildCount();
@@ -613,25 +641,29 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 		return b.toString();
 	}
 	public static void readObject(TextBuilder b, Object o) {
+		Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+		visited.add(o);
+		readObject(b, o, visited);
+	}
+	private static void readObject(TextBuilder b, Object o, Set<Object> visited) {
 		List<Field> fields = new ArrayList<>();
 		for( Class<?> c=o.getClass(); c!=null && acceptClass(c); c=c.getSuperclass()) {
 			Field[] cfields = c.getDeclaredFields();
 			for(int i=0; i<cfields.length; i++) {
 				Field f = cfields[i];
-				if(acceptField(f)) {
-					f.setAccessible(true);
+				if(acceptField(f) && f.trySetAccessible()) {
 					fields.add(f);
 				}
 			}
 		}
 		fields.sort((f1,f2) -> f1.getName().compareToIgnoreCase(f2.getName()) );
-		
+
 		b.incIndent();
 		for(Field f: fields) {
 			try {
 				Object v = f.get(o);
 				b.print("{0}",f.getName());
-				printValue(b,v);
+				printValue(b,v,visited);
 			} catch (Exception e) {
 				b.println("{0}={1}",f.getName(),e.toString() );
 			}
@@ -639,17 +671,26 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 		b.decIndent();
 	}
 	public static void printValue(TextBuilder b, Object v) {
+		printValue(b, v, Collections.newSetFromMap(new IdentityHashMap<>()));
+	}
+	private static void printValue(TextBuilder b, Object v, Set<Object> visited) {
 		if(v!=null) {
 			Class<?> fc = v.getClass();
 			if(fc==String.class || fc==Boolean.class || Number.class.isAssignableFrom(fc)) {
 				b.println("={0}",DebugUtil.jsLiteral(SnippetEnvironment.staticValue, v, 128) );
+			} else if(isOpaque(fc)) {
+				// enums, records and JDK types print themselves: never
+				// introspected (no reflective access into JDK internals)
+				b.println("={0}", String.valueOf(v));
+			} else if(!visited.add(v)) {
+				b.println(", {0} <cycle>", fc.getName());
 			} else if(fc.isArray()) {
 				b.println(", {0}",Array.getLength(v));
 				b.incIndent();
 				int c = Array.getLength(v);
 				for(int i=0; i<c; i++) {
 					b.print("[{0}]",i);
-					printValue(b, Array.get(v, i));
+					printValue(b, Array.get(v, i), visited);
 				}
 				b.decIndent();
 			} else if(List.class.isAssignableFrom(fc)) {
@@ -659,7 +700,7 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 				int c = l.size();
 				for(int i=0; i<c; i++) {
 					b.print("[{0}]",i);
-					printValue(b, l.get(i));
+					printValue(b, l.get(i), visited);
 				}
 				b.decIndent();
 			} else if(Map.class.isAssignableFrom(fc)) {
@@ -668,16 +709,30 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
 				b.incIndent();
 				for(Map.Entry<?,?> e: m.entrySet()) {
 					b.print("{0}",e.getKey());
-					printValue(b, e.getValue());
+					printValue(b, e.getValue(), visited);
 				}
 				b.decIndent();
 			} else {
 				b.println(", {0}", fc.getName());
-				readObject(b,v);
+				readObject(b,v,visited);
 			}
 		} else {
 			b.println("=<null>");
 		}
+	}
+	/**
+	 * Types shown through their own toString(): enums, records and the JDK's
+	 * own classes - except arrays, lists and maps, which are expanded.
+	 */
+	static boolean isOpaque(Class<?> c) {
+		if(Enum.class.isAssignableFrom(c) || c.isRecord()) {
+			return true;
+		}
+		if(c.isArray() || List.class.isAssignableFrom(c) || Map.class.isAssignableFrom(c)) {
+			return false;
+		}
+		String name = c.getName();
+		return name.startsWith("java.") || name.startsWith("javax.") || name.startsWith("jdk.") || name.startsWith("sun.");
 	}
 	private static boolean acceptClass(Class<?> c) {
 		if(c==ASTNode.class) {

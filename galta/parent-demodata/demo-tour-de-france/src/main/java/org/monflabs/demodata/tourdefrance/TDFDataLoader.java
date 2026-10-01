@@ -22,7 +22,6 @@ import java.util.List;
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.impexp.csv.CsvSource;
 import org.monflabs.json.impexp.pojo.PojoTarget;
-import org.monflabs.util.Console;
 import org.monflabs.util.ResourceLoader;
 
 public class TDFDataLoader {
@@ -51,12 +50,5 @@ public class TDFDataLoader {
 		source.exportTo(target);
 		
 		return list;
-	}
-
-	public static void main(String[] args) {
-		List<Tour> l = TDFDataLoader.loadTours();
-		for(Tour v: l) {
-			Console.log("{0}",v);
-		}
 	}
 }

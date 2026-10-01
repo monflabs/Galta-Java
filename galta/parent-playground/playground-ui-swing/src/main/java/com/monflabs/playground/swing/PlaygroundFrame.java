@@ -18,8 +18,6 @@ package com.monflabs.playground.swing;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -27,12 +25,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
@@ -54,8 +53,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.event.TreeSelectionEvent;
-import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeSelectionModel;
 import javax.swing.tree.TreePath;
@@ -63,6 +60,7 @@ import javax.swing.tree.TreePath;
 import org.fife.rsta.ac.LanguageSupport;
 import org.fife.rsta.ac.LanguageSupportFactory;
 import org.fife.rsta.ac.java.JavaLanguageSupport;
+import org.fife.rsta.ac.java.buildpath.LibraryInfo;
 import org.fife.ui.rsyntaxtextarea.FileTypeUtil;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -85,6 +83,7 @@ import org.monflabs.util.StringFormat;
 import org.monflabs.util.StringUtil;
 import org.monflabs.util.UserPath;
 import org.monflabs.util.datetime.PeriodFormatter;
+import org.monflabs.util.path.FileSystemRuntimeException;
 import org.monflabs.util.path.FilesUtil;
 
 import com.monflabs.swing.components.MarkdownRenderer;
@@ -97,10 +96,20 @@ import com.monflabs.swing.rtsyntax.LibraryInfo2;
  */
 @SuppressWarnings("serial")
 public class PlaygroundFrame extends IDEFrame {
-	
+
+	/**
+	 * Execution option: whether the value of each top-level expression is
+	 * logged to the console (the "Log Expression Values" checkbox).
+	 */
+	public static final String OPTION_LOG_STATEMENTS = "LogStatements";
+
 	private ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
 	private volatile Runnable stopScript;
 	private final AtomicLong executionRequest = new AtomicLong();
+	// The options of the execution in progress, captured on the event dispatch
+	// thread when it was requested (see collectExecutionOptions()): the
+	// execution thread never reads a Swing component itself.
+	private volatile Map<String,Object> executionOptions = Map.of();
 	
     
     private ExecutionContext executionContext;
@@ -217,33 +226,18 @@ public class PlaygroundFrame extends IDEFrame {
     
     protected void initToolbarLeft(JToolBar toolBar) {
         btSaveSnippet = new JButton("Save Snippet");
-        btSaveSnippet.addActionListener(new ActionListener() {
-        	@Override
-			public void actionPerformed(ActionEvent e) {
-        		saveSnippet();
-        	}
-        });
+        btSaveSnippet.addActionListener(e -> saveSnippet());
         toolBar.add(btSaveSnippet);
         
         btnExecute = new JButton("Execute");
         btnExecute.setToolTipText("Execute the current snippet");
         toolBar.add(btnExecute);
-        btnExecute.addActionListener(new ActionListener() {
-        	@Override
-			public void actionPerformed(ActionEvent e) {
-       			executeNow();
-        	}
-        });
+        btnExecute.addActionListener(e -> executeNow());
         
         btnStop = new JButton("Stop");
         btnStop.setToolTipText("Stop the current execution");
         toolBar.add(btnStop);
-        btnStop.addActionListener(new ActionListener() {
-        	@Override
-			public void actionPerformed(ActionEvent e) {
-       			interupt();
-        	}
-        });
+        btnStop.addActionListener(e -> interupt());
         
         ckAutoExec = new JCheckBox("Auto Execute");
         toolBar.add(ckAutoExec);
@@ -252,23 +246,12 @@ public class PlaygroundFrame extends IDEFrame {
     protected void initToolbarRight(JToolBar toolBar) {
         ckLogStatement = new JCheckBox("Log Expression Values");
         ckLogStatement.setSelected(true);
-        //ckLogStatement.setSelected(true);
-        ckLogStatement.addActionListener(new ActionListener() {
-        	@Override
-			public void actionPerformed(ActionEvent e) {
-       			executeNow();
-        	}
-        });
+        ckLogStatement.addActionListener(e -> executeNow());
         getToolbar().add(ckLogStatement);
         
         JButton btnClearConsole = new JButton("Clear");
         btnClearConsole.setToolTipText("Clear the console");
-        btnClearConsole.addActionListener(new ActionListener() {
-        	@Override
-			public void actionPerformed(ActionEvent e) {
-        		TextAreaOutputStream.clear(edConsole);
-        	}
-        });
+        btnClearConsole.addActionListener(e -> TextAreaOutputStream.clear(edConsole));
         toolBar.add(btnClearConsole);
 
         ckWordWrap = new JCheckBox("Word Wrap");
@@ -308,10 +291,8 @@ public class PlaygroundFrame extends IDEFrame {
     private void init() {
     	btSaveSnippet.setVisible(PlaygroundConfiguration.get().isEditable());
         
-    	edConsole.setLineWrap(ckWordWrap.isSelected()); 
-    	
-    	AtomicBoolean eventsEnabled = new AtomicBoolean(true);
-    	
+    	edConsole.setLineWrap(ckWordWrap.isSelected());
+
     	initTitle();
         
         treePanel.setPreferredSize(new Dimension(250, 250));
@@ -350,21 +331,13 @@ public class PlaygroundFrame extends IDEFrame {
             	return canClose();
             }
         });
-        snippetTree.addTreeSelectionListener(new TreeSelectionListener() {
-            @Override
-			public void valueChanged(TreeSelectionEvent e) {
-            	eventsEnabled.set(false);
-            	try {
-	            	Object node = snippetTree.getLastSelectedPathComponent();
-	            	if(node instanceof ScratchpadTreeNode) {
-	            		loadScratchpad();
-	            	} else if(node instanceof SnippetTreeNode stn) {
-	            		loadSnippet(stn.treeNode);
-	            	}
-            	} finally {
-                	eventsEnabled.set(true);
-            	}
-            }
+        snippetTree.addTreeSelectionListener(e -> {
+        	Object node = snippetTree.getLastSelectedPathComponent();
+        	if(node instanceof ScratchpadTreeNode) {
+        		loadScratchpad();
+        	} else if(node instanceof SnippetTreeNode stn) {
+        		loadSnippet(stn.treeNode);
+        	}
         });
         
         // Select the first snippet
@@ -378,7 +351,7 @@ public class PlaygroundFrame extends IDEFrame {
 			// discarding: just flush whatever the debounce timer hasn't yet.
 			if(dirty) {
 				scratchpadSaveTimer.stop();
-				saveSnippet();
+				return saveSnippet();
 			}
 			return true;
 		}
@@ -390,8 +363,8 @@ public class PlaygroundFrame extends IDEFrame {
     		    		 	"Save Confirmation",
     		    		 	JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
 	    	    if(res == JOptionPane.YES_OPTION) {
-	    	    	saveSnippet();
-	    	    	return true;
+	    	    	// a failed save keeps the snippet open: nothing is lost
+	    	    	return saveSnippet();
 	    	    } else if (res == JOptionPane.NO_OPTION){
 	    	    	return true;
 	    	    } else {
@@ -479,7 +452,7 @@ public class PlaygroundFrame extends IDEFrame {
         executionContext = new PlaygroundExecutionContext(this, s) {
         	@Override
 			public boolean isLogStatements() {
-        		return ckLogStatement.isSelected();
+        		return Boolean.TRUE.equals(getExecutionOption(OPTION_LOG_STATEMENTS, Boolean.FALSE));
         	}
         };
     	
@@ -580,41 +553,35 @@ public class PlaygroundFrame extends IDEFrame {
         textArea.getDocument().addDocumentListener(new DocumentListener() {
 			@Override
 			public void removeUpdate(DocumentEvent e) {
-				if(!dirty) {
-					dirty = true;
-					initTitle();
-				}
-				executionContext.setContent(name, textArea.getText());
-				autoExecute();
-				if(scratchpadActive) {
-					scratchpadSaveTimer.restart();
-				}
+				textChanged(name, textArea);
 			}
 			@Override
 			public void insertUpdate(DocumentEvent e) {
-				if(!dirty) {
-					dirty = true;
-					initTitle();
-				}
-				executionContext.setContent(name, textArea.getText());
-				autoExecute();
-				if(scratchpadActive) {
-					scratchpadSaveTimer.restart();
-				}
+				textChanged(name, textArea);
 			}
 			@Override
-			public void changedUpdate(DocumentEvent arg0) {
-//	        	if(eventsEnabled.get()) {
-//		        	executeDelay();
-//	        	}
+			public void changedUpdate(DocumentEvent e) {
+				// attribute changes only: the text is the same
 			}
 		});
         
         initSyntaxTextArea(textArea, name);
         
         edConsole.setFont(textArea.getFont());
-        
+
         return scrollPane;
+    }
+
+    private void textChanged(String name, SyntaxTextArea textArea) {
+		if(!dirty) {
+			dirty = true;
+			initTitle();
+		}
+		executionContext.setContent(name, textArea.getText());
+		autoExecute();
+		if(scratchpadActive) {
+			scratchpadSaveTimer.restart();
+		}
     }
 
     
@@ -656,39 +623,60 @@ public class PlaygroundFrame extends IDEFrame {
 		LanguageSupportFactory lsf = LanguageSupportFactory.get();
 		LanguageSupport support = lsf.getSupportFor(SyntaxConstants.SYNTAX_STYLE_JAVA);
 		JavaLanguageSupport jls = (JavaLanguageSupport)support;
-		try {
-			//jls.getJarManager().addCurrentJreClassFileSource();
-			var info = LibraryInfo2.getMainJreJarInfo();
-			if(info!=null) {
-				jls.getJarManager().addClassFileSource(info);
+		// Indexing the JDK classes reads every entry of every module: done on
+		// a background thread, then registered on the event dispatch thread
+		// (the jar manager is not thread-safe), where it is now cheap.
+		Thread.ofVirtual().name("playground-java-completion").start(() -> {
+			try {
+				LibraryInfo info = LibraryInfo2.getMainJreJarInfo();
+				if(info!=null) {
+					info.createPackageMap();
+					SwingUtilities.invokeLater(() -> {
+						try {
+							jls.getJarManager().addClassFileSource(info);
+						} catch (IOException | RuntimeException e) {
+							Console.log(e);
+						}
+					});
+				}
+			} catch (IOException | RuntimeException e) {
+				// Code completion is a nicety: never fail the editor because of it
+				Console.log(e);
 			}
-		} catch (IOException | RuntimeException e) {
-			// Code completion is a nicety: never fail the editor because of it
-			Console.log(e);
-		}
+		});
     }
 
     
     //
     // Save snippet (dev mode)
     //
-    private void saveSnippet() {
+    /**
+     * Writes the snippet's modified files back to its folder. A failure is
+     * reported to the user and leaves the snippet dirty.
+     *
+     * @return true when the snippet was saved (or there was nothing to save)
+     */
+    private boolean saveSnippet() {
     	Snippet s = executionContext.getSnippet();
     	Path f = s.getFolder();
     	if(!f.getFileSystem().isReadOnly()) {
 			try (Stream<Path> stream = Files.list(FilesUtil.getRoot(executionContext.getSnippetFs()))) {
 			    stream
 			    	.filter(Files::isRegularFile)
-			    	.forEach( (p) -> {
-			    		saveFile(p);
-			    	});
-			} catch(IOException ex) {
+			    	.forEach(this::saveFile);
+			} catch(IOException | FileSystemRuntimeException ex) {
+				Console.log(ex);
+				JOptionPane.showMessageDialog(this,
+						StringFormat.format("The snippet {0} cannot be saved:\n{1}", f, ex.getMessage()),
+						"Save Snippet", JOptionPane.ERROR_MESSAGE);
+				return false;
 			}
     	}
     	if(dirty) {
     		dirty = false;
     		initTitle();
     	}
+    	return true;
     }
     
     private void saveFile(Path inMemoryFile) {
@@ -718,8 +706,22 @@ public class PlaygroundFrame extends IDEFrame {
     	}
     }
     
+	/**
+	 * The value of an option of the execution in progress, as captured by
+	 * {@link #collectExecutionOptions(Map)} when it was requested. Safe to
+	 * call from any thread.
+	 */
 	public Object getExecutionOption(String key, Object defaultValue) {
-		return defaultValue;
+		return executionOptions.getOrDefault(key, defaultValue);
+	}
+
+	/**
+	 * Captures the execution options from the UI: called on the event dispatch
+	 * thread when an execution is requested, so the execution thread never
+	 * reads a Swing component. Subclasses add their own options.
+	 */
+	protected void collectExecutionOptions(Map<String,Object> options) {
+		options.put(OPTION_LOG_STATEMENTS, ckLogStatement.isSelected());
 	}
 
     // To be overridden
@@ -748,16 +750,21 @@ public class PlaygroundFrame extends IDEFrame {
     	// Debounce: a request is dropped when a newer one was made before it started
     	final long request = executionRequest.incrementAndGet();
     	final ExecutionContext context = executionContext;
+    	final Map<String,Object> options = new HashMap<>();
+    	onEdt(() -> collectExecutionOptions(options));
     	executorService.schedule(() -> {
     		if(request!=executionRequest.get()) {
     			return;
     		}
-    		runExecution(context);
+    		runExecution(context, Map.copyOf(options));
     	}, delay, TimeUnit.MILLISECONDS);
     }
-	
-	private void runExecution(ExecutionContext context) {
+
+	private void runExecution(ExecutionContext context, Map<String,Object> options) {
 		long start = System.currentTimeMillis();
+		// One execution at a time (single-threaded executor): the options
+		// stay the same until the next one starts
+		executionOptions = options;
 		onEdt( () -> {
 			btnExecute.setEnabled(false);
 			btnStop.setEnabled(true);
@@ -818,7 +825,7 @@ public class PlaygroundFrame extends IDEFrame {
 	}
 	
 	private void reportException(Throwable t) {
-		if(isThreadDeath(t)) {
+		if(isEngineKill(t)) {
 			return;
 		}
 		if(isInterrupt(t)) {
@@ -873,16 +880,17 @@ public class PlaygroundFrame extends IDEFrame {
 		}
 	}
     
-	private boolean isThreadDeath(Throwable t) {
+	/**
+	 * Whether the failure is an engine reporting it was killed (GraalVM wraps
+	 * its own kill as a message mentioning ThreadDeath) - not worth a stack
+	 * trace. Thread.stop() no longer exists on Java 21, so a real ThreadDeath
+	 * cannot be thrown anymore.
+	 */
+	private static boolean isEngineKill(Throwable t) {
     	while(t!=null) {
-    		if(t instanceof ThreadDeath) {
-    			return true;
-    		}
     		String m = t.getMessage();
-    		if(m!=null) {
-	    		if(m.contains("ThreadDeath")) { // Graalvm...
-	    			return true;
-	    		}
+    		if(m!=null && m.contains("ThreadDeath")) {
+    			return true;
     		}
     		t = BaseException.getCause(t);
     	}

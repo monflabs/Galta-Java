@@ -113,7 +113,9 @@ public class GaltaJSExecutionEngine extends ExecutionEngine {
 		if(t!=null) {
 			t.interrupt();
 		}
-		Thread stopper = new Thread(() -> {
+		// a short-lived poller: a virtual thread (the script itself keeps
+		// running on its platform thread)
+		Thread.ofVirtual().name("galtajs-playground-stop").start(() -> {
 			long end = System.currentTimeMillis()+10_000;
 			while(getState()==STATE.RUNNING && System.currentTimeMillis()<end) {
 				InterpretedGlobalRuntimeContext c = runningContext;
@@ -126,9 +128,7 @@ public class GaltaJSExecutionEngine extends ExecutionEngine {
 					return;
 				}
 			}
-		}, "galtajs-playground-stop");
-		stopper.setDaemon(true);
-		stopper.start();
+		});
 	}
 	
 	private void installConsoleTrace(JSInterpretedUnit expr) {
