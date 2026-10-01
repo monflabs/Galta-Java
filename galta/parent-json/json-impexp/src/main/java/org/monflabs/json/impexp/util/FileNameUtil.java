@@ -15,12 +15,47 @@
  */
 package org.monflabs.json.impexp.util;
 
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+
 import org.monflabs.json.JsonException;
 import org.monflabs.json.impexp.file.FileBase;
 
 public class FileNameUtil {
 
 	private FileNameUtil() {}
+
+	/**
+	 * Detects the file names that only differ by their case.
+	 * <p>
+	 * On a case-insensitive file system (the default on Windows and macOS), "Abc.json"
+	 * and "abc.json" are the same file: the second document would silently overwrite
+	 * the first one. The names are checked whatever the actual file system, so an
+	 * export is portable.
+	 */
+	public static class CaseCollisionDetector {
+		private final Map<String,String> names = new HashMap<>();
+		/**
+		 * Registers a relative path, and throws an exception if a path that only differs
+		 * by its case was already registered.
+		 */
+		public void register(String path) {
+			String previous = names.putIfAbsent(path.toLowerCase(Locale.ROOT), path);
+			if(previous!=null && !previous.equals(path)) {
+				throw new JsonException(null,"File name {0} collides with {1} on a case-insensitive file system", path, previous);
+			}
+		}
+		/**
+		 * Unregisters a path, typically when the file is deleted.
+		 */
+		public void unregister(String path) {
+			names.remove(path.toLowerCase(Locale.ROOT), path);
+		}
+		public void clear() {
+			names.clear();
+		}
+	}
 
 	/**
 	 * Encodes a document id or a collection name so it can be used as a single file

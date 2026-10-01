@@ -95,6 +95,54 @@ public class CsvTargetTest extends ProjectTestCase {
 		assertEquals("b\n2\n", sw[0].toString().replace("\r\n","\n"));
 	}
 
+	// A schema without properties defines no column (it used to throw a NPE)
+	public void testColumnsFromSchemaWithoutProperties() throws Exception {
+		StringWriter sw = new StringWriter();
+		CsvTarget target = CsvTarget.newBuilder()
+								.writer(() -> sw)
+								.columnsFromSchema(JsonObject.of("type","object"))
+								.build();
+		assertNull(target.getColumns());
+		JsonContainerSource.newBuilder()
+								.format(JsonInMemoryFormat.RECORDS)
+								.container(JsonArray.parse("[{a:1}]"))
+								.build()
+								.exportTo(target);
+		assertEquals("a\n1\n", sw.toString().replace("\r\n","\n"));
+	}
+
+	// The writer is closed even when the flush fails
+	public void testWriterClosedWhenFlushFails() throws Exception {
+		boolean[] closed = new boolean[1];
+		java.io.Writer failing = new java.io.Writer() {
+			@Override
+			public void write(char[] cbuf, int off, int len) throws java.io.IOException {
+				throw new java.io.IOException("disk full");
+			}
+			@Override
+			public void flush() {
+			}
+			@Override
+			public void close() {
+				closed[0] = true;
+			}
+		};
+		CsvTarget target = CsvTarget.newBuilder()
+								.writer(() -> failing)
+								.build();
+		JsonContainerSource source = JsonContainerSource.newBuilder()
+								.format(JsonInMemoryFormat.RECORDS)
+								.container(JsonArray.parse("[{a:1}]"))
+								.build();
+		try {
+			source.exportTo(target);
+			fail("Exception expected");
+		} catch(RuntimeException ex) {
+			// expected
+		}
+		assertTrue(closed[0]);
+	}
+
 	public void testFileTarget() throws Exception {
 		JsonContainerSource source = JsonContainerSource.newBuilder()
 								.format(JsonInMemoryFormat.RECORDS)

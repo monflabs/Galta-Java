@@ -16,15 +16,9 @@
 package org.monflabs.json.impexp.impl;
 
 import java.time.Instant;
-import java.util.Collections;
-import java.util.Set;
-import java.util.function.BiConsumer;
-import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.LongSupplier;
-import java.util.function.Supplier;
-import java.util.stream.Collector;
 import java.util.stream.Stream;
 
 import org.monflabs.json.JsonException;
@@ -52,8 +46,6 @@ import org.monflabs.util.StringFormat;
 public abstract class JsonTargetImpl implements JsonTarget {
 
 	public static final int DEFAULT_NOTIFICATION_DELAY = 2000;
-
-    private static final Set<Collector.Characteristics> CH_ID = Collections.emptySet();
 
 	public static abstract class TargetBuilder<C extends JsonTarget, T extends TargetBuilder<C,?>> extends ObjectBuilder<C> {
 		private ReplicationTable replicationTable;
@@ -224,6 +216,9 @@ public abstract class JsonTargetImpl implements JsonTarget {
 		if(replicationTable==null) {
 			throw new JsonException(null,"Replication table should not be null");
 		}
+		if(!(this instanceof ReplicationTarget)) {
+			throw new JsonException(null,"{0} cannot be the target of a replication: it does not implement {1}", getClass().getName(), ReplicationTarget.class.getName());
+		}
 		ReplicationEngine engine = getReplicationEngine(source, resolver);
 		return engine.replicate();
 	}
@@ -287,6 +282,8 @@ public abstract class JsonTargetImpl implements JsonTarget {
 		protected long startTS;
 		protected long lastTS;
 		protected boolean closed;
+		// True while a transaction started by this engine is pending (neither committed nor rolled back)
+		protected boolean transactionOpen;
 		
 		protected void initEngine() {
 			closed = false;
@@ -296,6 +293,7 @@ public abstract class JsonTargetImpl implements JsonTarget {
 			estimatedCount = estimatedCountSupplier!=null ? estimatedCountSupplier.getAsLong() : -1;
 			startTS = lastTS = System.currentTimeMillis();
 			transactionCount = 0;
+			transactionOpen = false;
 			notify(JsonTargetImpl.Event.START, 0, 0, estimatedCount, 0);				
 		}
 		protected void closeEngine(ImportResult result) {
@@ -316,7 +314,10 @@ public abstract class JsonTargetImpl implements JsonTarget {
 			}
 			// A cancellation is reported as is, not wrapped as an error
 			RuntimeException ex = e instanceof CancelException ce ? ce : JsonException.wrap(e);
-			if(supportsTransaction() && getTransactionThreshold()>0) {
+			// Only roll back a transaction that is actually pending: the failure can happen
+			// before the first one is started, or while a new one is being started
+			if(transactionOpen) {
+				transactionOpen = false;
 				try {
 					rollbackTransaction();
 				} catch(Exception re) {
@@ -333,15 +334,43 @@ public abstract class JsonTargetImpl implements JsonTarget {
 			}
 			return ex;
 		}
+		protected boolean usesTransactions() {
+			return supportsTransaction() && getTransactionThreshold()>0;
+		}
+		protected void beginEngineTransaction() {
+			if(usesTransactions()) {
+				startTransaction();
+				transactionOpen = true;
+			}
+		}
+		protected void commitEngineTransaction() {
+			if(transactionOpen) {
+				// Once commit is called the transaction is no longer pending, even if it fails
+				transactionOpen = false;
+				commitTransaction();
+			}
+		}
 		protected void saveTemporaryTransaction() {
-    		if(supportsTransaction() && getTransactionThreshold()>0) {
+    		if(usesTransactions()) {
     			transactionCount++;
     			if(transactionCount>=getTransactionThreshold()) {
-    				commitTransaction();
-    				startTransaction();
+    				commitEngineTransaction();
+    				beginEngineTransaction();
     				transactionCount = 0;
     			}
     		}
+		}
+		/**
+		 * Writes every content of the stream to the target, closing the stream.
+		 */
+		protected void processStream(Stream<JsonContent> stream, Consumer<JsonContent> processor) {
+			try (Stream<JsonContent> content=stream) {
+				// Sequential: the engine state (counts, transaction) is not thread safe
+				content.sequential().forEach(c -> {
+					processor.accept(c);
+					saveTemporaryTransaction();
+				});
+			}
 		}
 		
 	    public void saveJsonContent(ImportResult result, JsonContent content) {
@@ -357,6 +386,14 @@ public abstract class JsonTargetImpl implements JsonTarget {
 			if(cancel) {
 				notify(JsonTargetImpl.Event.CANCEL, result.getProcessed(), result.getDeleted(), estimatedCount, 0);				
 				throw new CancelException();
+			}
+			// A target that cannot delete ignores the deletions: they are neither written
+			// nor counted as deleted
+			if(content.getType()==TYPE.DELETION && !supportsDeletions()) {
+				if(count && result instanceof ReplicationResult rr) {
+					rr.addIgnored();
+				}
+				return;
 			}
 			long nowTS = System.currentTimeMillis();
 			if( (nowTS-lastTS)>=notificationDelay ) {
@@ -412,49 +449,12 @@ public abstract class JsonTargetImpl implements JsonTarget {
 		protected ImportResult importData() {
 			try {
 				initEngine();
-				
-				if(supportsTransaction() && getTransactionThreshold()>0) {
-					startTransaction();
-				}
+				beginEngineTransaction();
 				
 				ImportResult result = new ImportResult();
-				Collector<JsonContent, Object, Void> collector = new Collector<JsonContent, Object, Void>() {
-					@Override
-					public Supplier<Object> supplier() {
-				    	return () -> {
-				    		return null;
-				    	};
-				    }
-				    @Override
-					public BiConsumer<Object, JsonContent> accumulator() {
-				    	return (t,content) -> {
-				    		saveJsonContent(result,content);
-				    		saveTemporaryTransaction();
-				    	};
-				    }
-				    @Override
-					public BinaryOperator<Object> combiner() {
-				   		return null;
-				    }
-				    @Override
-					public Function<Object,Void> finisher() {
-				    	return (a) -> {
-				    		return (Void)null;
-				    	};
-				    }
-				    @Override
-					public Set<Characteristics> characteristics() {
-				    	return CH_ID;
-				    }
-				};
-				
-				try (Stream<JsonContent> content=source.stream(filter)) {
-					content.collect(collector);
-				}
+				processStream(source.stream(filter), content -> saveJsonContent(result,content));
 
-				if(supportsTransaction() && getTransactionThreshold()>0) {
-					commitTransaction();
-				}
+				commitEngineTransaction();
 				
 				closeEngine(result);
 				
@@ -482,58 +482,25 @@ public abstract class JsonTargetImpl implements JsonTarget {
 
 		protected ReplicationResult replicate() {
 			long start = System.currentTimeMillis();
-			Instant lastReplication = replicationTable.lastReplication(source.getReplicationId(), ((ReplicationTarget)JsonTargetImpl.this).getReplicationId());
+			String targetId = ((ReplicationTarget)JsonTargetImpl.this).getReplicationId();
+			Instant lastReplication = replicationTable.lastReplication(source.getReplicationId(), targetId);
 			RangeFilter rangeFilter = new RangeFilter(lastReplication, replicationTable.now());
 			try {
 				initEngine();
-				if(supportsTransaction() && getTransactionThreshold()>0) {
-					startTransaction();
-				}
+				beginEngineTransaction();
 				
 				ReplicationResult result = new ReplicationResult();
 				result.setRangeFilter(rangeFilter);
 
-				Collector<JsonContent, Object, Void> collector = new Collector<JsonContent, Object, Void> () {
-					@Override
-					public Supplier<Object> supplier() {
-				    	return () -> {
-				    		return null;
-				    	};
-					}
-					@Override
-					public BiConsumer<Object, JsonContent> accumulator() {
-				    	return (t,content) -> {
-				    		replicateContent(content,rangeFilter.getSince(),result);
-				    		saveTemporaryTransaction();
-				    	};
-					}
-					@Override
-					public BinaryOperator<Object> combiner() {
-						return null;
-					}
-					@Override
-					public Function<Object, Void> finisher() {
-				    	return (a) -> {
-				    		return (Void)null;
-				    	};
-					}
-					@Override
-					public Set<Characteristics> characteristics() {
-				    	return CH_ID;
-					}
-				};
-				try (Stream<JsonContent> content=source.stream(rangeFilter)) {
-					content.collect(collector);
-				}
+				processStream(source.stream(rangeFilter), content -> replicateContent(content,rangeFilter.getSince(),result));
 				long end = System.currentTimeMillis();
 				result.setDuration(end-start);
-				
-				// This can be done in the same transaction that the target updates
-				replicationTable.saveReplication(source.getReplicationId(), ((ReplicationTarget)JsonTargetImpl.this).getReplicationId(), rangeFilter.getUntil(), result);
 
-				if(supportsTransaction() && getTransactionThreshold()>0) {
-					commitTransaction();
-				}
+				// The watermark is only saved once the target changes are committed: saving it
+				// first would make a failed commit lose these changes for good, as the next
+				// replication would start after them
+				commitEngineTransaction();
+				replicationTable.saveReplication(source.getReplicationId(), targetId, rangeFilter.getUntil(), result);
 
 				closeEngine(result);
 				return result;
@@ -543,6 +510,11 @@ public abstract class JsonTargetImpl implements JsonTarget {
 		}
 
 		protected void replicateContent(JsonContent content, Instant lastRep, ReplicationResult result) {
+			if(content.getType()==TYPE.DELETION && !supportsDeletions()) {
+				// Not a conflict either: the target ignores the deletions
+				result.addIgnored();
+				return;
+			}
 			JsonKey key = content.getKey();
 			
 			// Check for a replication conflict

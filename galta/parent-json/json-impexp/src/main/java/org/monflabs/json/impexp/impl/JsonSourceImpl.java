@@ -52,11 +52,22 @@ public abstract class JsonSourceImpl implements JsonSource {
 
 	@Override
 	public final Stream<JsonContent> stream(RangeFilter filter) {
-		init(filter);
-		Stream<JsonContent> stream = createJsonContentStream();
+		Stream<JsonContent> stream;
+		try {
+			init(filter);
+			stream = createJsonContentStream();
+		} catch(RuntimeException | Error e) {
+			// init() may have opened resources (a reader...) before failing: the caller
+			// never gets a stream to close, so release them here
+			try {
+				close();
+			} catch(Exception ce) {
+				e.addSuppressed(ce);
+			}
+			throw e;
+		}
 		if(stream!=null) {
-			stream.onClose(this::close);
-			return stream;
+			return stream.onClose(this::close);
 		} else {
 			close();
 			return Stream.empty();

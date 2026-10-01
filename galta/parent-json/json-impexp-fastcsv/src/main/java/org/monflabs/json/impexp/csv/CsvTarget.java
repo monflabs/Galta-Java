@@ -29,7 +29,6 @@ import org.monflabs.json.impexp.JsonContent;
 import org.monflabs.json.impexp.JsonContent.TYPE;
 import org.monflabs.json.impexp.impl.JsonTargetImpl;
 import org.monflabs.json.jsonschema.SchemaNode;
-import org.monflabs.util.IOStreamUtil;
 import org.monflabs.util.iterators.Iterators;
 
 import de.siegmar.fastcsv.writer.CsvWriter;
@@ -91,12 +90,17 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 			columns.put(name,new Column(name,cellWriter));
 			return this;
 		}
+		/**
+		 * Defines a column for every property of the schema. A schema without properties
+		 * defines no column (they are then inferred from the first record).
+		 */
 		public Builder columnsFromSchema(JsonObject schema) {
 			SchemaNode node = new SchemaNode(schema);
-			node.getProperties().entrySet().forEach( (e) -> {
+			Map<String,SchemaNode> props = node.getProperties();
+			if(props!=null) {
 				// The JSON value is converted automatically to a string
-				column(e.getKey());
-			});
+				props.keySet().forEach(this::column);
+			}
 			return this;
 		}
 		public Builder firstRowAsHeader(boolean firstRowAsHeader) {
@@ -179,25 +183,34 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 		CsvWriter cw = csvWriter;
 		writer = null;
 		csvWriter = null;
+		JsonException error = null;
 		if(cw!=null) {
 			// The CSV writer buffers internally: push its content to the writer
 			// before the writer is closed or handed back to the caller
 			try {
 				cw.flush();
 			} catch(IOException ex) {
-				throw new JsonException(ex,"Error while flushing the CSV writer");
+				error = new JsonException(ex,"Error while flushing the CSV writer");
 			}
 		}
 		if(w!=null) {
-			if(closeWriter) {
-				IOStreamUtil.close(w);
-			} else {
-				try {
+			// The writer is closed even when the flush failed, so it is not leaked
+			try {
+				if(closeWriter) {
+					w.close();
+				} else {
 					w.flush();
-				} catch(IOException ex) {
-					throw new JsonException(ex,"Error while flushing the CSV writer");
+				}
+			} catch(IOException ex) {
+				if(error==null) {
+					error = new JsonException(ex,"Error while closing the CSV writer");
+				} else {
+					error.addSuppressed(ex);
 				}
 			}
+		}
+		if(error!=null) {
+			throw error;
 		}
 	}
 

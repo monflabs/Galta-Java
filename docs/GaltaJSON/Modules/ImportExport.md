@@ -34,6 +34,8 @@ JsonKey.parse("customers!!c-42");       // the same key
 JsonKey.of(null, "c-42").keyString();   // -> "c-42": no collection
 ```
 
+A `!` or a `\` inside the collection or the id is escaped with a `\` in the key string, so `parse()` always gives back the same key (`JsonKey.of(null, "a!!b")` is `"a\!\!b"`, not the collection `a`). A target that does not support deletions (`supportsDeletions()` is false) ignores the deleted documents: they are not counted as deleted.
+
 ## A first export
 
 Sample: `doc_examples/impexp/ImportExportExamples.java` (`testContainerToFiles`)

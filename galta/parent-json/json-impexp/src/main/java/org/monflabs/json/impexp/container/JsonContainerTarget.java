@@ -15,15 +15,14 @@
  */
 package org.monflabs.json.impexp.container;
 
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.monflabs.json.JsonArray;
 import org.monflabs.json.JsonContainer;
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.impexp.JsonContent;
+import org.monflabs.json.impexp.JsonKey;
 import org.monflabs.json.impexp.impl.JsonTargetImpl;
 import org.monflabs.util.StringUtil;
 
@@ -54,7 +53,7 @@ public class JsonContainerTarget extends JsonTargetImpl {
 	private JsonContainer container;
 	// RECORDSWITHKEYS: index of the entries by (collection,id), built by init() from
 	// the current container content
-	private Map<List<String>,JsonObject> keyIndex;
+	private Map<JsonKey,JsonObject> keyIndex;
 
 	protected JsonContainerTarget(Builder builder) {
 		super(builder);
@@ -76,17 +75,26 @@ public class JsonContainerTarget extends JsonTargetImpl {
 		return container;
 	}
 
+	/**
+	 * The formats that are not keyed (RECORDS, RECORDSBYCOL) cannot delete an entry.
+	 */
+	@Override
+	public boolean supportsDeletions() {
+		return format!=JsonInMemoryFormat.RECORDS && format!=JsonInMemoryFormat.RECORDSBYCOL;
+	}
+
 	@Override
 	public void init() {
 		keyIndex = null;
 	}
 	
-	private Map<List<String>,JsonObject> getKeyIndex() {
+	private Map<JsonKey,JsonObject> getKeyIndex() {
 		if(keyIndex==null) {
 			keyIndex = new HashMap<>();
 			for(Object o: (JsonArray)container) {
 				if(o instanceof JsonObject e) {
-					keyIndex.put(Arrays.asList(e.getString("collection"),e.getString("id")), e);
+					// JsonKey normalizes a missing collection/id the same way the contents do
+					keyIndex.put(JsonKey.of(e.getString("collection",null),e.getString("id",null)), e);
 				}
 			}
 		}
@@ -108,7 +116,7 @@ public class JsonContainerTarget extends JsonTargetImpl {
 					}
 					case RECORDSWITHKEYS -> {
 						// Upsert: a key that is already in the container gets its value replaced
-						List<String> key = Arrays.asList(content.getKey().getCollection(), content.getKey().getId());
+						JsonKey key = content.getKey();
 						JsonObject existing = getKeyIndex().get(key);
 						if(existing!=null) {
 							existing.put("value", content.getJson());
@@ -141,16 +149,15 @@ public class JsonContainerTarget extends JsonTargetImpl {
 						// Can't delete, no key...
 					}
 					case RECORDSWITHKEYS -> {
-						JsonArray objects = (JsonArray)container;
-						String col = content.getKey().getCollection();
-						String id = content.getKey().getId();
-						getKeyIndex().remove(Arrays.asList(col,id));
-						for(int i=0; i<objects.size(); ) {
-							JsonObject o = objects.getObject(i);
-							if(StringUtil.equals(col, o.getString("collection")) && StringUtil.equals(id, o.getString("id")) ) {
-								objects.remove(i);
-							} else {
-								i++;
+						JsonObject existing = getKeyIndex().remove(content.getKey());
+						if(existing!=null) {
+							// Find the indexed entry by identity, without comparing the keys
+							JsonArray objects = (JsonArray)container;
+							for(int i=objects.size()-1; i>=0; i--) {
+								if(objects.get(i)==existing) {
+									objects.remove(i);
+									break;
+								}
 							}
 						}
 					}

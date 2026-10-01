@@ -15,9 +15,12 @@
  */
 package org.monflabs.json.impexp.replication.impl;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -36,7 +39,9 @@ import org.monflabs.util.path.FilesUtil;
  * { "source1": { "target1": "2026-01-01T10:00:00Z", "target2": "..." }, ... }
  * </pre>
  * The file is read and rewritten on every access, and the methods are synchronized
- * on the table instance, so a table instance can be shared by several targets.
+ * on the table instance, so a table instance can be shared by several targets. The
+ * file is replaced atomically (written to a temporary file, then moved), so a crash
+ * while saving cannot leave a truncated table.
  */
 public class FileReplicationTable implements ReplicationTable {
 	
@@ -107,9 +112,23 @@ public class FileReplicationTable implements ReplicationTable {
 			if(parent!=null && !Files.exists(parent)) {
 				Files.createDirectories(parent);
 			}
-			FilesUtil.writeString(file,table.stringify(),StandardCharsets.UTF_8);
+			writeAtomically(file, table.stringify());
 		} catch (Exception e) {
 			throw new JsonException(e,"Error while saving replication file {0}",file);
+		}
+	}
+	
+	private static void writeAtomically(Path file, String content) throws IOException {
+		Path tmp = Files.createTempFile(file.getParent(), file.getFileName().toString()+".", ".tmp");
+		try {
+			Files.writeString(tmp, content, StandardCharsets.UTF_8);
+			try {
+				Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			} catch(AtomicMoveNotSupportedException e) {
+				Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
+			}
+		} finally {
+			Files.deleteIfExists(tmp);
 		}
 	}
 }

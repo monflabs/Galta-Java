@@ -80,17 +80,18 @@ public class PojoTarget<T> extends JsonTargetImpl {
 		}
 	}
 
+	/**
+	 * The writer receives every content, deletions included, and decides what to do with them.
+	 */
+	@Override
+	public boolean supportsDeletions() {
+		return true;
+	}
+
 	@Override
 	public void saveJsonContent(JsonContent content) {
-//		switch(content.getType()) {
-//			case RECORD -> {
-				if(writer!=null) {
-					writer.accept(content);
-				}
-//			}
-//			default -> {
-//				throw new NotImplementedException();
-//			}
-//		}
+		if(writer!=null) {
+			writer.accept(content);
+		}
 	}
 }

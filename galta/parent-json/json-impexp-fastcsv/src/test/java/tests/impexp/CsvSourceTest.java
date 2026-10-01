@@ -165,6 +165,20 @@ public class CsvSourceTest extends ProjectTestCase {
 		source2.close();
 		assertTrue(reader2.closed);
 	}
+	// A duplicate header column fails stream() after the reader was opened: it must be closed
+	public void testStreamClosesReaderOnDuplicateHeader() throws Exception {
+		TrackingReader reader = new TrackingReader("c1,c1\na,b");
+		CsvSource source = CsvSource.newBuilder()
+						.reader(() -> reader)
+						.build();
+		try {
+			source.stream(null).close();
+			fail("Duplicate header expected");
+		} catch(JsonException ex) {
+			assertTrue(ex.getMessage(), ex.getMessage().contains("Duplicate"));
+		}
+		assertTrue(reader.closed);
+	}
 	private static class TrackingReader extends StringReader {
 		boolean closed;
 		TrackingReader(String s) {

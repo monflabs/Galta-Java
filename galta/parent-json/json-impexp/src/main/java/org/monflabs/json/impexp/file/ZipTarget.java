@@ -22,6 +22,8 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -151,6 +153,11 @@ public class ZipTarget extends JsonTargetImpl implements FileBase {
 			}
 			try {
 				ZipEntry e = new ZipEntry(entryName);
+				// Keep the content timestamp, which the zip sources read back
+				Instant ts = content.getTimestamp();
+				if(ts!=null) {
+					e.setLastModifiedTime(FileTime.from(ts));
+				}
 				zipOs.putNextEntry(e);
 				Writer w = new OutputStreamWriter(zipOs,StandardCharsets.UTF_8);
 				Object json = content.getJson();

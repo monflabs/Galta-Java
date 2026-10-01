@@ -84,6 +84,8 @@ public class FileTarget extends JsonTargetImpl implements FileBase {
 	private int subdirLevels;
 	private boolean clearOnStart;
 	private boolean keepTimestamp;
+	// Names written by the current import, to detect the ones that only differ by their case
+	private final FileNameUtil.CaseCollisionDetector collisions = new FileNameUtil.CaseCollisionDetector();
 
 	protected FileTarget(Builder builder) {
 		super(builder);
@@ -113,6 +115,7 @@ public class FileTarget extends JsonTargetImpl implements FileBase {
 
 	@Override
 	public void init() {
+		collisions.clear();
 		FileUtil.prepareDirectory(getRoot(),clearOnStart);
 	}
 
@@ -121,26 +124,36 @@ public class FileTarget extends JsonTargetImpl implements FileBase {
 	}
 
 	@Override
-	public void saveJsonContent(JsonContent content) {
+	public synchronized void saveJsonContent(JsonContent content) {
 		String key = content.getKey().getId();
 		File parent = getRoot();
+		String folder = null;
 		if(!isIgnoreCollection()) {
 			String collection = content.getKey().getCollection();
 			if(StringUtil.isNotEmpty(collection)) {
-				parent = new File(parent,FileNameUtil.encodeCollectionFolder(collection));
-				if(content.getType()==TYPE.RECORD) {
-					parent.mkdirs();
-				}
+				folder = FileNameUtil.encodeCollectionFolder(collection);
+				parent = new File(parent,folder);
 			}
 		}
-		if(subdirLevels>0) {
-			String subpath = FilenameHash.hash(key, subdirLevels);
+		String fileName = FileNameUtil.encodeFilename(key)+".json";
+		String subpath = subdirLevels>0 ? FilenameHash.hash(key, subdirLevels) : null;
+		// The path relative to the root, used to detect the case collisions
+		String relPath = (folder!=null ? folder+"/" : "") + (subpath!=null ? subpath+"/" : "") + fileName;
+		if(content.getType()==TYPE.RECORD) {
+			// Two collections only differing by their case would share a folder
+			if(folder!=null) {
+				collisions.register(folder+"/");
+			}
+			collisions.register(relPath);
+			parent.mkdirs();
+		}
+		if(subpath!=null) {
 			parent = new File(parent,subpath);
 			if(content.getType()==TYPE.RECORD) {
 				parent.mkdirs();
 			}
 		}
-		File doc = new File(parent,FileNameUtil.encodeFilename(key)+".json");
+		File doc = new File(parent,fileName);
 		switch(content.getType()) {
 			case RECORD -> {
 				try(Writer fw = new FastBufferedWriter(new FileWriter(doc,StandardCharsets.UTF_8))) {
@@ -157,6 +170,7 @@ public class FileTarget extends JsonTargetImpl implements FileBase {
 				}
 			}
 			case DELETION -> {
+				collisions.unregister(relPath);
 				doc.delete();
 			}
 		}

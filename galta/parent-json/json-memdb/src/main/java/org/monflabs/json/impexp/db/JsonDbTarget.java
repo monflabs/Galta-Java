@@ -64,6 +64,11 @@ public class JsonDbTarget extends JsonTargetImpl implements ReplicationTarget {
 	}
 	
 	@Override
+	public boolean supportsDeletions() {
+		return true;
+	}
+	
+	@Override
 	public String getReplicationId() {
 		return db.getReplicationId();
 	}
