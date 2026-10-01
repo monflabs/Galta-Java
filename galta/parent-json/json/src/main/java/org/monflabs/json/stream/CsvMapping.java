@@ -19,6 +19,8 @@ import java.lang.reflect.Array;
 import java.util.List;
 import java.util.function.Function;
 
+import org.monflabs.json.JsonUtil;
+
 /**
  * CSV &lt;-&gt; Json data converters for streams.
  * 
@@ -58,8 +60,10 @@ public class CsvMapping {
 	 * The function is stateless and can be used by a parallel stream.
 	 */
 	public static Function<Object, String> toCsvStrings(char fieldSeparator, QuoteStrategy quoteStrategy) {
-		// A new encoder per row: its buffers must not be shared between threads
-		return row -> new CsvStringHandler(fieldSeparator,quoteStrategy).toCsvString(row);
+		// One encoder per thread (and per function): its buffers are reused from row to row,
+		// and never shared between threads
+		ThreadLocal<CsvStringHandler> handler = ThreadLocal.withInitial(() -> new CsvStringHandler(fieldSeparator,quoteStrategy));
+		return row -> handler.get().toCsvString(row);
 	}
 	
 	// https://en.wikipedia.org/wiki/Comma-separated_values
@@ -156,7 +160,8 @@ public class CsvMapping {
 	        
 	        // We convert the non string values to a string
 	        // Note that even Numbers have to be checked for encoding as they can contain a ',' as the decimal separator
-        	String str = value.toString();
+        	// A number is written as in JSON (1e10 is 10000000000, not 1.0E10)
+        	String str = value instanceof Number n ? JsonUtil.toString(n) : value.toString();
         	int length = str.length();
 
         	if(length==0) {

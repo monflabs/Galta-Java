@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.monflabs.json.JsonArray;
+import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.JsonUtil;
 import org.monflabs.json.jsonpath.JsonValues;
@@ -125,6 +126,23 @@ public class JsonObjectAsLinkedMap extends LinkedHashMap<String, Object> impleme
 		return JavaJsonFactory.instance;
 	}
 
+
+	// The last entry of the linked map, without iterating over all the values
+	@SuppressWarnings("unchecked")
+	@Override
+	public <T> T lastValue() {
+		Map.Entry<String,Object> e = lastEntry();
+		if(e==null) {
+			throw new JsonException(null,"Collection is empty");
+		}
+		return (T)e.getValue();
+	}
+	@SuppressWarnings("unchecked")
+	@Override
+	public <T> T lastValueOrDefault(T defaultValue) {
+		Map.Entry<String,Object> e = lastEntry();
+		return e!=null ? (T)e.getValue() : defaultValue;
+	}
 
 	@Override
 	public String getReference() {

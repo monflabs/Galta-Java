@@ -17,12 +17,9 @@ notice, reproduced in the header of each file:
   galta/parent-js/js/src/main/java/org/monflabs/galtajs/rt/builtins/standard/temporal
 - Ryu floating point formatting by Ulf Adams (Apache License 2.0)
   galta/parent-utilities/utilities/src/main/java/org/monflabs/util/impl/ryu
-- LinkedTreeMap from Gson, Google Inc. and The Android Open Source Project (Apache License 2.0)
-  galta/parent-json/json/src/main/java/org/monflabs/json/java/LinkedTreeMap.java
 - json-smart and json-simple parser classes (Apache License 2.0)
   galta/parent-json/json/src/main/java/org/monflabs/json/parser/JsonParser.java
   galta/parent-json/json/src/main/java/org/monflabs/json/parser/ParseException.java
-  galta/parent-json/json/src/main/java/org/monflabs/json/parser/ContentHandler.java
 - JTreeTable, Sun Microsystems (BSD-style license)
   galta/parent-ui/parent-ui-swing/ui-swing/src/main/java/org/monflabs/ui/swing/components/treetable
 - Jdk9LibraryInfo, derived from RSyntaxTextArea by Robert Futrell (BSD 3-Clause License)

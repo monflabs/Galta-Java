@@ -63,7 +63,6 @@ import tests.json.streams.ArrayStreamsTest;
 import tests.json.streams.CsvStreamsTest;
 import tests.json.util.JsonDateTimeTest;
 import tests.json.util.JsonUtilTest;
-import tests.json.util.LinkedTreeMapTest;
 import tests.json.yaml.YamlTest;
 
 public class JsonTestSuite  {
@@ -212,7 +211,6 @@ public class JsonTestSuite  {
 		// util
 		suite.addTestSuite(JsonDateTimeTest.class);
 		suite.addTestSuite(JsonUtilTest.class);
-		suite.addTestSuite(LinkedTreeMapTest.class);
 		suite.addTestSuite(tests.json.factory.FastPathsTest.class);
 		suite.addTestSuite(tests.json.util.NumberEqualityTest.class);
 

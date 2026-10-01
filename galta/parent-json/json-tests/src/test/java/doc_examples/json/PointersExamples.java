@@ -128,8 +128,8 @@ public class PointersExamples extends ProjectTestCase {
 		JsonReference.resolve(JsonFactory.get(), schema, new JsonReference.Resolver(schema), true);
 		JsonStringifier.StringSerializer s = new JsonStringifier.StringSerializer();
 		s.setOutputReferences(true);
-		// The shared target carries the reference, at both places
-		assertEquals("{\"defs\":{\"u\":{\"$ref\":\"#/defs/u\"}},\"p\":{\"$ref\":\"#/defs/u\"}}", s.stringify(schema));
+		// The reference is written where it was, the definition keeps its content
+		assertEquals("{\"defs\":{\"u\":{\"t\":1}},\"p\":{\"$ref\":\"#/defs/u\"}}", s.stringify(schema));
 	}
 
 	public void testResolveExternalReferences() throws Exception {

@@ -38,10 +38,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNull;
 import org.monflabs.util.DtoA;
@@ -680,6 +678,20 @@ public abstract class JsonUtil extends TypeUtil {
 		return l>Integer.MAX_VALUE ? Integer.MAX_VALUE : l<Integer.MIN_VALUE ? Integer.MIN_VALUE : (int)l;
 	}
 	/**
+	 * The short value of a number, saturated like {@link #clampToInt(Number)}.
+	 */
+	public static short clampToShort(Number n) {
+		int i = clampToInt(n);
+		return i>Short.MAX_VALUE ? Short.MAX_VALUE : i<Short.MIN_VALUE ? Short.MIN_VALUE : (short)i;
+	}
+	/**
+	 * The byte value of a number, saturated like {@link #clampToInt(Number)}.
+	 */
+	public static byte clampToByte(Number n) {
+		int i = clampToInt(n);
+		return i>Byte.MAX_VALUE ? Byte.MAX_VALUE : i<Byte.MIN_VALUE ? Byte.MIN_VALUE : (byte)i;
+	}
+	/**
 	 * The long value of a number, saturated like {@link #clampToInt(Number)}.
 	 */
 	public static long clampToLong(Number n) {
@@ -841,25 +853,29 @@ public abstract class JsonUtil extends TypeUtil {
 			case OBJECT: {
 				JsonObject j1 = (JsonObject)o1;
 				JsonObject j2 = (JsonObject)o2;
-
-				Set<String> allKeys = new HashSet<>();
-				allKeys.addAll(j1.keySet());
-				allKeys.addAll(j2.keySet());
-				String[] keys = allKeys.toArray(new String[allKeys.size()]);
-				Arrays.sort(keys);
-				for(String k: keys) {
-					if(!j1.has(k)) {
-						return -1;
+				// Walk the 2 sorted key lists together (the union of the keys, in order): the
+				// first key only present in one of the objects makes the other one smaller
+				String[] k1 = j1.keySet().toArray(new String[0]);
+				String[] k2 = j2.keySet().toArray(new String[0]);
+				Arrays.sort(k1);
+				Arrays.sort(k2);
+				int i1 = 0, i2 = 0;
+				while(i1<k1.length && i2<k2.length) {
+					int kc = k1[i1].compareTo(k2[i2]);
+					if(kc<0) {
+						return 1;	// k1[i1] is missing from j2
 					}
-					if(!j2.has(k)) {
-						return 1;
+					if(kc>0) {
+						return -1;	// k2[i2] is missing from j1
 					}
-					int c = compare(j1.get(k),j2.get(k));
+					int c = compare(j1.get(k1[i1]),j2.get(k2[i2]));
 					if(c!=0) {
 						return c;
 					}
+					i1++;
+					i2++;
 				}
-				return 0;
+				return i1<k1.length ? 1 : i2<k2.length ? -1 : 0;
 			}
 			case ARRAY: {
 				JsonArray j1 = (JsonArray)o1;
@@ -879,7 +895,18 @@ public abstract class JsonUtil extends TypeUtil {
 				return 0;
 			}
 			default: {
-				throw new IllegalStateException();
+				// UNKNOWN: native (non JSON) values. Compared by their natural order when
+				// they are of the same Comparable class, then by class name and string value
+				if(o1.getClass()==o2.getClass() && o1 instanceof Comparable) {
+					@SuppressWarnings({ "unchecked", "rawtypes" })
+					int c = ((Comparable)o1).compareTo(o2);
+					return c;
+				}
+				int c = o1.getClass().getName().compareTo(o2.getClass().getName());
+				if(c!=0) {
+					return c;
+				}
+				return String.valueOf(o1).compareTo(String.valueOf(o2));
 			}
 		}
 	}

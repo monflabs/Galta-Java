@@ -16,6 +16,7 @@
 package org.monflabs.json.jsonpath;
 
 import org.monflabs.json.JsonException;
+import org.monflabs.json.JsonUtil;
 
 /**
  * Base class for an expression node.
@@ -183,12 +184,12 @@ public final class ExprBinaryOp extends ExprNode {
 			return false;
 		}
 		if(v1 instanceof Number n1 && v2 instanceof Number n2) {
-			double d1 = n1.doubleValue();
-			double d2 = n2.doubleValue();
-			if(Double.isNaN(d1) || Double.isNaN(d2)) {
+			// Exact comparison (big or long values are not rounded to a double); NaN
+			// equals nothing, not even NaN
+			if(isNaN(n1) || isNaN(n2)) {
 				return false;
 			}
-			return d1==d2;
+			return JsonUtil.compareNumber(n1, n2)==0;
 		}
 		// Works for Boolean, Strings, Array & Objects
 		if(v1.getClass()==v2.getClass()) {
@@ -240,18 +241,19 @@ public final class ExprBinaryOp extends ExprNode {
 			return compareCodePoints(s1,s2)<0;
 		}
 		if(v1 instanceof Number n1 && v2 instanceof Number n2) {
-			double d1 = n1.doubleValue();
-			double d2 = n2.doubleValue();
-			if(Double.isNaN(d1) || Double.isNaN(d2)) {
+			if(isNaN(n1) || isNaN(n2)) {
 				return false;
 			}
-			return d1<d2;
+			return JsonUtil.compareNumber(n1, n2)<0;
 		}
 		return false;
 	}
+	private static boolean isNaN(Number n) {
+		return (n instanceof Double d && d.isNaN()) || (n instanceof Float f && f.isNaN());
+	}
 	
 	// RFC 9535: strings are compared by Unicode scalar values, not UTF-16 code units
-	private static int compareCodePoints(String s1, String s2) {
+	static int compareCodePoints(String s1, String s2) {
 		int i1=0, i2=0;
 		int l1=s1.length(), l2=s2.length();
 		while(i1<l1 && i2<l2) {

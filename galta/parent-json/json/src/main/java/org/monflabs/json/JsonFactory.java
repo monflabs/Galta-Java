@@ -54,11 +54,17 @@ public abstract class JsonFactory {
 
 	private static final class DefaultFactory implements JsonFactoryService {
 		@Override
-		public synchronized JsonFactory get() {
-			if(factory==this) {
-				factory = new StaticFactory(findFactory());
+		public JsonFactory get() {
+			JsonFactoryService f;
+			// Same lock as set()/setFactory(): a factory set while the default one is being
+			// looked up is not overwritten by it
+			synchronized(FACTORY_LOCK) {
+				if(factory==this) {
+					factory = new StaticFactory(findFactory());
+				}
+				f = factory;
 			}
-			return factory.get();
+			return f.get();
 		}
 		private JsonFactory findFactory() {
 			// 1- Look if there is a registered service
@@ -76,19 +82,22 @@ public abstract class JsonFactory {
 	
 	// volatile: set() from one thread must be seen by get() in the others
 	private static volatile JsonFactoryService factory = new DefaultFactory();
+	private static final Object FACTORY_LOCK = new Object();
 	
 	public static JsonFactory get() {
 		return factory.get();
 	}
 	public static void set(JsonFactory instance) {
-		JsonFactory.factory = new StaticFactory(instance);
+		setFactory(new StaticFactory(instance));
 	}
 	
 	public static JsonFactoryService getFactory() {
 		return factory;
 	}
 	public static void setFactory(JsonFactoryService factory) {
-		JsonFactory.factory = factory;
+		synchronized(FACTORY_LOCK) {
+			JsonFactory.factory = factory;
+		}
 	}	
 	
 	/**
@@ -262,11 +271,11 @@ public abstract class JsonFactory {
 		try {
 			JsonParser.StringParser parser = new JsonParser.StringParser(this);
 			return parser.parse(json);
-        } catch(Throwable ex) {
-        	// Can be anything, like a stack overflow, like an array with "[[[[[[[[[...."
-        	if(ex instanceof JsonException jex) {
-        		throw jex;
-        	}
+        } catch(JsonException ex) {
+        	throw ex;
+        } catch(IOException | RuntimeException | StackOverflowError ex) {
+        	// StackOverflowError: a deeply nested content, like "[[[[[[[[[....". Other
+        	// errors (OutOfMemoryError...) are not wrapped
 		    throw new JsonException(ex,"Error when parsing JSON string"); 
 		}		
 	}

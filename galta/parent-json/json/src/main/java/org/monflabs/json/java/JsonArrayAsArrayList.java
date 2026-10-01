@@ -1351,23 +1351,40 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 
     @Override
 	public JsonArray distinct() {
-    	// We can't use a set because we want to use a JSON like comparator
-    	// Could be more optimized than n!...
     	JsonArray a = factory().createArray();
     	int sz = size();
-    	if(sz==0) {
-    		// nothing
-    	} else if(sz==1) {
+    	if(sz==1) {
     		a.add(get(0));
     	} else if(sz>1) { 
+    		// Hashed with the JSON equality (JsonUtil.eq/hashCode: 1 and 1.0 are the same value)
+    		Set<JsonValueKey> seen = new HashSet<>();
 	    	for(int i=0; i<sz; i++) {
 	    		Object value = get(i);
-	    		if(!containsValue(a,value)) {
+	    		if(seen.add(new JsonValueKey(value))) {
 	    			a.add(value);
 	    		}
 	    	}
     	}
     	return a;
+    }
+    /**
+     * A value compared with the JSON equality, for hashed collections.
+     */
+    private static final class JsonValueKey {
+    	private final Object value;
+    	private final int hash;
+    	JsonValueKey(Object value) {
+    		this.value = value;
+    		this.hash = JsonUtil.hashCode(value);
+    	}
+    	@Override
+    	public int hashCode() {
+    		return hash;
+    	}
+    	@Override
+    	public boolean equals(Object o) {
+    		return o instanceof JsonValueKey k && hash==k.hash && JsonUtil.eq(value, k.value);
+    	}
     }
     @Override
 	public JsonArray distinct(Comparator<Object> comp) {
@@ -1412,15 +1429,6 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
     	return a;
     }
     
-    private static boolean containsValue(JsonArray a, Object value) { // should be public?
-    	int sz = a.size();
-    	for(int i=0; i<sz; i++) {
-    		if(JsonUtil.eq(a.get(i),value)) {
-    			return true;
-    		}
-    	}
-    	return false;
-    }
     private static boolean containsValue(JsonArray a, Object value, Comparator<Object> comp) { // should be public?
     	int sz = a.size();
     	for(int i=0; i<sz; i++) {

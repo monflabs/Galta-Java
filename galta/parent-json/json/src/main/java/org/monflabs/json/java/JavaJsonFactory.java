@@ -99,28 +99,32 @@ public class JavaJsonFactory extends JsonFactory {
 	@Override
 	public byte asByte(Object nativeValue) {
 		if(nativeValue instanceof Number n) {
-			return n.byteValue();
+			// Saturated, like JsonObject.getInt(): 1e10 is not wrapped to a negative value
+			return JsonUtil.clampToByte(n);
 		}
 		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
 	}
 	@Override
 	public short asShort(Object nativeValue) {
 		if(nativeValue instanceof Number n) {
-			return n.shortValue();
+			// Saturated, like JsonObject.getInt(): 1e10 is not wrapped to a negative value
+			return JsonUtil.clampToShort(n);
 		}
 		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
 	}
 	@Override
 	public int asInt(Object nativeValue) {
 		if(nativeValue instanceof Number n) {
-			return n.intValue();
+			// Saturated, like JsonObject.getInt(): 1e10 is not wrapped to a negative value
+			return JsonUtil.clampToInt(n);
 		}
 		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
 	}
 	@Override
 	public long asLong(Object nativeValue) {
 		if(nativeValue instanceof Number n) {
-			return n.longValue();
+			// Saturated, like JsonObject.getInt(): 1e10 is not wrapped to a negative value
+			return JsonUtil.clampToLong(n);
 		}
 		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
 	}

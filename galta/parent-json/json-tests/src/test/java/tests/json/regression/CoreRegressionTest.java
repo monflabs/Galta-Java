@@ -287,4 +287,175 @@ public class CoreRegressionTest extends ProjectTestCase {
 		JsonObject copy = o.deepClone();
 		assertThrows(JsonException.class, () -> copy.putValue("x", new Object()));
 	}
+
+	//
+	// Second review
+	//
+
+	private static String withReferences(Object json) throws Exception {
+		JsonStringifier.StringSerializer s = new JsonStringifier.StringSerializer();
+		s.setOutputReferences(true);
+		return s.stringify(json);
+	}
+
+	public void testLocalReferenceDefinitionIsNotASelfReference() throws Exception {
+		JsonObject o = JsonObject.parse("{\"defs\":{\"u\":{\"t\":1}},\"p\":{\"$ref\":\"#/defs/u\"},\"q\":[{\"$ref\":\"#/defs/u\"}]}");
+		JsonReference.resolve(JsonFactory.get(), o, new JsonReference.Resolver(o), true);
+		String text = withReferences(o);
+		assertEquals("{\"defs\":{\"u\":{\"t\":1}},\"p\":{\"$ref\":\"#/defs/u\"},\"q\":[{\"$ref\":\"#/defs/u\"}]}", text);
+		// The output resolves back to the same content
+		JsonObject back = JsonObject.parse(text);
+		JsonReference.resolve(JsonFactory.get(), back, new JsonReference.Resolver(back), false);
+		assertEquals(1, back.getObject("p").getInt("t"));
+
+		// A recursive structure is written with a reference, not reported as a cycle
+		JsonObject rec = JsonObject.parse("{\"n\":{\"type\":\"object\",\"child\":{\"$ref\":\"#/n\"}}}");
+		JsonReference.resolve(JsonFactory.get(), rec, new JsonReference.Resolver(rec), true);
+		assertEquals("{\"n\":{\"type\":\"object\",\"child\":{\"$ref\":\"#/n\"}}}", withReferences(rec));
+	}
+
+	public void testCompareNativeValues() {
+		java.time.LocalDate d1 = java.time.LocalDate.of(2020,1,1);
+		java.time.LocalDate d2 = java.time.LocalDate.of(2021,1,1);
+		assertTrue(JsonUtil.compare(d1, d2)<0);
+		assertTrue(JsonUtil.compare(d2, d1)>0);
+		assertEquals(0, JsonUtil.compare(d1, java.time.LocalDate.of(2020,1,1)));
+		// Different classes: by class name, never an exception
+		Object a = new StringBuilder("a");
+		Object b = java.time.LocalTime.NOON;
+		assertEquals(-Integer.signum(JsonUtil.compare(b, a)), Integer.signum(JsonUtil.compare(a, b)));
+		// Same non comparable class: by string value
+		assertTrue(JsonUtil.compare(new StringBuilder("a"), new StringBuilder("b"))<0);
+		// Sorting a mix doesn't fail
+		java.util.List<Object> mix = new java.util.ArrayList<>(java.util.List.of(d2, new StringBuilder("x"), d1));
+		mix.sort(JsonUtil::compare);
+		assertTrue(mix.indexOf(d1)<mix.indexOf(d2));
+	}
+
+	public void testCompareObjects() {
+		JsonObject a1 = JsonObject.parse("{\"a\":1}");
+		assertEquals(0, JsonUtil.compare(a1, JsonObject.parse("{\"a\":1}")));
+		assertTrue(JsonUtil.compare(a1, JsonObject.parse("{\"a\":2}"))<0);
+		// The first key missing from an object makes it smaller
+		assertTrue(JsonUtil.compare(a1, JsonObject.parse("{\"b\":1}"))>0);
+		assertTrue(JsonUtil.compare(JsonObject.parse("{\"b\":1}"), a1)<0);
+		assertTrue(JsonUtil.compare(a1, JsonObject.parse("{\"a\":1,\"b\":2}"))<0);
+		assertTrue(JsonUtil.compare(JsonObject.parse("{\"b\":2,\"a\":1}"), a1)>0);
+	}
+
+	public void testNumberWithoutDigitsIsAParseError() {
+		for(String s: new String[] {".", "-.", ".e5", "-", "+", "[-]", "{\"a\":.}", "-.e1"}) {
+			org.monflabs.json.parser.ParseException e = assertThrows(s, org.monflabs.json.parser.ParseException.class, () -> JsonFactory.get().parse(s));
+			assertTrue(e.getMessage(), e.getMessage().contains("position"));
+		}
+		// Still accepted in lenient mode
+		assertEquals(0.5, ((Number)JsonFactory.get().parse(".5")).doubleValue());
+		assertEquals(5.0, ((Number)JsonFactory.get().parse("5.")).doubleValue());
+		assertEquals(-0.5, ((Number)JsonFactory.get().parse("-.5")).doubleValue());
+	}
+
+	public void testByteOrderMarkSkippedInStreams() {
+		byte[] bytes = "﻿{\"a\":1}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		assertEquals(1, ((JsonObject)JsonFactory.get().parse(new java.io.ByteArrayInputStream(bytes))).getInt("a"));
+		assertEquals(1, ((JsonObject)JsonFactory.get().parse(new java.io.StringReader("﻿{\"a\":1}"))).getInt("a"));
+		// Not in a string: a BOM is not a JSON whitespace (JSON.parse)
+		assertThrows(JsonException.class, () -> JsonFactory.get().parse("﻿1"));
+	}
+
+	public void testEndOfInputIsSticky() {
+		// A reader that would give more content after reporting the end of the input
+		java.io.Reader r = new java.io.Reader() {
+			int calls;
+			@Override
+			public int read(char[] cbuf, int off, int len) {
+				calls++;
+				if(calls==1) {
+					cbuf[off] = '1';
+					return 1;
+				}
+				if(calls==2) {
+					return -1;
+				}
+				cbuf[off] = 'x';
+				return 1;
+			}
+			@Override
+			public void close() {
+			}
+		};
+		assertEquals(1, ((Number)JsonFactory.get().parse(r)).intValue());
+	}
+
+	public void testParseDoesNotWrapErrors() {
+		JsonFactory f = new org.monflabs.json.java.JavaJsonFactory() {
+			@Override
+			public Number parseInteger(String s) {
+				throw new OutOfMemoryError("simulated");
+			}
+		};
+		assertThrows(OutOfMemoryError.class, () -> f.parse("123456789012345678901234567890"));
+	}
+
+	public void testJsonPathFilterNumbersCompareExactly() {
+		// The long 2^53+1 is not 2^53, which a double comparison can't tell apart
+		String json = "[{\"v\":9007199254740993}]";
+		assertEquals(0, path("$[?(@.v==9007199254740992)]", json).size());
+		assertEquals(1, path("$[?(@.v>9007199254740992)]", json).size());
+		assertEquals(1, path("$[?(9007199254740992<@.v)]", json).size());
+		// NaN never matches
+		assertEquals(0, path("$[?(@.v<1)]", "[{\"v\":NaN}]").size());
+	}
+
+	public void testAsIntegerClamps() {
+		JsonFactory f = JsonFactory.get();
+		assertEquals(Integer.MAX_VALUE, f.asInt(1e10));
+		assertEquals(Integer.MIN_VALUE, f.asInt(-1e10));
+		assertEquals(Integer.MAX_VALUE, f.asInt(Long.MAX_VALUE));
+		assertEquals(Long.MAX_VALUE, f.asLong(new java.math.BigInteger("100000000000000000000000")));
+		assertEquals(Short.MAX_VALUE, f.asShort(100000));
+		assertEquals(Byte.MIN_VALUE, f.asByte(-1000));
+		assertEquals(42, f.asByte(42));
+		assertEquals(0, f.asInt(Double.NaN));
+	}
+
+	public void testPrettyPrintAllMembersSkipped() throws Exception {
+		JsonStringifier.StringSerializer s = new JsonStringifier.StringSerializer();
+		s.setCompact(false);
+		s.setSerializeNulls(false);
+		assertEquals("{}", s.stringify(JsonObject.parse("{\"a\":null}")));
+		assertEquals("{\n  \"o\": {}\n}", s.stringify(JsonObject.parse("{\"o\":{\"a\":null}}")));
+		JsonStringifier.StringSerializer r = new JsonStringifier.StringSerializer();
+		r.setCompact(false);
+		r.setReplacer((c,k,v) -> k.isEmpty() ? v : JsonStringifier.Replacer.IGNORE);
+		assertEquals("[]", r.stringify(JsonArray.parse("[1,2]")));
+		assertEquals("{}", r.stringify(JsonObject.parse("{\"a\":1}")));
+		// Not empty: unchanged
+		assertEquals("[\n  1,\n  2\n]", new JsonStringifier.StringSerializer() {{ setCompact(false); }}.stringify(JsonArray.parse("[1,2]")));
+	}
+
+	public void testDistinctUsesJsonEquality() {
+		JsonArray a = JsonArray.parse("[1, 1.0, \"1\", {\"a\":1}, {\"a\":1.0}, [1], [1], null, null, 2]");
+		assertEquals("[1,\"1\",{\"a\":1},[1],null,2]", a.distinct().stringify());
+		// Large arrays stay fast (hash based)
+		JsonArray big = JsonArray.create();
+		for(int i=0; i<200000; i++) {
+			big.add(i%1000);
+		}
+		assertEquals(1000, big.distinct().size());
+	}
+
+	public void testCsvMappingNumbers() {
+		java.util.function.Function<Object,String> f = org.monflabs.json.stream.CsvMapping.toCsvStrings();
+		assertEquals("10000000000,4,0.5", f.apply(java.util.List.of(1e10, 4.0, 0.5)));
+		// The encoder is reused, every row is complete
+		assertEquals("a,b", f.apply(java.util.List.of("a","b")));
+		assertEquals("c", f.apply(java.util.List.of("c")));
+	}
+
+	public void testLastValue() {
+		JsonObject o = JsonObject.parse("{\"a\":1,\"b\":2,\"c\":3}");
+		assertEquals(3, (int)o.<Integer>lastValue());
+		assertEquals("x", JsonObject.create().lastValueOrDefault("x"));
+		assertThrows(JsonException.class, () -> JsonObject.create().lastValue());
+	}
 }

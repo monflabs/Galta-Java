@@ -176,7 +176,7 @@ JsonValues collected = java.util.stream.StreamSupport.stream(titles.spliterator(
 
 ## CSV lines
 
-`CsvMapping.toCsvStrings()` returns a `Function` that turns a row, a `List` (such as a `JsonArray`) or a Java array, into one CSV line, following RFC 4180: a field that contains the separator, a double quote, a carriage return or a line feed is enclosed in double quotes, and its double quotes are doubled. A field that starts or ends with a space or a tab is quoted as well. Each cell is written with `toString()`, so a `Double` `4.0` gives `4.0`, and `null` gives an empty field. Any other row, an object for example, gives an empty line.
+`CsvMapping.toCsvStrings()` returns a `Function` that turns a row, a `List` (such as a `JsonArray`) or a Java array, into one CSV line, following RFC 4180: a field that contains the separator, a double quote, a carriage return or a line feed is enclosed in double quotes, and its double quotes are doubled. A field that starts or ends with a space or a tab is quoted as well. Each cell is written with `toString()`, except the numbers that are written as in JSON (a `Double` `4.0` gives `4`, `1e10` gives `10000000000`), and `null` gives an empty field. Any other row, an object for example, gives an empty line.
 
 `toCsvStrings(separator, quoteStrategy)` sets the field separator and the `QuoteStrategy`:
 
@@ -206,7 +206,7 @@ JsonArray lines = rows.stream()
 // 1,Ada,"says ""hi"""
 // 2,Grace,"a,b"
 // 3,,
-// 4.0," padded",true
+// 4," padded",true
 
 JsonArray semicolons = rows.stream()
     .map(CsvMapping.toCsvStrings(';', QuoteStrategy.EMPTY))
@@ -245,7 +245,7 @@ For reading and writing CSV files, see [Import & Export](/GaltaJSON/Modules/Impo
 - `remove(predicate)` does not remove anything from the array: it returns a filtered copy. Use `removeIf` (from `Collection`) to modify the array.
 - `sorted()` orders mixed types by type first; strings come before numbers.
 - `find(key, false)` still searches the whole tree, only not below a match.
-- Numbers in CSV use Java's `toString()`, not the JSON text: `4.0` stays `4.0`.
+- Numbers in CSV use the JSON text, not Java's `toString()`: `4.0` is written `4`.
 
 ## Source
 

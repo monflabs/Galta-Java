@@ -137,6 +137,10 @@ public abstract class JsonStringifier {
     private Object[] processed = new Object[16];
     private int processedCount;
     private Map<Object,Void> processedDeep;
+    // With outputReferences: the keys of the current path from the root, to recognize
+    // the location of the target of a local ("#/...") reference
+    private String[] refPath;
+    private int refPathDepth;
     
 	// Serialization buffer
 	private static final int BUFFER_SIZE = 8192;
@@ -289,6 +293,7 @@ public abstract class JsonStringifier {
     		// as being processed: the next write would report a false cycle
     		Arrays.fill(processed, 0, processedCount, null);
     		processedCount = 0;
+    		refPathDepth = 0;
     		if(processedDeep!=null && !processedDeep.isEmpty()) {
     			processedDeep.clear(); // kept (already sized) for the next write
     		}
@@ -569,6 +574,17 @@ public abstract class JsonStringifier {
         out(b?"true":"false"); 
     }    
     private void outObjectLiteral(JsonObject container) throws IOException, JsonException {
+    	// Checked before the cycles: a reference to a parent (a recursive structure) is
+    	// written as a reference, not a cycle, and the same target may be referenced twice
+    	if(outputReferences) {
+    		String ref = container.getReference();
+    		if(StringUtil.isNotEmpty(ref) && !isReferenceLocation(ref)) {
+    	    	out('{');
+    	    	outProperty(JsonReference.REF_PROP,ref);
+                out('}');
+                return;
+    		}
+    	}
     	if(isProcessed(container)) {
     		// Don't call container.toString() here: a genuinely circular container's
     		// own toString() recurses into itself just as infinitely, causing a
@@ -576,17 +592,6 @@ public abstract class JsonStringifier {
     		throw new JsonException.CircularReference(null,"Circular reference detected in object of type {0}",container.getClass().getName());
     	}
     	pushProcessed(container);
-    	
-    	if(outputReferences) {
-    		String ref = container.getReference();
-    		if(StringUtil.isNotEmpty(ref)) {
-    	    	out('{');
-    	    	outProperty(JsonReference.REF_PROP,ref);
-                out('}');
-                popProcessed(); // not a cycle: the same target may be referenced twice
-                return;
-    		}
-    	}
 
     	out('{');
 
@@ -666,9 +671,7 @@ public abstract class JsonStringifier {
         	// change it while it is written: its entries are snapshot and read directly, no
         	// need to look each key up again.
         	if(replacer==null && container.getClass()==JsonObjectAsLinkedMap.class) {
-        		@SuppressWarnings("unchecked")
-				Map.Entry<String,Object>[] entries = container.entrySet().toArray(new Map.Entry[container.size()]);
-        		for(Map.Entry<String,Object> e: entries) {
+        		for(Map.Entry<String,Object> e: container.entrySet()) {
         			Object value = e.getValue();
 		        	if(value!=null || serializeNulls) {
 			        	if(coma) {
@@ -709,12 +712,42 @@ public abstract class JsonStringifier {
         	}
         }
         
-        nl();
-        indent();
-        
+        // When every member was skipped (null values, replacer), the object is just {}
+        if(coma) {
+	        nl();
+	        indent();
+        }
         out('}');
         
     	popProcessed();
+    }
+    
+    /**
+     * Whether the container being written is at the location a local reference points to:
+     * it is then the definition, written as is, and not a reference to itself.
+     */
+    private boolean isReferenceLocation(String ref) {
+    	if(ref.charAt(0)!='#') {
+    		return false;
+    	}
+    	String ptr = ref.substring(1);
+    	if(ptr.indexOf('%')>=0) {
+    		// The fragment is percent-encoded, see JsonReference
+    		ptr = java.net.URLDecoder.decode(ptr.replace("+", "%2B"), java.nio.charset.StandardCharsets.UTF_8);
+    	}
+    	StringBuilder b = new StringBuilder(ptr.length());
+    	for(int i=0; i<refPathDepth; i++) {
+    		b.append('/').append(refPath[i].replace("~", "~0").replace("/", "~1"));
+    	}
+    	return b.toString().equals(ptr);
+    }
+    private void pushRefPath(String key) {
+    	if(refPath==null) {
+    		refPath = new String[16];
+    	} else if(refPathDepth==refPath.length) {
+    		refPath = Arrays.copyOf(refPath, refPathDepth*2);
+    	}
+    	refPath[refPathDepth++] = key;
     }
     private boolean isProcessed(Object container) {
     	int scan = Math.min(processedCount, PROCESSED_SCAN_DEPTH);
@@ -758,27 +791,33 @@ public abstract class JsonStringifier {
         if(!compact) {
         	out(' ');
         }
-        outLiteral(value);
+        if(outputReferences) {
+        	pushRefPath(prop);
+        	outLiteral(value);
+        	refPathDepth--;
+        } else {
+        	outLiteral(value);
+        }
         indentLevel--;
     }
     
     private void outArrayLiteral(JsonArray container) throws IOException, JsonException {
+    	// Checked before the cycles: a reference to a parent (a recursive structure) is
+    	// written as a reference, not a cycle, and the same target may be referenced twice
+    	if(outputReferences) {
+    		String ref = container.getReference();
+    		if(StringUtil.isNotEmpty(ref) && !isReferenceLocation(ref)) {
+    	    	out('{');
+    	    	outProperty(JsonReference.REF_PROP,ref);
+                out('}');
+                return;
+    		}
+    	}
     	if(isProcessed(container)) {
     		// See outObjectLiteral() above for why toString() isn't used here.
     		throw new JsonException.CircularReference(null,"Circular reference detected in array of type {0}",container.getClass().getName());
     	}
     	pushProcessed(container);
-    	
-    	if(outputReferences) {
-    		String ref = container.getReference();
-    		if(StringUtil.isNotEmpty(ref)) {
-    	    	out('{');
-    	    	outProperty(JsonReference.REF_PROP,ref);
-                out('}');
-                popProcessed(); // not a cycle: the same target may be referenced twice
-                return;
-    		}
-    	}
 
     	out('[');
     	
@@ -788,8 +827,6 @@ public abstract class JsonStringifier {
     		return;
     	}
     	
-        nl();
-        
         boolean coma = false;
         int count = container.size();
         for(int i=0; i<count; i++) {
@@ -803,17 +840,26 @@ public abstract class JsonStringifier {
             indentLevel++;
             if(coma) {
                 out(',');
-                nl();
             } else {
                 coma = true;
             }
+            nl();
             indent();
-            outLiteral(propValue); 
+            if(outputReferences) {
+            	pushRefPath(Integer.toString(i));
+            	outLiteral(propValue);
+            	refPathDepth--;
+            } else {
+            	outLiteral(propValue);
+            }
             indentLevel--;
         }
         
-        nl();
-        indent();
+        // When every item was skipped by the replacer, the array is just []
+        if(coma) {
+	        nl();
+	        indent();
+        }
         out(']');
 
     	popProcessed();

@@ -159,7 +159,7 @@ public class CollectionsExamples extends ProjectTestCase {
 			"1,Ada,\"says \"\"hi\"\"\"",
 			"2,Grace,\"a,b\"",
 			"3,,",
-			"4.0,\" padded\",true"), lines);
+			"4,\" padded\",true"), lines);
 
 		JsonArray semicolons = rows.stream()
 			.map(CsvMapping.toCsvStrings(';', QuoteStrategy.EMPTY))

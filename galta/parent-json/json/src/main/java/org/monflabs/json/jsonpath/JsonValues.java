@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
 import java.util.function.Predicate;
 
 import org.eclipse.jdt.annotation.NonNull;
@@ -1752,59 +1753,35 @@ public class JsonValues implements Iterable<JsonValues> {
 	}
 
 	public boolean eq(byte other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)==0;
-		}
-		return false;
+		return testNumber(other, EQ);
 	}
 
 	public boolean eq(short other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)==0;
-		}
-		return false;
+		return testNumber(other, EQ);
 	}
 
 	public boolean eq(int other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)==0;
-		}
-		return false;
+		return testNumber(other, EQ);
 	}
 
 	public boolean eq(long other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)==0;
-		}
-		return false;
+		return testNumber(other, EQ);
 	}
 
 	public boolean eq(float other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)==0;
-		}
-		return false;
+		return testNumber(other, EQ);
 	}
 
 	public boolean eq(double other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)==0;
-		}
-		return false;
+		return testNumber(other, EQ);
 	}
 
 	public boolean eq(BigInteger other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)==0;
-		}
-		return false;
+		return testNumber(other, EQ);
 	}
 
 	public boolean eq(BigDecimal other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)==0;
-		}
-		return false;
+		return testNumber(other, EQ);
 	}
 
 	public boolean eq(Object other) {
@@ -1827,6 +1804,34 @@ public class JsonValues implements Iterable<JsonValues> {
 	}
 	private static boolean isNaN(Number n) {
 		return (n instanceof Double d && d.isNaN()) || (n instanceof Float f && f.isNaN());
+	}
+
+	// Comparison results
+	private static final IntPredicate EQ = c -> c==0;
+	private static final IntPredicate LT = c -> c<0;
+	private static final IntPredicate LTE = c -> c<=0;
+	private static final IntPredicate GT = c -> c>0;
+	private static final IntPredicate GTE = c -> c>=0;
+	
+	/**
+	 * Compares the single numeric value with a number, false if the value is not a number
+	 * or one of them is NaN.
+	 */
+	private boolean testNumber(Number other, IntPredicate test) {
+		if (type == TYPE.VALUE && value instanceof Number v) {
+			return comparable(v, other) && test.test(JsonUtil.compareNumber(v, other));
+		}
+		return false;
+	}
+	/**
+	 * Compares the single string value with a string, by Unicode code points (like the
+	 * JSONPath filters, RFC 9535), false if the value is not a string.
+	 */
+	private boolean testString(String other, IntPredicate test) {
+		if (type == TYPE.VALUE && value instanceof String v && other!=null) {
+			return test.test(ExprBinaryOp.compareCodePoints(v, other));
+		}
+		return false;
 	}
 
 	public boolean ne(@NonNull String other) {
@@ -1870,255 +1875,147 @@ public class JsonValues implements Iterable<JsonValues> {
 	}
 
 	public boolean lt(String other) {
-		if (type == TYPE.VALUE && value instanceof String v) {
-			return v.compareTo(other) < 0;
-		}
-		return false;
+		return testString(other, LT);
 	}
 
 	public boolean lt(byte other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<0;
-		}
-		return false;
+		return testNumber(other, LT);
 	}
 
 	public boolean lt(short other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<0;
-		}
-		return false;
+		return testNumber(other, LT);
 	}
 
 	public boolean lt(int other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<0;
-		}
-		return false;
+		return testNumber(other, LT);
 	}
 
 	public boolean lt(long other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<0;
-		}
-		return false;
+		return testNumber(other, LT);
 	}
 
 	public boolean lt(float other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<0;
-		}
-		return false;
+		return testNumber(other, LT);
 	}
 
 	public boolean lt(double other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<0;
-		}
-		return false;
+		return testNumber(other, LT);
 	}
 
 	public boolean lt(BigInteger other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<0;
-		}
-		return false;
+		return testNumber(other, LT);
 	}
 
 	public boolean lt(BigDecimal other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<0;
-		}
-		return false;
+		return testNumber(other, LT);
 	}
 
 	public boolean lte(String other) {
-		if (type == TYPE.VALUE && value instanceof String v) {
-			return v.compareTo(other) <= 0;
-		}
-		return false;
+		return testString(other, LTE);
 	}
 
 	public boolean lte(byte other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<=0;
-		}
-		return false;
+		return testNumber(other, LTE);
 	}
 
 	public boolean lte(short other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<=0;
-		}
-		return false;
+		return testNumber(other, LTE);
 	}
 
 	public boolean lte(int other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<=0;
-		}
-		return false;
+		return testNumber(other, LTE);
 	}
 
 	public boolean lte(long other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<=0;
-		}
-		return false;
+		return testNumber(other, LTE);
 	}
 
 	public boolean lte(float other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<=0;
-		}
-		return false;
+		return testNumber(other, LTE);
 	}
 
 	public boolean lte(double other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<=0;
-		}
-		return false;
+		return testNumber(other, LTE);
 	}
 
 	public boolean lte(BigInteger other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<=0;
-		}
-		return false;
+		return testNumber(other, LTE);
 	}
 
 	public boolean lte(BigDecimal other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)<=0;
-		}
-		return false;
+		return testNumber(other, LTE);
 	}
 
 	public boolean gt(String other) {
-		if (type == TYPE.VALUE && value instanceof String v) {
-			return v.compareTo(other) > 0;
-		}
-		return false;
+		return testString(other, GT);
 	}
 
 	public boolean gt(byte other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>0;
-		}
-		return false;
+		return testNumber(other, GT);
 	}
 
 	public boolean gt(short other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>0;
-		}
-		return false;
+		return testNumber(other, GT);
 	}
 
 	public boolean gt(int other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>0;
-		}
-		return false;
+		return testNumber(other, GT);
 	}
 
 	public boolean gt(long other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>0;
-		}
-		return false;
+		return testNumber(other, GT);
 	}
 
 	public boolean gt(float other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>0;
-		}
-		return false;
+		return testNumber(other, GT);
 	}
 
 	public boolean gt(double other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>0;
-		}
-		return false;
+		return testNumber(other, GT);
 	}
 
 	public boolean gt(BigInteger other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>0;
-		}
-		return false;
+		return testNumber(other, GT);
 	}
 
 	public boolean gt(BigDecimal other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>0;
-		}
-		return false;
+		return testNumber(other, GT);
 	}
 
 	public boolean gte(String other) {
-		if (type == TYPE.VALUE && value instanceof String v) {
-			return v.compareTo(other) >= 0;
-		}
-		return false;
+		return testString(other, GTE);
 	}
 
 	public boolean gte(byte other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>=0;
-		}
-		return false;
+		return testNumber(other, GTE);
 	}
 
 	public boolean gte(short other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>=0;
-		}
-		return false;
+		return testNumber(other, GTE);
 	}
 
 	public boolean gte(int other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>=0;
-		}
-		return false;
+		return testNumber(other, GTE);
 	}
 
 	public boolean gte(long other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>=0;
-		}
-		return false;
+		return testNumber(other, GTE);
 	}
 
 	public boolean gte(float other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>=0;
-		}
-		return false;
+		return testNumber(other, GTE);
 	}
 
 	public boolean gte(double other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>=0;
-		}
-		return false;
+		return testNumber(other, GTE);
 	}
 
 	public boolean gte(BigInteger other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>=0;
-		}
-		return false;
+		return testNumber(other, GTE);
 	}
 
 	public boolean gte(BigDecimal other) {
-		if (type == TYPE.VALUE && value instanceof Number v) {
-			return comparable(v, other) && JsonUtil.compareNumber(v, other)>=0;
-		}
-		return false;
+		return testNumber(other, GTE);
 	}
 
 	public boolean matches(String regExp) {

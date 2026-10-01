@@ -208,7 +208,7 @@ JsonReference.resolve(JsonFactory.get(), doc, new JsonReference.Resolver(doc), f
                                      // throws JsonException: no resolver for other.json
 ```
 
-References need a factory whose containers can carry them (`supportsReferences()`); the default factory's can. With `keepReferences`, a local reference marks the *target* container itself, since it is shared: stringifying with `setOutputReferences(true)` then writes the reference at the target's own location too, and the definition's content is lost from the output. Keep `keepReferences` for references to other documents.
+References need a factory whose containers can carry them (`supportsReferences()`); the default factory's can. With `keepReferences`, a local reference marks the *target* container itself, since it is shared. Stringifying with `setOutputReferences(true)` writes the reference wherever the target is referenced, but the target's own location (the one the `#/...` pointer designates) gets the definition's content, so the output resolves back to the same structure. A recursive structure (a node referring to one of its parents) is written with references, not reported as a cycle.
 
 Sample: `doc_examples/json/PointersExamples.java` (`testKeepLocalReferences`)
 
@@ -217,8 +217,8 @@ JsonObject schema = JsonObject.parse("{\"defs\":{\"u\":{\"t\":1}},\"p\":{\"$ref\
 JsonReference.resolve(JsonFactory.get(), schema, new JsonReference.Resolver(schema), true);
 JsonStringifier.StringSerializer s = new JsonStringifier.StringSerializer();
 s.setOutputReferences(true);
-// The shared target carries the reference, at both places
-s.stringify(schema);    // {"defs":{"u":{"$ref":"#/defs/u"}},"p":{"$ref":"#/defs/u"}}
+// The reference is written where it was, the definition keeps its content
+s.stringify(schema);    // {"defs":{"u":{"t":1}},"p":{"$ref":"#/defs/u"}}
 ```
 
 ## Gotchas
