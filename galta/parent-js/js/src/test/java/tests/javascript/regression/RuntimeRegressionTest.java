@@ -135,4 +135,19 @@ public class RuntimeRegressionTest extends JavaScriptStrictTestCase {
 			assertTrue(c.x === 5n);
 			""");
 	}
+
+	// A compound assignment to a private field reads the field before the
+	// right side runs; ??= assigns over undefined (both execution modes)
+	public void testPrivateCompoundOrderAndNullishAssign() throws Exception {
+		executeCode("""
+			class P {
+				#x = 5;
+				run() { const r = (this.#x += (this.#x = 10, 1)); return [r, this.#x].join(); }
+			}
+			assertEquals('6,6', new P().run());
+			globalThis.nullishTarget = undefined;
+			nullishTarget ??= 5;
+			assertEquals(5, globalThis.nullishTarget);
+			""");
+	}
 }

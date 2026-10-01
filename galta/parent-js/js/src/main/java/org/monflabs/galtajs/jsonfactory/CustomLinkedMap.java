@@ -210,23 +210,6 @@ public abstract class CustomLinkedMap<K> extends AbstractMap<K, Object> {
 		}
 	}
 
-	/**
-	 * @deprecated iterators no longer need soft deletion (see
-	 *             {@link #liveSuccessor}); kept so subclasses overriding it
-	 *             still compile. Never called.
-	 */
-	@Deprecated
-	protected boolean isShouldSoftDelete() {
-		return false;
-	}
-
-	/**
-	 * @deprecated see {@link #isShouldSoftDelete()}. Never called.
-	 */
-	@Deprecated
-	protected void setShouldSoftDelete(boolean shouldSoftDelete) {
-	}
-
 	// Entry that follows `pos` in the current list, `pos` being the last entry
 	// an iterator returned (null: none yet). Entries are unlinked as soon as
 	// they are removed, but a removed entry keeps its own listPrev/listNext

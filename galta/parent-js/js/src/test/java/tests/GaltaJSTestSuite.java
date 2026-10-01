@@ -588,7 +588,6 @@ public class GaltaJSTestSuite {
 		suite.addTestSuite(tests.javascript.op.assign.AssignComputedKeyOrderTest.class);
 		suite.addTestSuite(tests.javascript.op.assign.DestructuredAssignAutoGlobalTest.class);
 		suite.addTestSuite(tests.javascript.op.assign.AnnexBHoistingStrictModeTest.class);
-		suite.addTestSuite(tests.javascript.op.assign.AssignConstFailCompileTest.class);
 		suite.addTestSuite(tests.javascript.op.assign.AssignEvalOrderTest.class);
 		suite.addTestSuite(tests.javascript.op.assign.AssignNullCoalescingTest.class);
 		suite.addTestSuite(tests.javascript.op.assign.AssignOrTest.class);

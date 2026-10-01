@@ -690,12 +690,16 @@ public class ASTMember extends ASTNode implements ChainingNode, MemberNode {
 	    	if(isPrivateMemberName(getMemberName())) {
 	    		String fnName = type.assignmentRuntimeFunction();
 	    		String privateFnName = "private" + Character.toUpperCase(fnName.charAt(0)) + fnName.substring(1);
+	    		// A compound operator reads the field before evaluating the
+	    		// right side (spec 13.15.2): pass it lazily too
+	    		boolean compound = type!=ASSIGN_TYPE.EQUALS && type!=ASSIGN_TYPE.PREINC && type!=ASSIGN_TYPE.POSTINC
+	    				&& type!=ASSIGN_TYPE.PREDEC && type!=ASSIGN_TYPE.POSTDEC;
 	    		return StringFormat.format("{0}({1},{2},{3},{4})",
 	    				privateFnName,
 	    				jsContext.getContextJavaName(),
 	    				leftValue,
 	    				memberName,
-	    				rightArg);
+	    				compound ? StringFormat.format("()->{0}", rightValue) : rightArg);
 	    	}
 	    	// Every OTHER compound operator (+=, *=, ...) must also defer RHS
 	    	// evaluation until after PutValue/GetValue's own null-base check has

@@ -145,7 +145,9 @@ public class InterpretedWithRuntimeContext extends InterpretedBlockRuntimeContex
 	@Override
 	public boolean deleteVariable(String varName) {
 		if(_with!=null) {
-			boolean v = RuntimeUtil.getOwnPropertyDescriptor(InterpretedWithRuntimeContext.this.getEnvironment(),_with,varName)!=null;
+			// HasBinding of an object environment is HasProperty: an inherited
+			// property is a binding too (deleting it is then a no-op)
+			boolean v = RuntimeUtil.hasProperty(InterpretedWithRuntimeContext.this.getEnvironment(),_with,varName);
 			if(v && !isUnscopable(varName)) {
 				return RuntimeUtil.deleteProperty(InterpretedWithRuntimeContext.this.getEnvironment(),_with,varName);
 			}

@@ -344,7 +344,7 @@ public class InterpretedGlobalRuntimeContext extends InterpretedUnitRuntimeConte
 		if(err!=null) {
 			return err;
 		}
-		return Console.outStream();
+		return Console.errStream();
 	}
 	@Override
 	public void setOutStream(PrintStream out) {

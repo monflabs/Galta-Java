@@ -229,7 +229,7 @@ public class TranspiledGlobalRuntimeContext extends TranspiledUnitRuntimeContext
 		if(err!=null) {
 			return err;
 		}
-		return Console.outStream();
+		return Console.errStream();
 	}
 	@Override
 	public void setOutStream(PrintStream out) {

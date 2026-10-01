@@ -30,7 +30,6 @@ import org.monflabs.galtajs.rt.builtins.primitives.symbol.Symbol;
 public class JavaScriptMap extends CustomLinkedMap<Object> {
 
 	private final JSEnvironment env;
-	private boolean shouldSoftDelete;
 	private boolean mixedBigNumbers;
 
 	public JavaScriptMap(JSEnvironment env, boolean mixedBigNumbers) {
@@ -42,15 +41,6 @@ public class JavaScriptMap extends CustomLinkedMap<Object> {
 		return env;
 	}
 
-	@Override
-	public boolean isShouldSoftDelete(){
-		return shouldSoftDelete;
-	}
-	@Override
-	public void setShouldSoftDelete(boolean shouldSoftDelete) {
-		this.shouldSoftDelete = shouldSoftDelete;
-	}
-	
     public boolean isMixedBigNumbers() {
 		return mixedBigNumbers;
 	}

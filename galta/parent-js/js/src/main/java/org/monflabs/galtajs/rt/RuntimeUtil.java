@@ -4702,6 +4702,15 @@ public class RuntimeUtil {
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignAdd(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = add(env,v,value.get());
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
 	public static Object privateAssignAnd(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
 		JSEnvironment env = ctx.getEnvironment();
 		PrivateName pn = ctx.resolvePrivateName(member);
@@ -4721,11 +4730,29 @@ public class RuntimeUtil {
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignBitAnd(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = bitAnd(env,v,value.get());
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
 	public static Object privateAssignBitOr(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		JSEnvironment env = ctx.getEnvironment();
 		PrivateName pn = ctx.resolvePrivateName(member);
 		Object v = getPrivateField(leftValue, pn);
 		Object vi = bitOr(env,v,value);
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignBitOr(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = bitOr(env,v,value.get());
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
@@ -4737,11 +4764,29 @@ public class RuntimeUtil {
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignBitXor(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = bitXor(env,v,value.get());
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
 	public static Object privateAssignDiv(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		JSEnvironment env = ctx.getEnvironment();
 		PrivateName pn = ctx.resolvePrivateName(member);
 		Object v = getPrivateField(leftValue, pn);
 		Object vi = div(env,v,value);
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignDiv(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = div(env,v,value.get());
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
@@ -4753,6 +4798,15 @@ public class RuntimeUtil {
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignMod(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = mod(env,v,value.get());
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
 	public static Object privateAssignMul(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		JSEnvironment env = ctx.getEnvironment();
 		PrivateName pn = ctx.resolvePrivateName(member);
@@ -4761,11 +4815,29 @@ public class RuntimeUtil {
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignMul(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = mul(env,v,value.get());
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
 	public static Object privateAssignPower(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		JSEnvironment env = ctx.getEnvironment();
 		PrivateName pn = ctx.resolvePrivateName(member);
 		Object v = getPrivateField(leftValue, pn);
 		Object vi = power(env,v,value);
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignPower(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = power(env,v,value.get());
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
@@ -4798,11 +4870,29 @@ public class RuntimeUtil {
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignLShift(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = lshift(env,v,value.get());
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
 	public static Object privateAssignRShift(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		JSEnvironment env = ctx.getEnvironment();
 		PrivateName pn = ctx.resolvePrivateName(member);
 		Object v = getPrivateField(leftValue, pn);
 		Object vi = rshift(env,v,value);
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignRShift(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = rshift(env,v,value.get());
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
@@ -4814,11 +4904,29 @@ public class RuntimeUtil {
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignRunShift(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = runshift(env,v,value.get());
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
 	public static Object privateAssignSub(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		JSEnvironment env = ctx.getEnvironment();
 		PrivateName pn = ctx.resolvePrivateName(member);
 		Object v = getPrivateField(leftValue, pn);
 		Object vi = sub(env,v,value);
+		setPrivateField(leftValue,pn,vi);
+		return vi;
+	}
+	// The right side is evaluated after the private field is read (spec 13.15.2)
+	public static Object privateAssignSub(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		JSEnvironment env = ctx.getEnvironment();
+		PrivateName pn = ctx.resolvePrivateName(member);
+		Object v = getPrivateField(leftValue, pn);
+		Object vi = sub(env,v,value.get());
 		setPrivateField(leftValue,pn,vi);
 		return vi;
 	}

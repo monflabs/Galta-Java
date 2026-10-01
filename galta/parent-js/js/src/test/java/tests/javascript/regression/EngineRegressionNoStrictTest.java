@@ -39,4 +39,16 @@ public class EngineRegressionNoStrictTest extends JavaScriptNoStrictTestCase {
 			assertThrows(ReferenceError, () => { with({}) { undeclaredInWith += 1 } });
 			""");
 	}
+
+	// HasBinding of a with object is HasProperty: delete through an inherited
+	// binding deletes nothing and leaves the outer variable alone
+	public void testDeleteThroughWithInherited() throws Exception {
+		executeCode("""
+			var shadowed = 'outer';
+			var deleted;
+			with (Object.create({ shadowed: 1 })) { deleted = delete shadowed; }
+			assertTrue(deleted);
+			assertEquals('outer', shadowed);
+			""");
+	}
 }

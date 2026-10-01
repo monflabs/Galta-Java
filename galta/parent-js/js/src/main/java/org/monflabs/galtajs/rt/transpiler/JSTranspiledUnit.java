@@ -1644,7 +1644,7 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 	}
 	public Object assignNullCoalescing(VarAccessor var, Object value) {
 		Object v = var.getValue();
-		if( v!=null ) {
+		if(!RuntimeUtil.isNullOrUndefined(v)) {
 			return v;
 		}
 		if(RuntimeUtil.isStrictMode() && !var.stillExists()) {
@@ -1656,7 +1656,7 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 	// See assignAnd(VarAccessor,Supplier) above.
 	public Object assignNullCoalescing(VarAccessor var, Supplier<Object> value) {
 		Object v = var.getValue();
-		if( v!=null ) {
+		if(!RuntimeUtil.isNullOrUndefined(v)) {
 			return v;
 		}
 		Object rv = value.get();
@@ -1863,28 +1863,52 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 	public final Object privateAssignAdd(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		return RuntimeUtil.privateAssignAdd(ctx, leftValue, member, value);
 	}
+	public final Object privateAssignAdd(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		return RuntimeUtil.privateAssignAdd(ctx, leftValue, member, value);
+	}
 	public final Object privateAssignAnd(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
 		return RuntimeUtil.privateAssignAnd(ctx, leftValue, member, value);
 	}
 	public final Object privateAssignBitAnd(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		return RuntimeUtil.privateAssignBitAnd(ctx, leftValue, member, value);
 	}
+	public final Object privateAssignBitAnd(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		return RuntimeUtil.privateAssignBitAnd(ctx, leftValue, member, value);
+	}
 	public final Object privateAssignBitOr(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
+		return RuntimeUtil.privateAssignBitOr(ctx, leftValue, member, value);
+	}
+	public final Object privateAssignBitOr(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
 		return RuntimeUtil.privateAssignBitOr(ctx, leftValue, member, value);
 	}
 	public final Object privateAssignBitXor(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		return RuntimeUtil.privateAssignBitXor(ctx, leftValue, member, value);
 	}
+	public final Object privateAssignBitXor(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		return RuntimeUtil.privateAssignBitXor(ctx, leftValue, member, value);
+	}
 	public final Object privateAssignDiv(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
+		return RuntimeUtil.privateAssignDiv(ctx, leftValue, member, value);
+	}
+	public final Object privateAssignDiv(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
 		return RuntimeUtil.privateAssignDiv(ctx, leftValue, member, value);
 	}
 	public final Object privateAssignMod(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		return RuntimeUtil.privateAssignMod(ctx, leftValue, member, value);
 	}
+	public final Object privateAssignMod(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		return RuntimeUtil.privateAssignMod(ctx, leftValue, member, value);
+	}
 	public final Object privateAssignMul(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		return RuntimeUtil.privateAssignMul(ctx, leftValue, member, value);
 	}
+	public final Object privateAssignMul(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		return RuntimeUtil.privateAssignMul(ctx, leftValue, member, value);
+	}
 	public final Object privateAssignPower(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
+		return RuntimeUtil.privateAssignPower(ctx, leftValue, member, value);
+	}
+	public final Object privateAssignPower(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
 		return RuntimeUtil.privateAssignPower(ctx, leftValue, member, value);
 	}
 	public final Object privateAssignNullCoalescing(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
@@ -1896,13 +1920,25 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 	public final Object privateAssignLShift(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		return RuntimeUtil.privateAssignLShift(ctx, leftValue, member, value);
 	}
+	public final Object privateAssignLShift(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		return RuntimeUtil.privateAssignLShift(ctx, leftValue, member, value);
+	}
 	public final Object privateAssignRShift(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
+		return RuntimeUtil.privateAssignRShift(ctx, leftValue, member, value);
+	}
+	public final Object privateAssignRShift(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
 		return RuntimeUtil.privateAssignRShift(ctx, leftValue, member, value);
 	}
 	public final Object privateAssignRunShift(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
 		return RuntimeUtil.privateAssignRunShift(ctx, leftValue, member, value);
 	}
+	public final Object privateAssignRunShift(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
+		return RuntimeUtil.privateAssignRunShift(ctx, leftValue, member, value);
+	}
 	public final Object privateAssignSub(JSRuntimeContext ctx, Object leftValue, String member, Object value) {
+		return RuntimeUtil.privateAssignSub(ctx, leftValue, member, value);
+	}
+	public final Object privateAssignSub(JSRuntimeContext ctx, Object leftValue, String member, Supplier<Object> value) {
 		return RuntimeUtil.privateAssignSub(ctx, leftValue, member, value);
 	}
 	public final Object privatePreInc(JSRuntimeContext ctx, Object leftValue, String member, Object unused) {
