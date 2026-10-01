@@ -84,15 +84,37 @@ public class ClassMetadata {
 	private static final boolean USE_JAVABEAN_PROPERTIES = false;
 
 	// Read from every Java-interop access, possibly from several threads at once.
-	// A ClassValue rather than a Map keyed by Class: the cache entry lives with the
-	// class, so a class (and its class loader - e.g. one compiled at runtime) can
-	// still be unloaded instead of being pinned by this cache forever.
+	//
+	// Two caches, so that neither a class nor this ClassMetadata is pinned forever:
+	// - the classes of the permanent class loaders (bootstrap, platform, system) can never
+	//   be unloaded: their entries are kept in a plain map owned by this instance, which
+	//   goes away with it.
+	// - the classes of any other loader (e.g. classes compiled at runtime) use a ClassValue,
+	//   so the entry lives with the class and doesn't prevent its loader from being
+	//   unloaded. A ClassValue entry strongly references its value, and the value references
+	//   this ClassMetadata (the member caches are inner classes), so such an entry keeps this
+	//   instance alive as long as the class itself is alive - never longer.
+	// Using a ClassValue for every class would pin every ClassMetadata (and whatever owns it)
+	// as soon as it has seen a JDK class such as String, as these classes never unload.
+	private final ConcurrentHashMap<Class<?>, ClassInfoCache> permanentClassCache = new ConcurrentHashMap<>();
 	private final ClassValue<ClassInfoCache> classCache = new ClassValue<>() {
 		@Override
 		protected ClassInfoCache computeValue(Class<?> type) {
 			return new ClassInfoCache(type);
 		}
 	};
+	private static final Set<ClassLoader> PERMANENT_LOADERS = permanentLoaders();
+	private static Set<ClassLoader> permanentLoaders() {
+		Set<ClassLoader> loaders = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for(ClassLoader l = ClassLoader.getSystemClassLoader(); l!=null; l = l.getParent()) {
+			loaders.add(l);
+		}
+		return loaders;
+	}
+	private static boolean isPermanentClass(Class<?> c) {
+		ClassLoader l = c.getClassLoader();
+		return l==null || PERMANENT_LOADERS.contains(l);
+	}
 	private AccessManager accessManager;
 
 	public ClassMetadata(AccessManager accessManager) {
@@ -209,6 +231,9 @@ public class ClassMetadata {
 				if(value instanceof String s) {
 					return s;
 				}
+				if(value instanceof Character ch) {
+					return ch.toString();
+				}
 				if(permissiveConverter) {
 					return value.toString();
 				}
@@ -251,18 +276,21 @@ public class ClassMetadata {
 	// - else, among the applicable overloads, the one more specific than all the others
 	//   is selected, whatever the order the reflection API returned them in
 	// - several maximally specific overloads with different signatures is an ambiguity
+	// - a variable arity method (varargs) is only considered in its variable arity form
+	//   when no overload is applicable with its fixed arity, as in Java
 	// A null argument is applicable to any reference parameter but never to a primitive one,
-	// and is never an exact match (so f(String) is preferred over f(Object) for null).
+	// and is never an exact match (so f(String) is preferred over f(Object) for null, and
+	// f(String)/f(Integer) is an ambiguity).
 	// strictMatch is currently unused: conversions (e.g. Double -> int) are always allowed.
 	private CallableCache findCallable(Boolean staticMethod, @NonNull Object[] args, CallableCache cache, boolean strictMatch) {
 		int argsLength = args.length;
 		List<CallableCache> candidates = null;
+		List<Class<?>[]> candidateClasses = null;
 		loop: for (CallableCache m = cache; m != null; m = m.nextCallable) {
 			if (staticMethod!=null && (staticMethod != m.isStatic())) {
 				continue;
 			}
 
-			// TODO: Check for variable parameters!
 			Class<?>[] argClasses = m.argClasses;
 			if (argClasses.length != argsLength) {
 				continue;
@@ -272,7 +300,8 @@ public class ClassMetadata {
 			for (int j = 0; j < argsLength; j++) {
 				Object param = args[j];
 				if (param == null) {
-					// The parameter classes are boxed, so the primitive information is kept aside
+					// The parameter classes are boxed, so the primitive information is kept aside.
+					// A null is never an exact match
 					if (m.primitiveArgs[j]) {
 						continue loop;
 					}
@@ -293,9 +322,53 @@ public class ClassMetadata {
 			}
 			if (candidates == null) {
 				candidates = new ArrayList<>();
+				candidateClasses = new ArrayList<>();
 			}
 			candidates.add(m);
+			candidateClasses.add(argClasses);
 		}
+
+		// Variable arity: only when no overload applies with its fixed arity
+		if (candidates == null) {
+			loop: for (CallableCache m = cache; m != null; m = m.nextCallable) {
+				if (!m.varArgs || (staticMethod!=null && (staticMethod != m.isStatic()))) {
+					continue;
+				}
+				Class<?>[] argClasses = m.argClasses;
+				int fixed = argClasses.length - 1;
+				if (argsLength < fixed) {
+					continue;
+				}
+				Class<?>[] effective = new Class<?>[argsLength];
+				for (int j = 0; j < argsLength; j++) {
+					Object param = args[j];
+					boolean primitive;
+					if (j < fixed) {
+						effective[j] = argClasses[j];
+						primitive = m.primitiveArgs[j];
+					} else {
+						effective[j] = m.varArgsBoxedComponent;
+						primitive = m.varArgsComponent.isPrimitive();
+					}
+					if (param == null) {
+						if (primitive) {
+							continue loop;
+						}
+						continue;
+					}
+					if (isAssignable(effective[j], param) == ASSIGNABLE.NO) {
+						continue loop;
+					}
+				}
+				if (candidates == null) {
+					candidates = new ArrayList<>();
+					candidateClasses = new ArrayList<>();
+				}
+				candidates.add(m);
+				candidateClasses.add(effective);
+			}
+		}
+
 		if (candidates == null) {
 			return null;
 		}
@@ -304,27 +377,31 @@ public class ClassMetadata {
 		}
 
 		// Keep the maximally specific candidates (no other candidate is more specific)
-		List<CallableCache> best = new ArrayList<>();
-		for (CallableCache m : candidates) {
+		List<Integer> best = new ArrayList<>();
+		for (int i = 0; i < candidates.size(); i++) {
 			boolean maximal = true;
-			for (CallableCache o : candidates) {
-				if (o != m && compareArguments(o.argClasses, m.argClasses) == 1) {
+			for (int k = 0; k < candidates.size(); k++) {
+				if (k != i && compareArguments(candidateClasses.get(k), candidateClasses.get(i), args) == 1) {
 					maximal = false;
 					break;
 				}
 			}
 			// The same signature can be listed twice (e.g. a covariant bridge method): keep one
-			if (maximal && best.stream().noneMatch(b -> java.util.Arrays.equals(b.argClasses, m.argClasses))) {
-				best.add(m);
+			final Class<?>[] mClasses = candidateClasses.get(i);
+			final List<Class<?>[]> allClasses = candidateClasses;
+			if (maximal && best.stream().noneMatch(b -> java.util.Arrays.equals(allClasses.get(b), mClasses))) {
+				best.add(i);
 			}
 		}
 		if (best.size() > 1) {
-			throw new ModelException(null, "Ambiguity between {0}{1} and {0}{2}", best.get(0).getName(),
-					methodSignature(best.get(0).argClasses),methodSignature(best.get(1).argClasses));
+			CallableCache b0 = candidates.get(best.get(0));
+			CallableCache b1 = candidates.get(best.get(1));
+			throw new ModelException(null, "Ambiguity between {0}{1} and {0}{2}", b0.getName(),
+					methodSignature(b0.argClasses),methodSignature(b1.argClasses));
 		}
-		return best.get(0);
+		return candidates.get(best.get(0));
 	}
-	
+
 
 	// Should we create 3 states of assignable?
 	//    NO, POSSIBLE, EXACT
@@ -349,9 +426,12 @@ public class ClassMetadata {
 		if (c1.isAssignableFrom(c2)) {
 			return ASSIGNABLE.POSSIBLE;
 		}
-		// String and Character can be exchanged
-		if ((c1 == Character.class && c2 == String.class) || (c2 == Character.class && c1 == String.class)) {
+		// A Character can be passed as a String, and a one-character String as a Character
+		if (c1 == String.class && c2 == Character.class) {
 			return ASSIGNABLE.POSSIBLE;
+		}
+		if (c1 == Character.class && c2 == String.class) {
+			return ((String)p2).length() == 1 ? ASSIGNABLE.POSSIBLE : ASSIGNABLE.NO;
 		}
 		// Numbers can be converted
 		if (Number.class.isAssignableFrom(c1) && Number.class.isAssignableFrom(c2)) {
@@ -385,28 +465,75 @@ public class ClassMetadata {
 	// 0: incompatible. This leads to an error
 	// 1: a1 is more specific than a2
 	// -1: a2 is more specific than a1
-	private static int compareArguments(Class<?>[] a1, Class<?>[] a2) {
+	// Two numeric primitive (wrapper) parameters are ordered by the Java primitive widening
+	// conversions (byte < short < int < long < float < double, char < int): the
+	// narrower one is more specific, as long as the argument reaches it by widening
+	// (a Short argument picks g(int) over g(long), a Long argument g(double) over g(int)).
+	// When the argument can't widen to either of them (e.g. a Double for g(int)/g(long)),
+	// the wider one, which loses less, is preferred.
+	private static int compareArguments(Class<?>[] a1, Class<?>[] a2, Object[] args) {
 		int result = 0;
 		int length = a1.length;
 		for (int i = 0; i < length; i++) {
 			Class<?> c1 = a1[i];
 			Class<?> c2 = a2[i];
 			if (c1 != c2) {
-				if (c1.isAssignableFrom(c2)) {
-					if (result == 1) {
-						return 0;
+				int r = 0;
+				int w1 = widening(c1);
+				int w2 = widening(c2);
+				if (w1 > 0 && w2 > 0) {
+					Object arg = args!=null && i<args.length ? args[i] : null;
+					int wa = arg!=null ? widening(arg.getClass()) : 0;
+					boolean reach1 = wa > 0 && widensTo(wa, w1);
+					boolean reach2 = wa > 0 && widensTo(wa, w2);
+					if (reach1 != reach2) {
+						r = reach1 ? 1 : -1;
+					} else if (reach1) {
+						r = widensTo(w1, w2) ? 1 : widensTo(w2, w1) ? -1 : 0;
+					} else {
+						r = widensTo(w1, w2) ? -1 : widensTo(w2, w1) ? 1 : 0;
 					}
-					result = -1;
+				} else if (c1.isAssignableFrom(c2)) {
+					r = -1;
+				} else if (c2.isAssignableFrom(c1)) {
+					r = 1;
 				}
-				if (c2.isAssignableFrom(c1)) {
-					if (result == -1) {
+				if (r != 0) {
+					if (result == -r) {
 						return 0;
 					}
-					result = 1;
+					result = r;
 				}
 			}
 		}
 		return result;
+	}
+	// The numeric primitive wrappers, as bit flags
+	private static final int W_BYTE=1, W_SHORT=2, W_CHAR=4, W_INT=8, W_LONG=16, W_FLOAT=32, W_DOUBLE=64;
+	private static int widening(Class<?> c) {
+		if (c == Integer.class) return W_INT;
+		if (c == Long.class) return W_LONG;
+		if (c == Double.class) return W_DOUBLE;
+		if (c == Float.class) return W_FLOAT;
+		if (c == Short.class) return W_SHORT;
+		if (c == Byte.class) return W_BYTE;
+		if (c == Character.class) return W_CHAR;
+		return 0;
+	}
+	// Whether the primitive 'from' converts to 'to' by identity or widening (JLS 5.1.2)
+	private static boolean widensTo(int from, int to) {
+		if (from == to) {
+			return true;
+		}
+		switch (from) {
+			case W_BYTE:	return (to & (W_SHORT|W_INT|W_LONG|W_FLOAT|W_DOUBLE)) != 0;
+			case W_SHORT:
+			case W_CHAR:	return (to & (W_INT|W_LONG|W_FLOAT|W_DOUBLE)) != 0;
+			case W_INT:		return (to & (W_LONG|W_FLOAT|W_DOUBLE)) != 0;
+			case W_LONG:	return (to & (W_FLOAT|W_DOUBLE)) != 0;
+			case W_FLOAT:	return to == W_DOUBLE;
+			default:		return false;
+		}
 	}
 
 	public static String getMethodSignature(String functionName, Object[] args) {
@@ -437,6 +564,13 @@ public class ClassMetadata {
 	/////////////////////////////////////////////////////////////////////////////////////
 
 	public ClassInfoCache getClassInfoCache(Class<?> c) {
+		if(isPermanentClass(c)) {
+			ClassInfoCache ci = permanentClassCache.get(c);
+			if(ci==null) {
+				ci = permanentClassCache.computeIfAbsent(c, ClassInfoCache::new);
+			}
+			return ci;
+		}
 		return classCache.get(c);
 	}
 
@@ -520,6 +654,10 @@ public class ClassMetadata {
 					if (r != CallableCache.NULL_ARG_MARKER) {
 						return false;
 					}
+				} else if (a instanceof String str && str.length() == 1) {
+					if (r != CallableCache.CHAR_STRING_ARG_MARKER) {
+						return false;
+					}
 				} else {
 					Class<?> c = a.getClass();
 					if (r != c && !(r instanceof java.lang.ref.WeakReference<?> w && w.get() == c)) {
@@ -537,8 +675,20 @@ public class ClassMetadata {
 		Class<?>[] argClasses;
 		// Which parameters were primitive before argClasses got boxed (a null can't be passed to them)
 		boolean[] primitiveArgs;
+		// Variable arity: the component type of the last (array) parameter, as declared and boxed
+		boolean varArgs;
+		Class<?> varArgsComponent;
+		Class<?> varArgsBoxedComponent;
 
 		protected CallableCache(Class<?>[] argClasses) {
+			this(argClasses, false);
+		}
+		protected CallableCache(Class<?>[] argClasses, boolean varArgs) {
+			if (varArgs && argClasses != null && argClasses.length > 0 && argClasses[argClasses.length-1].isArray()) {
+				this.varArgs = true;
+				this.varArgsComponent = argClasses[argClasses.length-1].getComponentType();
+				this.varArgsBoxedComponent = varArgsComponent.isPrimitive() ? getObjectTypeFromPrimitive(varArgsComponent) : varArgsComponent;
+			}
 			this.argClasses = argClasses;
 			this.primitiveArgs = new boolean[argClasses!=null ? argClasses.length : 0];
 			// Transform the primitive types to their object ones
@@ -563,6 +713,49 @@ public class ClassMetadata {
 		public abstract boolean isStatic();
 
 		public abstract String getName();
+
+		/**
+		 * Whether this is a variable arity method or constructor (varargs).
+		 */
+		public boolean isVarArgs() {
+			return varArgs;
+		}
+
+		/**
+		 * Converts the arguments of a call resolved to this method or constructor into the
+		 * parameters to invoke it with, into a new array (the given one is left untouched).
+		 * Each argument is converted to its parameter type with the converter; for a varargs
+		 * method called in its variable arity form, the trailing arguments are collected into
+		 * an array of the variable arity parameter.
+		 */
+		public Object[] convertArguments(BiFunction<Object,Class<?>,Object> convert, Object[] args) {
+			if (args == null) {
+				return null;
+			}
+			int n = argClasses.length;
+			boolean fixedArity = !varArgs || (args.length == n
+					&& (args[n-1] == null || argClasses[n-1].isInstance(args[n-1])));
+			if (fixedArity) {
+				if (args.length == 0) {
+					return args;
+				}
+				Object[] converted = new Object[args.length];
+				for (int i = 0; i < args.length; i++) {
+					converted[i] = convert.apply(args[i], i < n ? argClasses[i] : null);
+				}
+				return converted;
+			}
+			Object[] converted = new Object[n];
+			for (int i = 0; i < n-1; i++) {
+				converted[i] = convert.apply(args[i], argClasses[i]);
+			}
+			Object array = java.lang.reflect.Array.newInstance(varArgsComponent, args.length - (n-1));
+			for (int i = n-1; i < args.length; i++) {
+				java.lang.reflect.Array.set(array, i-(n-1), convert.apply(args[i], varArgsComponent));
+			}
+			converted[n-1] = array;
+			return converted;
+		}
 		
 		// Resolved overload per distinct call SHAPE (staticMethod + each
 		// argument's runtime class, null args using NULL_ARG as a stand-in
@@ -587,6 +780,9 @@ public class ClassMetadata {
 		private static final Object NULL_ARG = new Object();
 		static final Object NULL_ARG_MARKER = NULL_ARG;
 		private static final Object NO_MATCH = new Object();
+		// A one-character String is also applicable to a char parameter, a longer one is not
+		private static final Object CHAR_STRING_ARG = new Object();
+		static final Object CHAR_STRING_ARG_MARKER = CHAR_STRING_ARG;
 
 		/**
 		 * The class whose loader bounds the lifetime of this member, if known.
@@ -609,6 +805,8 @@ public class ClassMetadata {
 				Object a = args[i];
 				if (a == null) {
 					classes[i] = NULL_ARG;
+				} else if (a instanceof String str && str.length() == 1) {
+					classes[i] = CHAR_STRING_ARG;
 				} else {
 					Class<?> c = a.getClass();
 					classes[i] = c;
@@ -648,7 +846,7 @@ public class ClassMetadata {
 			return false;
 		}
 
-		private Class<?> getObjectTypeFromPrimitive(Class<?> c) {
+		private static Class<?> getObjectTypeFromPrimitive(Class<?> c) {
 			// Transform a primitive to its Object based class
 			if (c == Character.TYPE) {
 				return Character.class;
@@ -740,7 +938,7 @@ public class ClassMetadata {
 		volatile Method publicMethod;
 
 		protected MethodCache(Method method) {
-			super(method.getParameterTypes());
+			super(method.getParameterTypes(), method.isVarArgs());
 			this.method = method;
 		}
 
@@ -794,14 +992,7 @@ public class ClassMetadata {
 				// Convert the parameters
 				// Example: Numbers, String<->Characters...
 				// Into a copy: the caller's array is left untouched
-				Object[] converted = parameters;
-				if (parameters != null && parameters.length > 0) {
-					Class<?>[] args = m.argClasses;
-					converted = new Object[parameters.length];
-					for (int i = 0; i < parameters.length; i++) {
-						converted[i] = convert.apply(parameters[i], args[i]);
-					}
-				}
+				Object[] converted = m.convertArguments(convert, parameters);
 				try {
 					return m.invoke(_this, converted);
 				} catch (InvocationTargetException e) {
@@ -823,7 +1014,7 @@ public class ClassMetadata {
 		Constructor<?> constructor;
 
 		protected ConstructorCache(Constructor<?> constructor) {
-			super(constructor.getParameterTypes());
+			super(constructor.getParameterTypes(), constructor.isVarArgs());
 			this.constructor = constructor;
 		}
 
@@ -1148,6 +1339,12 @@ public class ClassMetadata {
 				return first;
 			}
 
+			// A name that can't be a member of the class is answered without being cached,
+			// so looking up arbitrary names (e.g. a script probing properties) can't grow
+			// the cache: only the names of actual members end up in it
+			if (!getMemberNames().isCandidate(name)) {
+				return emptyCache;
+			}
 			MemberCache mc = findMembers(clazz, name);
 			if (mc == null) {
 				// Nothing corresponds here...
@@ -1155,6 +1352,15 @@ public class ClassMetadata {
 			}
 			MemberCache existing = members.putIfAbsent(name, mc);
 			return existing!=null ? existing : mc;
+		}
+
+		private volatile MemberNames memberNames;
+		private MemberNames getMemberNames() {
+			MemberNames n = memberNames;
+			if (n == null) {
+				memberNames = n = findMemberNames(clazz);
+			}
+			return n;
 		}
 		
 		public FieldCache getField(String name) {
@@ -1199,6 +1405,53 @@ public class ClassMetadata {
 				mc = mc.nextMember;
 			}
 			return null;
+		}
+	}
+
+	/**
+	 * The names {@link #findMembers(Class, String)} can find something for, a superset
+	 * being fine. {@link ClassInfoCache#getMembers(String)} only calls findMembers(), and
+	 * caches the result, for these names: a subclass overriding findMembers() to expose
+	 * additional names must override this method as well.
+	 */
+	protected MemberNames findMemberNames(Class<?> clazz) {
+		Set<String> names = new HashSet<>();
+		Set<String> propertySuffixes = new HashSet<>();
+		for (Field f : clazz.getFields()) {
+			names.add(f.getName());
+		}
+		for (Method m : clazz.getMethods()) {
+			String mName = m.getName();
+			names.add(mName);
+			if (mName.startsWith("get") && mName.length() > 3) {
+				propertySuffixes.add(mName.substring(3));
+			} else if (mName.startsWith("is") && mName.length() > 2) {
+				propertySuffixes.add(mName.substring(2));
+			}
+		}
+		return new MemberNames(names, propertySuffixes);
+	}
+
+	/**
+	 * The names of the members of a class: see {@link ClassMetadata#findMemberNames(Class)}.
+	 */
+	public static final class MemberNames {
+		private final Set<String> names;
+		private final Set<String> propertySuffixes;
+		public MemberNames(Set<String> names, Set<String> propertySuffixes) {
+			this.names = names;
+			this.propertySuffixes = propertySuffixes;
+		}
+		/**
+		 * Whether a member can have this name: a field or method name, or a property
+		 * name (that findProperty() maps to the getter get&lt;Name&gt;/is&lt;Name&gt;).
+		 */
+		public boolean isCandidate(String name) {
+			if (names.contains(name)) {
+				return true;
+			}
+			return !name.isEmpty()
+					&& propertySuffixes.contains(Character.toUpperCase(name.charAt(0)) + name.substring(1));
 		}
 	}
 
@@ -1317,12 +1570,39 @@ public class ClassMetadata {
 			if ((m[i].getModifiers() & Modifier.PUBLIC) == 0) {
 				continue;
 			}
+			// A synthetic bridge method (e.g. compareTo(Object) generated for compareTo(T))
+			// accepts arguments the real method rejects with a ClassCastException
+			if (m[i].isBridge() && isBridgeFor(m[i], m)) {
+				continue;
+			}
 			MethodCache mc = createMethodCache(m[i]);
 			mc.nextCallable = first;
 			first = mc;
 		}
 		return first;
 	}
+	// Whether the bridge method is the erasure of another, non-bridge, method of the list
+	private static boolean isBridgeFor(Method bridge, Method[] methods) {
+		Class<?>[] bTypes = bridge.getParameterTypes();
+		for (Method o : methods) {
+			if (o == bridge || o.isBridge() || !o.getName().equals(bridge.getName())) {
+				continue;
+			}
+			Class<?>[] oTypes = o.getParameterTypes();
+			if (oTypes.length != bTypes.length || !bridge.getReturnType().isAssignableFrom(o.getReturnType())) {
+				continue;
+			}
+			boolean erases = true;
+			for (int i = 0; i < oTypes.length && erases; i++) {
+				erases = bTypes[i].isAssignableFrom(oTypes[i]);
+			}
+			if (erases) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	protected PropertyCache findProperty(Class<?> clazz, String name) {
 		Method[] methods = clazz.getMethods();
 

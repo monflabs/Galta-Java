@@ -93,6 +93,37 @@ public class EngineRegressionJavaTest extends __BaseTestCase {
 				.build();
 	}
 
+	private static java.lang.ref.WeakReference<JavaLibrary> useJavaLibrary() {
+		JavaLibrary lib = new JavaLibrary();
+		JSEnvironment env = JSEnvironment.newBuilder()
+				.enableGaltaJSExtensions()
+				.registerLibrary(new StandardLibrary())
+				.registerLibrary(lib)
+				.build();
+		assertEquals(3, ((Number)env.evaluateScript("var R=Java.type('java.util.Random'); var r=new R(42); r.nextInt(1) + r.getClass().getName().length - 16 + Java.type('java.lang.Math').abs(-3)")).intValue());
+		return new java.lang.ref.WeakReference<>(lib);
+	}
+
+	// ClassMetadata: its ClassValue entries for JDK classes (never unloaded) used to pin
+	// every JavaLibrary - and its environment - forever
+	public void testJavaLibraryCollectable() throws Exception {
+		java.util.List<java.lang.ref.WeakReference<JavaLibrary>> refs = new java.util.ArrayList<>();
+		for (int i = 0; i < 20; i++) {
+			refs.add(useJavaLibrary());
+		}
+		long alive = 0;
+		for (int i = 0; i < 50; i++) {
+			System.gc();
+			Thread.sleep(20);
+			alive = refs.stream().filter(r -> r.get() != null).count();
+			if (alive <= 1) {
+				break;
+			}
+		}
+		// The last environment may still be referenced as the current one
+		assertTrue(alive + " JavaLibrary instances still alive", alive <= 1);
+	}
+
 	// AccessManager: reflection can't be used to reach denied classes
 	public void testAccessManagerReflection() {
 		ClassMetadata.AccessManager denyReflection = new ClassMetadata.AccessManager() {

@@ -102,13 +102,13 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 		@Override
 		protected ASSIGNABLE isAssignable(Class<?> c1, Object p2) {
 			if(p2==null) {
-				// Null is nor valid for primitives
-				// Else, we don't assume this is an exact match
-				// Should handle UNDEFINED as well
+				// Null is not valid for primitives, and never an exact match.
+				// (ClassMetadata.findCallable() handles a null argument itself, so this is
+				// only reached by a direct call)
 				if (c1.isPrimitive()) {
 					return ASSIGNABLE.NO;
 				}
-				return ASSIGNABLE.EXACT;
+				return ASSIGNABLE.POSSIBLE;
 			}
 			
 			if(c1==Class.class) {
@@ -127,9 +127,12 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			if (c1.isAssignableFrom(c2)) {
 				return ASSIGNABLE.POSSIBLE;
 			}
-			// String and Character can be exchanged
-			if ((c1 == Character.class && c2 == String.class) || (c2 == Character.class && c1 == String.class)) {
+			// A Character can be passed as a String, and a one-character String as a Character
+			if (c1 == String.class && c2 == Character.class) {
 				return ASSIGNABLE.POSSIBLE;
+			}
+			if (c1 == Character.class && c2 == String.class) {
+				return ((String)p2).length() == 1 ? ASSIGNABLE.POSSIBLE : ASSIGNABLE.NO;
 			}
 			// Numbers can be converted
 			if (Number.class.isAssignableFrom(c1) && Number.class.isAssignableFrom(c2)) {
@@ -351,20 +354,14 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			// Find and call the proper ctor
 			// Find the best constructor using 2 passes
 			ConstructorCache cache = getClassInfoCache().getConstructors();
-			ConstructorCache m = (ConstructorCache) cache.findCallable(true, parameters, true);
+			ConstructorCache m = cache!=null ? (ConstructorCache) cache.findCallable(true, parameters, true) : null;
 			if (m != null) {
+				// Convert the arguments into a copy (varargs collected into an array): the
+				// caller's array is left untouched
+				Object[] converted = m.convertArguments((v,t) -> convertObject(v, t), parameters);
 				// Create the java object
-				// Convert into a copy: the caller's array must not be modified
-				Object[] args = parameters;
-				if (parameters != null && parameters.length > 0) {
-					Class<?>[] argClasses = m.getArgClasses();
-					args = new Object[parameters.length];
-					for (int i = 0; i < parameters.length; i++) {
-						args[i] = convertObject(parameters[i], argClasses[i]);
-					}
-				}
 				try {
-					Object o = m.getConstructor().newInstance(args);
+					Object o = m.getConstructor().newInstance(converted);
 					if(RuntimeUtil.isPrimitiveType(o)) {
 						return RuntimeUtil.primitiveAsObject(JSEnvironment.getEnvironment(),o);
 					}

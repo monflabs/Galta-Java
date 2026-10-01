@@ -247,13 +247,13 @@ public class PojoAccessor extends JavaObjectAccessor {
 		}
         // Find the best constructor using 2 passes
         ConstructorCache cache = getClassMetadata().getClassInfoCache(c).getConstructors();
-        ConstructorCache m = (ConstructorCache)cache.findCallable(null,parameters,true);
+        ConstructorCache m = cache!=null ? (ConstructorCache)cache.findCallable(null,parameters,true) : null;
         if(m!=null) {
             // Create the java object
             try {
             	// As for call(): the constructor may have been accepted with conversions
             	// (e.g. Double -> int), so convert the arguments before invoking
-            	Object[] converted = convertArguments(m.getArgClasses(), parameters);
+            	Object[] converted = m.convertArguments(this::convertObject, parameters);
                 return m.constructor.newInstance(converted);
             } catch( Exception e ) {
 				if(isUseExceptions()) {
@@ -315,7 +315,7 @@ public class PojoAccessor extends JavaObjectAccessor {
 	            	// The overload was accepted with conversions (e.g. Double -> int),
 	            	// so convert the arguments before invoking - into a copy, the caller's
 	            	// array is left untouched
-	            	Object[] converted = convertArguments(m.argClasses, parameters);
+	            	Object[] converted = m.convertArguments(this::convertObject, parameters);
 	            	// Through the public declaring class/interface when the method is declared
 	            	// by a non-public class (e.g. the List returned by List.of())
 	                return m.invoke(instance, converted);
@@ -337,17 +337,6 @@ public class PojoAccessor extends JavaObjectAccessor {
 		}
 		return UNHANDLED;
 	}
-	private Object[] convertArguments(Class<?>[] argClasses, Object[] parameters) {
-		if(argClasses==null || parameters.length!=argClasses.length) {
-			return parameters;
-		}
-		Object[] converted = new Object[parameters.length];
-		for(int i=0; i<parameters.length; i++) {
-			converted[i] = convertObject(parameters[i], argClasses[i]);
-		}
-		return converted;
-	}
-
 	protected void throwInvocationTargetException(InvocationTargetException e) throws ModelException {
         throw new ModelException(e.getTargetException());
 	}

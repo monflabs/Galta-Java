@@ -258,4 +258,174 @@ public class ClassMetadataTest extends ProjectTestCase {
 			return new java.lang.ref.WeakReference<>(l);
 		}
 	}
+
+	// Overload resolution cases that used to fail
+
+	public static class Widening {
+		public String g(int i) {
+			return "int";
+		}
+		public String g(long l) {
+			return "long";
+		}
+		public String d(int i) {
+			return "int";
+		}
+		public String d(double d) {
+			return "double";
+		}
+		public String h(char c) {
+			return "char " + c;
+		}
+		public String s(String s) {
+			return "String " + s;
+		}
+		public String join(String sep, String... parts) {
+			return String.join(sep, parts);
+		}
+		public int total(int... values) {
+			int t = 0;
+			for (int v : values) {
+				t += v;
+			}
+			return t;
+		}
+		public String fixed(Object o) {
+			return "fixed";
+		}
+		public String fixed(Object... o) {
+			return "varargs " + o.length;
+		}
+	}
+	public static class Cmp implements Comparable<Cmp> {
+		@Override
+		public int compareTo(Cmp o) {
+			return 0;
+		}
+	}
+
+	public void testPrimitiveWidening() throws Exception {
+		// g(int)/g(long) with a Short used to be an ambiguity: Java picks g(int)
+		assertEquals("int", accessor().call(new Widening(), "g", new Object[] {(short)1}));
+		assertEquals("int", accessor().call(new Widening(), "g", new Object[] {(byte)1}));
+		assertEquals("long", accessor().call(new Widening(), "g", new Object[] {1L}));
+		assertEquals("int", accessor().call(new Widening(), "g", new Object[] {1}));
+		// A Long reaches double by widening, not int (as in Java)
+		assertEquals("double", accessor().call(new Widening(), "d", new Object[] {3L}));
+		assertEquals("double", accessor().call(new Widening(), "d", new Object[] {1.5f}));
+		// Nothing widens: the wider parameter, which loses less, is chosen
+		assertEquals("long", accessor().call(new Widening(), "g", new Object[] {2.0}));
+	}
+
+	public void testStringToChar() throws Exception {
+		assertEquals("char a", accessor().call(new Widening(), "h", new Object[] {"a"}));
+		// A longer String used to be accepted, and the reflective call failed with an
+		// IllegalArgumentException
+		ModelException e = assertThrows(ModelException.class, () -> accessor().call(new Widening(), "h", new Object[] {"abc"}));
+		assertTrue(e.getMessage(), e.getMessage().startsWith("Cannot find public method h("));
+		// The shape cache must not reuse the one-character resolution
+		assertEquals("char b", accessor().call(new Widening(), "h", new Object[] {"b"}));
+		// And a Character is converted for a String parameter
+		assertEquals("String c", accessor().call(new Widening(), "s", new Object[] {'c'}));
+	}
+
+	public void testBridgeMethodsIgnored() throws Exception {
+		assertEquals(0, accessor().call(new Cmp(), "compareTo", new Object[] {new Cmp()}));
+		// The bridge compareTo(Object) used to be selected, failing with a ClassCastException
+		ModelException e = assertThrows(ModelException.class, () -> accessor().call(new Cmp(), "compareTo", new Object[] {"s"}));
+		assertTrue(e.getMessage(), e.getMessage().startsWith("Cannot find public method compareTo("));
+	}
+
+	public void testVarArgs() throws Exception {
+		assertEquals("a-b-c", accessor().call(new Widening(), "join", new Object[] {"-", "a", "b", "c"}));
+		assertEquals("", accessor().call(new Widening(), "join", new Object[] {"-"}));
+		assertEquals("x", accessor().call(new Widening(), "join", new Object[] {"-", new String[] {"x"}}));
+		assertEquals(6, accessor().call(new Widening(), "total", new Object[] {1, 2.9, 3L}));
+		assertEquals(0, accessor().call(new Widening(), "total", new Object[0]));
+		// Fixed arity is preferred, as in Java
+		assertEquals("fixed", accessor().call(new Widening(), "fixed", new Object[] {"x"}));
+		assertEquals("varargs 2", accessor().call(new Widening(), "fixed", new Object[] {"x", "y"}));
+		// A null can't be an int
+		assertThrows(ModelException.class, () -> accessor().call(new Widening(), "total", new Object[] {1, null}));
+	}
+
+	public void testMissingNamesNotCached() throws Exception {
+		ClassMetadata cm = new ClassMetadata(null);
+		ClassMetadata.ClassInfoCache ci = cm.getClassInfoCache(Sub.class);
+		java.lang.reflect.Field f = ClassMetadata.ClassInfoCache.class.getDeclaredField("members");
+		f.setAccessible(true);
+		Map<?,?> members = (Map<?,?>) f.get(ci);
+		for (int i = 0; i < 10000; i++) {
+			assertNull(ci.getMethod("missing" + i));
+		}
+		// Every looked up name used to be cached, misses included
+		assertTrue(String.valueOf(members.size()), members.size() < 10);
+		assertNotNull(ci.getProperty("v"));
+		assertNotNull(ci.getMethod("getV"));
+		assertNull(ci.getField("v"));
+	}
+
+	private static boolean collected(java.lang.ref.WeakReference<?> ref) throws InterruptedException {
+		for (int i = 0; i < 50 && ref.get() != null; i++) {
+			System.gc();
+			Thread.sleep(20);
+		}
+		return ref.get() == null;
+	}
+
+	private static java.lang.ref.WeakReference<ClassMetadata> useMetadata() {
+		ClassMetadata cm = new ClassMetadata(null);
+		PojoAccessor a = new PojoAccessor(cm);
+		assertEquals(3, a.call("abc", "length", new Object[0]));
+		assertNotNull(cm.getClassInfoCache(int.class));
+		assertNotNull(cm.getClassInfoCache(String[].class).getMethod("hashCode"));
+		assertEquals("sub", a.getMember(new Sub(), "v"));
+		return new java.lang.ref.WeakReference<>(cm);
+	}
+
+	public void testClassMetadataIsCollectable() throws Exception {
+		// The ClassValue entries of never-unloaded classes (String...) referenced their
+		// ClassMetadata, which then stayed reachable forever
+		java.lang.ref.WeakReference<ClassMetadata> ref = useMetadata();
+		assertTrue("The ClassMetadata was not garbage collected", collected(ref));
+	}
+
+	// The class, defined again by a throw-away class loader
+	private static Class<?> defineInOwnLoader(Class<?> c) throws Exception {
+		byte[] bytes;
+		try (java.io.InputStream is = c.getClassLoader().getResourceAsStream(c.getName().replace('.', '/') + ".class")) {
+			bytes = is.readAllBytes();
+		}
+		ClassLoader loader = new ClassLoader(ClassMetadataTest.class.getClassLoader()) {
+			@Override
+			protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+				if (name.equals(c.getName())) {
+					synchronized (getClassLoadingLock(name)) {
+						Class<?> l = findLoadedClass(name);
+						return l != null ? l : defineClass(name, bytes, 0, bytes.length);
+					}
+				}
+				return super.loadClass(name, resolve);
+			}
+		};
+		return loader.loadClass(c.getName());
+	}
+
+	private static java.lang.ref.WeakReference<?>[] useOtherLoader() throws Exception {
+		Class<?> other = defineInOwnLoader(sample.Class1.class);
+		assertNotSame(sample.Class1.class, other);
+		ClassMetadata cm = new ClassMetadata(null);
+		assertSame(cm.getClassInfoCache(other), cm.getClassInfoCache(other));
+		assertEquals(other, cm.getClassInfoCache(other).getNativeClass());
+		Object o = other.getConstructor().newInstance();
+		assertEquals("Class #1", new PojoAccessor(cm).call(o, "toString", new Object[0]));
+		return new java.lang.ref.WeakReference<?>[] {new java.lang.ref.WeakReference<>(other), new java.lang.ref.WeakReference<>(cm)};
+	}
+
+	public void testClassOfOtherLoader() throws Exception {
+		// The class, its loader and the metadata can all go away together
+		java.lang.ref.WeakReference<?>[] refs = useOtherLoader();
+		assertTrue(collected(refs[0]));
+		assertTrue(collected(refs[1]));
+	}
 }
