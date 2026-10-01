@@ -334,15 +334,21 @@ public class ASTArrayMember extends ASTNode implements ChainingNode, MemberNode 
 
 	@Override
 	public Object getSingleValue(JSInterpretedRuntimeContext context, Object base) {
-		Object singleIndex;
+		return RuntimeUtil.getPropertyUnavailable(context.getEnvironment(), base, getSingleIndex(context, base)); 
+	}
+
+	public Object getSingleIndex(JSInterpretedRuntimeContext context, Object base) {
 		if(singleIndexNode() instanceof ASTLiteral lit) {
-			singleIndex = lit.getValue();
+			return lit.getValue();
 		} else if(singleIndexNode() instanceof ASTIdentifier ident) {
-			singleIndex = RuntimeUtil.getIdentifierValue(context, ident.getId(), true);
-		} else {
-			singleIndex = context.executeWithFilterContext(base, singleIndexNode(), new JSResult());
+			return RuntimeUtil.getIdentifierValue(context, ident.getId(), true);
 		}
-		return RuntimeUtil.getPropertyUnavailable(context.getEnvironment(), base, singleIndex); 
+		return context.executeWithFilterContext(base, singleIndexNode(), new JSResult());
+	}
+
+	// A plain `base[index]` (the member of a `new` target)
+	public ASTNode getPlainSingleIndexNode() {
+		return !deepscan && !nullop && !node.isSequence() ? singleIndexNode() : null;
 	}
 
 	@Override

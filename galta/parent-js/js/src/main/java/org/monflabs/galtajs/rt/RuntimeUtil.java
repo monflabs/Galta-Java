@@ -6610,7 +6610,24 @@ public class RuntimeUtil {
 		}
 		throw RuntimeUtil.typeError("Object is not a callable, {0}", RuntimeUtil.objectTypeName(env,function));
 	}
+	// `new X[n]` where X is a Java class: a Java array (GaltaJS extension).
+	// Otherwise the spec applies, `new (X[n])(...)`.
+	public record JavaArrayAllocation(Constructor type, Object size) {
+	}
+	public static Object newMemberTarget(JSEnvironment env, Object base, Object index) {
+		if(base instanceof Constructor c && c.canConstructArray()) {
+			return new JavaArrayAllocation(c,index);
+		}
+		return getPropertyUnavailable(env,base,index);
+	}
+
 	public static Object constructObject(JSEnvironment env, Object ctor, Object[] parameters) {
+		if(ctor instanceof JavaArrayAllocation a) {
+			if(parameters.length>0) {
+				throw RuntimeUtil.typeError("A Java array allocation takes no arguments");
+			}
+			return a.type().constructArray(0,toInt32(env,a.size()));
+		}
 		if(ctor instanceof Constructor c) {
 			return c.constructObject(parameters);
 		}

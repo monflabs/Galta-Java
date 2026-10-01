@@ -83,7 +83,7 @@ map.set('k', 1);
 // -> [ 2, "b", "A,B", true, 1, 1, true, true ]
 ```
 
-Java arrays are created with the Java syntax `new Type[n]` on a class loaded with `Java.type()`, and behave like arrays.
+Java arrays are created with the Java syntax `new Type[n]` on a class loaded with `Java.type()`, and behave like arrays. The choice is made when the expression runs: when the value before `[` is not a Java class, `new x[n](...)` is the standard JavaScript `new (x[n])(...)`.
 
 Sample: `doc_examples/JavaInteropExamples.java` (`testJavaArrays`)
 

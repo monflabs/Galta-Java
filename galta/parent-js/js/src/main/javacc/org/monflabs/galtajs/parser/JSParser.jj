@@ -3208,7 +3208,10 @@ ASTNode AllocationExpression(Token newTk): {
 {
 	id=AllocationClass()
 		(
-			 ( LOOKAHEAD("[" "]") "[" "]" {dim++;} )* "[" node=Expression() "]" 
+			 // new int[][3]: the GaltaJS Java array syntax. A single
+			 // "new X[n]" is parsed as the member X[n] by NewTargetSuffixes();
+			 // ASTNewObject makes it a Java array when X is a Java class.
+			 ( LOOKAHEAD("[" "]") "[" "]" {dim++;} )+ "[" node=Expression() "]" 
 			 	{
 			 		return nodeFactory.createNewArray(newTk,id,dim,node);
 			 	}
@@ -3234,16 +3237,12 @@ ASTNode AllocationClass() : {
             return n;
         }
 |  t="new" n=AllocationExpression(t)
-  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
-  	| LOOKAHEAD(1) n=TemplateLiteral(n)
-  	)*
+  	n=NewTargetSuffixes(n)
   		{
   			return n;
   		}
-|  t="this" { n=nodeFactory.createThis(t); }
-  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
-  	| LOOKAHEAD(1) n=TemplateLiteral(n)
-  	)*
+|  LOOKAHEAD(1) t="this" { n=nodeFactory.createThis(t); }
+  	n=NewTargetSuffixes(n)
   		{
   			return n;
   		}
@@ -3263,30 +3262,56 @@ ASTNode AllocationClass() : {
   			}
   			n=nodeFactory.createImportMeta(t);
   		}
-  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
-  	| LOOKAHEAD(1) n=TemplateLiteral(n)
-  	)*
+  	n=NewTargetSuffixes(n)
   		{
   			return n;
   		}
-|  t=Identifier_Name() { n=nodeFactory.createIdentifier(t,t.image); }
-  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
-  	| LOOKAHEAD(1) n=TemplateLiteral(n)
-  	)*
+   // Not "async function": an async function expression is a PrimaryExpression
+|  LOOKAHEAD(1, { !(getToken(1).kind==ASYNC && getToken(2).kind==FUNCTION && getToken(2).beginLine==getToken(1).endLine) })
+   t=Identifier_Name() { n=nodeFactory.createIdentifier(t,t.image); }
+  	n=NewTargetSuffixes(n)
   		{
   			return n;
   		}
    // Any other PrimaryExpression form: literals, function/class expressions,
    // array/object literals, etc. Evaluation throws TypeError if not constructible.
 |  LOOKAHEAD(1) n=PrimaryExpression()
-  	( LOOKAHEAD("." t=Property_Name()) "." t=Property_Name(){n=nodeFactory.createMember(t,n,t.image,false,false);}
-  	| LOOKAHEAD(1) n=TemplateLiteral(n)
-  	)*
+  	n=NewTargetSuffixes(n)
   		{
   			return n;
   		}
 }
 
+
+// The member suffixes of a "new" target (MemberExpression): .name, .#name,
+// [expression] and tagged templates. "[" "]" is left to the Java array syntax.
+ASTNode NewTargetSuffixes(ASTNode n): {
+	Token t;
+	ASTNode e;
+	ASTArrayMember m;
+}
+{
+	( LOOKAHEAD(2) (
+	  LOOKAHEAD(3) "." "#" {privateNameFollows();} t=Property_Name()
+	  	{
+	  		n=nodeFactory.createMember(t,n,"#"+ASTLiteral.parseIdentifier(t.image),false,false);
+	  	}
+	| LOOKAHEAD(2) "." t=Property_Name()
+		{
+			n=nodeFactory.createMember(t,n,t.image,false,false);
+		}
+	| LOOKAHEAD({ getToken(1).kind==LBRACKET && getToken(2).kind!=RBRACKET }) t="[" e=Expression() "]"
+		{
+			m=nodeFactory.createArrayMember(t,n,false,false);
+			m.addIndex(t,e);
+			n=m;
+		}
+	| LOOKAHEAD(1) n=TemplateLiteral(n)
+	) )*
+		{
+			return n;
+		}
+}
 
 ASTNode CallExpression(ASTNode leftNode): {
 	ASTNode node;

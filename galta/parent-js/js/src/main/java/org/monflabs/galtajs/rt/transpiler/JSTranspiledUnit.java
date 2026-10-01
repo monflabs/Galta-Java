@@ -2699,6 +2699,10 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 		return RuntimeUtil.constructObject(env, value, parameters!=null ? parameters : RuntimeUtil.EMPTY_PARAMS);
 	}
 
+	public final Object newMemberTarget(Object base, Object index) {
+		return RuntimeUtil.newMemberTarget(env, base, index);
+	}
+
 	public final Object newArray(Object value, int dimensions, Object sizeObject) {
 		int size = RuntimeUtil.toInt32(env,sizeObject);
 		return RuntimeUtil.constructArray(env, value, dimensions, size);

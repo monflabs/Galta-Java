@@ -31,3 +31,22 @@ function Box(v) {
 	this.v = v;
 }
 assertThrows(TypeError, () => new new Box(5));
+
+// The target of new is a MemberExpression: computed members, private names and
+// async function expressions included
+{
+    const F = function F(v) { this.v = v; };
+    const holder = { list: [F], map: { key: F } };
+    const key = "key";
+    assertEquals(1, new holder.list[0](1).v);
+    assertEquals(2, new holder.map[key](2).v);
+    assertEquals(3, new holder["map"].key(3).v);
+    assertEquals(undefined, new holder.list[0]().v);
+    class K {
+        #C = F;
+        make(v) { return new this.#C(v); }
+    }
+    assertEquals(4, new K().make(4).v);
+    assertThrows(TypeError, () => new async function () {});
+    assertThrows(TypeError, () => new holder.list[1]());
+}

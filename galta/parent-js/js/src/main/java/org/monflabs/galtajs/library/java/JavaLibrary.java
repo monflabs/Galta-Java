@@ -358,6 +358,11 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 		}
 
 		@Override
+		public boolean canConstructArray() {
+			return true;
+		}
+
+		@Override
 		public final Object constructArray(int dimensions, long size) {
 			Class<?> c = getNativeClass();
 			AccessManager accessManager = getAccessManager(); 

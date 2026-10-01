@@ -51,4 +51,10 @@ public interface Constructor extends Callable {
 	public Object constructObject(Object[] parameters, Constructor topConstructor);
 
 	public Object constructArray(int dimensions, long size);
+
+	// Does `new X[n]` create a Java array (GaltaJS extension), rather than
+	// construct the member X[n]?
+	public default boolean canConstructArray() {
+		return false;
+	}
 }

@@ -81,6 +81,10 @@ First public release: Galta is published to Maven Central under the
   error in any dependency, is a `SyntaxError` before any module code runs.
   `import`/`export` at the top level of a script stays allowed by default;
   the new `supportImportExportInScripts(false)` builder option rejects it.
+- `new` accepts every MemberExpression target: `new a[i]()`, `new this.#C()`
+  and `new async function () {}` (a `TypeError` at run time) now parse as the
+  specification says. `new X[n]` still creates a Java array when `X` is a Java
+  class. The JavaCC grammar generates without warnings.
 - `Reflect.defineProperty` returns `false` instead of throwing when the
   property cannot be defined, and a proxy `set` trap returning false throws
   a `TypeError` in strict code.

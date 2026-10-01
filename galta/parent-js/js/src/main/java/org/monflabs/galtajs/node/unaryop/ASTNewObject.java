@@ -17,7 +17,10 @@ package org.monflabs.galtajs.node.unaryop;
 
 import java.util.List;
 
+import org.monflabs.galtajs.node.ASTArrayMember;
 import org.monflabs.galtajs.node.ASTNode;
+import org.monflabs.galtajs.rt.RuntimeUtil;
+import org.monflabs.galtajs.rt.builtins.Constructor;
 import org.monflabs.galtajs.parser.Token;
 import org.monflabs.galtajs.rt.JSResult;
 import org.monflabs.galtajs.rt.interpreter.InterpretedUnitRuntimeContext.Signal;
@@ -39,7 +42,16 @@ public class ASTNewObject extends ASTNew {
 	@Override
 	public Signal evaluate(JSInterpretedRuntimeContext context, JSResult result) {
 		try {
-			Object value = getTypeNode().evaluateValue(context,result);
+			Object value;
+			if(getTypeNode() instanceof ASTArrayMember m && m.getPlainSingleIndexNode()!=null) {
+				// new X[n]: a Java array when X is a Java class (GaltaJS)
+				Object base = m.getNode().evaluateValue(context,result);
+				value = base instanceof Constructor c && c.canConstructArray()
+						? new RuntimeUtil.JavaArrayAllocation(c,m.getSingleIndex(context,base))
+						: m.getSingleValue(context,base);
+			} else {
+				value = getTypeNode().evaluateValue(context,result);
+			}
 			Object obj = constructObject(context, value, result);
 			result.setValue(obj);
 			return Signal.NONE;
@@ -57,7 +69,15 @@ public class ASTNewObject extends ASTNew {
 	public String transpileJavaExpression(JSTranspilerGeneratorContext jsContext) {
     	StringBuilder b = new StringBuilder(64);
     	b.append("newObject(");
-    	b.append(JSTranspiler.asValue(jsContext, getTypeNode()));
+    	if(getTypeNode() instanceof ASTArrayMember m && m.getPlainSingleIndexNode()!=null) {
+    		b.append("newMemberTarget(");
+    		b.append(JSTranspiler.asValue(jsContext, m.getNode()));
+    		b.append(",");
+    		b.append(JSTranspiler.asValue(jsContext, m.getPlainSingleIndexNode()));
+    		b.append(")");
+    	} else {
+    		b.append(JSTranspiler.asValue(jsContext, getTypeNode()));
+    	}
 
 		ASTNode[] parameters = getParameters();
     	if(parameters.length>0) {
