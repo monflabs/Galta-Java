@@ -103,7 +103,11 @@ public class PrivateNameValidator {
 		}
 		int n = node.getChildCount();
 		for(int i=0; i<n; i++) {
-			ASTNode result = find(node.getChild(i), childValidNames);
+			ASTNode child = node.getChild(i);
+			// The ClassHeritage is evaluated in the enclosing private
+			// environment, not in the class's own
+			boolean heritage = node instanceof ASTBaseClass cls && child!=null && child==cls.getSuperClass();
+			ASTNode result = find(child, heritage ? validNames : childValidNames);
 			if(result!=null) {
 				return result;
 			}

@@ -31,6 +31,8 @@ public class GlobalTest262Environment {
 				// Float16Array/DataView.prototype.get|setFloat16 is a shipped
 				// ES2025 feature, not a proposal - test262 expects it present.
 				.supportFloat16Array(true)
+				// Strict ECMAScript: import/export declarations only in modules
+				.supportImportExportInScripts(false)
 				// Use Joni for the best compatibility
 				.regexpEngineFactory(RegExpEngineJoni.factory())
 				.registerLibrary(new StandardLibrary())

@@ -190,7 +190,7 @@ public class MathObject extends NativeObject {
 		}
 
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	JSEnvironment env = getEnvironment();
 
 	        switch(methodId) {

@@ -106,7 +106,7 @@ assertEquals(true, env.evaluateScript("import { existsSync } from 'fs'; existsSy
 
 Sample: `doc_examples/BundledLibrariesExamples.java` (`testNodeFileSystemModules`)
 
-A separate Maven module, `js-mod-node`, contains an older parallel implementation (`org.monflabs.galtajs.modules.node.NodeModuleResolver`, `FsModule`); the core `library/node` package is the one documented here.
+Paths resolve in the default file system. To sandbox a script, register `new NodeModuleResolver(fileSystem)` with `addModuleResolver(...)` instead of the library: every path is then resolved in that `java.nio.file.FileSystem` (an in-memory or zip file system, for example). The playground does this for its snippets.
 
 ## UnitTestLibrary
 

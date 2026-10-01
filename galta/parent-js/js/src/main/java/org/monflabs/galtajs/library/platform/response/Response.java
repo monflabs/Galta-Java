@@ -107,7 +107,7 @@ public class Response extends NativeObject {
 		}
 
 		@Override
-		public Object call(Object obj, Object[] args) {
+		protected Object invoke(Object obj, Object[] args) {
 			JSEnvironment env = getEnvironment();
 			if ("clone".equals(methodName)) {
 				return new Response(env, status, statusText, url, headers.copy(), body.clone());

@@ -79,6 +79,7 @@ public class DatePrototype extends BasePrototype {
 		
 		setOwnMethod(new Method(env,MethodId.toDateString,0));
 		setOwnMethod(new Method(env,MethodId.toISOString,0));
+		setOwnMethod(new Method(env,MethodId.toTemporalInstant,0));
 		setOwnMethod(new Method(env,MethodId.toJSON,1));
 		setOwnMethod(new Method(env,MethodId.toLocaleDateString,0));
 		setOwnMethod(new Method(env,MethodId.toLocaleString,0));
@@ -137,6 +138,7 @@ public class DatePrototype extends BasePrototype {
 		setYear,
 		toDateString,
 		toISOString,
+		toTemporalInstant,
 		toJSON,
 		toLocaleDateString,
 		toLocaleString,
@@ -169,7 +171,7 @@ public class DatePrototype extends BasePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	// Date.prototype[Symbol.toPrimitive] is the ONE method here that
 	    	// doesn't require a [[DateValue]] internal slot - it's OrdinaryToPrimitive
 	    	// applied to whatever object it's called on (spec: "If Type(O) is
@@ -488,6 +490,13 @@ public class DatePrototype extends BasePrototype {
 
 	    		case toDateString-> {
 	    			return DateUtil.toDateString(_this);
+	    		}
+	    		case toTemporalInstant-> {
+	    			double t = DateUtil.getTime(_this);
+	    			if(Double.isNaN(t)) {
+	    				throw RuntimeUtil.rangeError("Invalid time value");
+	    			}
+	    			return org.monflabs.galtajs.rt.builtins.standard.temporal.TemporalAO.createTemporalInstant(java.math.BigInteger.valueOf((long)t).multiply(java.math.BigInteger.valueOf(1_000_000L)));
 	    		}
 	    		case toISOString-> {
 	    			return DateUtil.toISOString(_this);

@@ -90,7 +90,7 @@ public class FetchLibrary extends GlobalLibrary {
 		}
 
 		@Override
-		public Object call(Object obj, Object[] args) {
+		protected Object invoke(Object obj, Object[] args) {
 			JSEnvironment env = getEnvironment();
 			JSExecutor executor = JSRuntimeContext.get().getGlobalContext().getExecutor();
 

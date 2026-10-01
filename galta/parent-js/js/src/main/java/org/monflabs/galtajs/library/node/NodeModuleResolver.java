@@ -15,6 +15,8 @@
  */
 package org.monflabs.galtajs.library.node;
 
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -42,7 +44,18 @@ public class NodeModuleResolver extends NativeModuleResolver {
 			"node:fs", "fs",
 			"node:fs/promises", "fs/promises");
 
+	private final FileSystem fs;
+
 	public NodeModuleResolver() {
+		this(FileSystems.getDefault());
+	}
+
+	/**
+	 * @param fs the file system the fs modules resolve paths in, for example
+	 *        an in-memory or zip file system to sandbox a script
+	 */
+	public NodeModuleResolver(FileSystem fs) {
+		this.fs = fs;
 	}
 
 	@Override
@@ -54,9 +67,9 @@ public class NodeModuleResolver extends NativeModuleResolver {
 				JSEnvironment env = globalContext.getEnvironment();
 				String n = getName();
 				if ("node:fs".equals(n) || "fs".equals(n)) {
-					return new NodeFsModule(env, this);
+					return new NodeFsModule(env, this, fs);
 				}
-				return new NodeFsPromisesModule(env, this);
+				return new NodeFsPromisesModule(env, this, fs);
 			}
 		};
 	}

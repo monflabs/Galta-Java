@@ -579,7 +579,13 @@ public class BuiltinClassConstructor extends BaseStandardConstructor {
 	// language/statements/class/subclass/binding.js).
 	@Override
 	public Object call(Object _this, @NonNull Object[] parameters) {
-		throw RuntimeUtil.typeError("Class constructor {0} cannot be invoked without 'new'", getProperty("name",""));
+		// In the class's own realm (its [[Call]] is a function of that realm)
+		Object realm = JSEnvironment.enterRealm(getEnvironment());
+		try {
+			throw RuntimeUtil.typeError("Class constructor {0} cannot be invoked without 'new'", getProperty("name",""));
+		} finally {
+			JSEnvironment.exitRealm(realm);
+		}
 	}
 	
 	// Whether the WHOLE superclass chain starting here is made entirely of
@@ -594,11 +600,21 @@ public class BuiltinClassConstructor extends BaseStandardConstructor {
 		while(c instanceof BuiltinClassConstructor bcc) {
 			c = bcc.getSuperClass();
 		}
-		return c==null;
+		// An ordinary JavaScript function as the base threads newTarget itself
+		return c==null || c instanceof BuiltinFunctionInterpreter || c instanceof BuiltinFunctionTranspiler;
 	}
 
 	@Override
 	public Object constructObject(Object[] parameters, Constructor topConstructor) {
+		try {
+			return doConstructObject(parameters, topConstructor);
+		} catch(org.monflabs.galtajs.rt.ConstructResultError e) {
+			// Thrown by the constructor's body, reported in the caller's realm
+			throw e.toJavaScriptError();
+		}
+	}
+
+	private Object doConstructObject(Object[] parameters, Constructor topConstructor) {
 		BaseInternalObject prototype = (BaseInternalObject)getProperty(PROTOTYPE,RuntimeUtil.NOT_AVAILABLE);
 		// Branches on `derived` (ClassHeritage textually present), NOT
 		// `superClass!=null` - see the `derived` field's doc: `extends null`
@@ -666,7 +682,7 @@ public class BuiltinClassConstructor extends BaseStandardConstructor {
 			if(initializer!=null) {
 				initializer.initInstance(this,_this);
 			}
-			Object r = functionConstructor.call(_this, parameters, topConstructor);
+			Object r = BuiltinFunction.resolveTailCalls(functionConstructor.call(_this, parameters, topConstructor));
 			if(RuntimeUtil.isObject(getEnvironment(), r)) {
 				return  r;
 			}

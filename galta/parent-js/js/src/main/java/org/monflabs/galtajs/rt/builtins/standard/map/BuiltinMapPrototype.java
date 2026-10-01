@@ -120,7 +120,7 @@ public class BuiltinMapPrototype extends BasePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	// We exclude JS Object from here
 	    	if(!(obj instanceof Map<?,?>) || obj instanceof JSObjectInternal) {
 	    		throw RuntimeUtil.typeError("Method Map.prototype.{0} called on incompatible receiver {1}", methodId.toString(), obj!=null?obj.getClass():"null");

@@ -59,7 +59,7 @@ public class BuiltinAsyncIteratorPrototype extends BasePrototype {
 			super(env, Symbol.ASYNC_ITERATOR, 0);
 		}
 		@Override
-		public Object call(Object _this, Object[] args) {
+		protected Object invoke(Object _this, Object[] args) {
 			return _this;
 		}
 	}
@@ -74,7 +74,7 @@ public class BuiltinAsyncIteratorPrototype extends BasePrototype {
 			super(env, Symbol.ASYNC_DISPOSE, 0);
 		}
 		@Override
-		public Object call(Object _this, Object[] args) {
+		protected Object invoke(Object _this, Object[] args) {
 			JSEnvironment env = getEnvironment();
 			Object returnMethod;
 			try {

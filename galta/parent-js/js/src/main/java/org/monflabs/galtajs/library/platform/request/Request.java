@@ -75,7 +75,7 @@ public class Request extends NativeObject {
 		}
 
 		@Override
-		public Object call(Object obj, Object[] args) {
+		protected Object invoke(Object obj, Object[] args) {
 			return new Request(getEnvironment(), url, method, headers.copy(), body);
 		}
 	}

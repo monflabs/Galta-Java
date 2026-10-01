@@ -148,7 +148,7 @@ public class DataViewPrototype extends BasePrototype {
 		}
 
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	if(!(obj instanceof DataView)) {
 	    		throw RuntimeUtil.typeError("Method DataView.prototype.{0} called on incompatible receiver {1}", methodId.toString(), RuntimeUtil.objectTypeName(getEnvironment(),obj));
 	    	}

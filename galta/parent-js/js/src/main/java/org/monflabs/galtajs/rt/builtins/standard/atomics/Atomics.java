@@ -258,7 +258,7 @@ public class Atomics extends NativeObject {
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			switch(methodId) {
 				case add -> {
 					return atomicReadModifyWrite(getEnvironment(), param(args,0,RuntimeUtil.UNDEFINED), param(args,1,RuntimeUtil.UNDEFINED), param(args,2,RuntimeUtil.UNDEFINED),

@@ -919,6 +919,37 @@ public class ASTObjectLiteral extends ASTContainerLiteral {
 		}
 	}
 
+	// Set when the literal is used as a destructuring pattern (checkPattern())
+	private boolean pattern;
+
+	// Early errors of an object literal that is an expression, not a
+	// pattern: no CoverInitializedName ("{a = 1}") and at most one
+	// "__proto__: value" property. Accessors always have the right arity.
+	public void checkEarlyErrors() {
+		boolean proto = false;
+		for(Initializer init: fieldInitializers) {
+			if(!(init instanceof InitializerFieldNameExpression f)) {
+				continue;
+			}
+			if(f.accessorType!=null && f.node instanceof ASTFunction fn) {
+				org.monflabs.galtajs.node.EarlyErrorsValidator.checkAccessorParameters(this, fn, f.accessorType==AccessorType.GETTER);
+			}
+			if(pattern) {
+				continue;
+			}
+			if(!f.hasField && f.node instanceof ASTAssign) {
+				throw new JSParseException(null, this, "Invalid shorthand property initializer");
+			}
+			if(f.hasField && f.accessorType==null && "__proto__".equals(f._fieldName)
+					&& !(f.node instanceof ASTFunction fn && fn.isMethod())) {
+				if(proto) {
+					throw new JSParseException(null, this, "Duplicate __proto__ fields are not allowed in object literals");
+				}
+				proto = true;
+			}
+		}
+	}
+
 	@Override
 	protected boolean lastIsSpread() {
 		return !fieldInitializers.isEmpty() && fieldInitializers.get(fieldInitializers.size()-1) instanceof InitializerSpread;
@@ -926,6 +957,7 @@ public class ASTObjectLiteral extends ASTContainerLiteral {
 
 	@Override
 	public void checkPattern(boolean binding, boolean strict) {
+		pattern = true;
 		for(int i=0; i<fieldInitializers.size(); i++) {
 			Initializer init = fieldInitializers.get(i);
 			if(init instanceof InitializerSpread sp) {

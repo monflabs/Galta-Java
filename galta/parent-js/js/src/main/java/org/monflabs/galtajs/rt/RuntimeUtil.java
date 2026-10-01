@@ -156,6 +156,14 @@ public class RuntimeUtil {
 	// it either way - safe to call unconditionally for any class
 	// constructor's own implicit/valueless return, without needing to know
 	// separately whether ITS class happens to be derived.
+	// The implicit return of a class constructor: see ConstructResultError
+	public static Object checkThisBindingOnReturn(Object _this) {
+		if(_this==UNDEFINED) {
+			throw ConstructResultError.thisNotInitialized();
+		}
+		return _this;
+	}
+
 	public static Object checkThisBinding(Object _this) {
 		if(_this==UNDEFINED) {
 			throw referenceError("Must call super constructor in derived class before accessing 'this' or returning from derived constructor");
@@ -5589,6 +5597,10 @@ public class RuntimeUtil {
 		if(v instanceof JSRuntimeException e) {
 			return e;
 		}
+		// Reported by the class constructor's [[Construct]], never wrapped
+		if(v instanceof ConstructResultError e) {
+			throw e;
+		}
 		if(v instanceof OutOfMemoryError me) {
 			return rangeError(me,"Java Exception: {0}",me.getLocalizedMessage());
 		}
@@ -6041,6 +6053,9 @@ public class RuntimeUtil {
 			JSEnvironment realm = getFunctionRealm(env, newTarget);
 			if(realm!=env) {
 				Object otherRealmProto = realm.getRegisteredPrototype(intrinsicDefaultProto.getClass());
+				if(otherRealmProto==null) {
+					otherRealmProto = createIntrinsic(realm, intrinsicDefaultProto.getClass());
+				}
 				if(otherRealmProto!=null) {
 					return otherRealmProto;
 				}
@@ -6054,6 +6069,17 @@ public class RuntimeUtil {
 	// Proxy's is its target's (a revoked one throws TypeError, per spec), an
 	// ordinary function/object's is the environment it was created in;
 	// anything else resolves to the ambient environment.
+	// The intrinsic prototype of class clazz in realm, created there when the
+	// realm has not used it yet: every intrinsic prototype class has a
+	// static get(JSEnvironment) factory
+	private static Object createIntrinsic(JSEnvironment realm, Class<?> clazz) {
+		try {
+			return clazz.getMethod("get", JSEnvironment.class).invoke(null, realm);
+		} catch(ReflectiveOperationException e) {
+			return null;
+		}
+	}
+
 	public static JSEnvironment getFunctionRealm(JSEnvironment env, Object fn) {
 		while(true) {
 			if(fn instanceof org.monflabs.galtajs.rt.builtins.standard.function.BuiltinFunctionBind bound) {
@@ -6667,6 +6693,12 @@ public class RuntimeUtil {
 
 	
     public static boolean defineProperty(JSEnvironment env, Object instance, Object prop, JSObject desc) {
+		return defineProperty(env, instance, prop, desc, DESC_CHECK.CHECK);
+    }
+    // check: how a property that cannot be added or changed is reported -
+    // Reflect.defineProperty passes NO_EXCEPTION ([[DefineOwnProperty]]
+    // returning false never throws there, whatever the caller's strictness)
+    public static boolean defineProperty(JSEnvironment env, Object instance, Object prop, JSObject desc, DESC_CHECK check) {
 		// Object.defineProperty's first step is "If O is not an Object,
 		// throw a TypeError" - not just a null/undefined check, EVERY
 		// primitive (boolean/number/string/symbol/bigint) is rejected too.
@@ -6674,7 +6706,7 @@ public class RuntimeUtil {
 			throw RuntimeUtil.typeError("Object.defineProperty called on non-object");
 		}
 		JSAccessor acc = env.getAccessor(instance);
-		return defineProperty(env, acc, instance, prop, desc);
+		return defineProperty(env, acc, instance, prop, desc, check);
     }
     // ObjectDefineProperties (10.1.13): the Properties argument is
     // ToObject-COERCED, not required to already be an object - e.g.
@@ -6708,7 +6740,7 @@ public class RuntimeUtil {
 			JSObject jv = descVal instanceof JSObject jo ? jo
 					: (RuntimeUtil.isObject(env, descVal) ? JSObject.from(env, descVal) : null);
 			if(jv!=null) {
-				if(!defineProperty(env, acc, instance, e.getKey(), jv)) {
+				if(!defineProperty(env, acc, instance, e.getKey(), jv, DESC_CHECK.CHECK)) {
 					throw RuntimeUtil.typeError("Cannot define property {0}", e.getKey());
 				}
 			} else {
@@ -6733,7 +6765,7 @@ public class RuntimeUtil {
     // MERGED "next" descriptor (and the value to apply, using NOT_AVAILABLE
     // as the "don't touch the stored value" sentinel already understood by
     // putEntry) so that machinery has accurate inputs to validate against.
-    private static boolean defineProperty(JSEnvironment env, JSAccessor acc , Object instance, Object prop, JSObject desc) {
+    private static boolean defineProperty(JSEnvironment env, JSAccessor acc , Object instance, Object prop, JSObject desc, DESC_CHECK check) {
 		PropertyDescriptor current = acc.getOwnPropertyDescriptor(instance, prop);
 
 		boolean hasValue = desc.hasProperty("value");
@@ -6792,11 +6824,11 @@ public class RuntimeUtil {
 			// not any Java-level default.
 			if(descIsAccessor) {
 				PropertyDescriptor next = PropertyDescriptor.of(configurableVal,enumerableVal,getterVal,setterVal,hasConfigurable,hasEnumerable);
-				return acc.setOwnProperty(instance, prop, RuntimeUtil.NOT_AVAILABLE, next, DESC_CHECK.CHECK, instance);
+				return acc.setOwnProperty(instance, prop, RuntimeUtil.NOT_AVAILABLE, next, check, instance);
 			}
 			PropertyDescriptor next = PropertyDescriptor.of(writableVal,configurableVal,enumerableVal,hasWritable,hasConfigurable,hasEnumerable);
 			Object value = hasValue ? rawValue : RuntimeUtil.UNDEFINED;
-			return acc.setOwnProperty(instance, prop, value, next, DESC_CHECK.CHECK, instance);
+			return acc.setOwnProperty(instance, prop, value, next, check, instance);
 		}
 
 		// An empty Desc ({} - no recognized fields at all) is a no-op success,
@@ -6847,7 +6879,7 @@ public class RuntimeUtil {
 				value = RuntimeUtil.NOT_AVAILABLE;
 			}
 		}
-		return acc.setOwnProperty(instance, prop, value, next, DESC_CHECK.CHECK, instance);
+		return acc.setOwnProperty(instance, prop, value, next, check, instance);
     }
 
 	// Spec 6.2.6.4 IsCompatiblePropertyDescriptor(extensible, Desc, current) -

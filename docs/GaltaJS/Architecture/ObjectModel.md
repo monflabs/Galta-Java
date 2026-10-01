@@ -78,6 +78,8 @@ A primitive and its wrapper share the same Java class (`"a"` and `new String("a"
 | ArrayBuffer and views | `standard/typedarrays/`: `BaseArrayBuffer` (a `byte[]` with `maxByteLength`, resizable, transferable), `ArrayBufferView`, `TypedArray`, one subpackage per element kind (`int8`... `float16`, `bigint64`, `uint8clamped`, `dataview`), `sharedarraybuffer`, `standard/atomics/` | `Float16Array` is registered only with `supportFloat16Array`. |
 | Error | `rt/builtins/errors/` (`Error`, the native errors, `AggregateError`, `SuppressedError`) | `Error.JAVA_EXCEPTION` (`__java_exception__`) carries a Java cause. |
 | Module namespace | `standard/module/ModuleNamespaceObject` | See [Modules runtime](/GaltaJS/Architecture/ModulesRuntime). |
+| Temporal | `standard/temporal/`: one `Temporal*Object` class per type (holding records such as `IsoDate`, `TimeRecord` and `BigInteger` epoch nanoseconds), the abstract operations in `TemporalAO` | A port of the TC39 reference polyfill; ISO 8601 calendar only, time zones from `java.time.zone.ZoneRules`. |
+| ShadowRealm | `standard/shadowrealm/ShadowRealmObject` | A second `JSEnvironment` created by `JSEnvironment.createRealm()`; functions cross the boundary as wrapped functions. |
 
 Number-to-string conversion uses the vendored Rhino/V8 code in `external/org_mozilla_javascript/DToA` and `v8dtoa/`.
 
@@ -91,7 +93,7 @@ Number-to-string conversion uses the vendored Rhino/V8 code in `external/org_moz
 - `primitives/`: undefined, null, number, string, boolean, symbol, object, array accessors and `ObjectWrapperAccessor`;
 - `errors/`: the error hierarchy;
 - `privatename/`: `PrivateName`, `PrivateElementsHolder`;
-- `standard/`: one subpackage per built-in family (`arguments`, `atomics`, `bigdecimal`, `bigint`, `console`, `date`, `disposablestack`, `finalizationregistry`, `function`, `generator`, `global` (`StandardObjects` is the registry, `StandardLibrary` the installer), `iterator`, `JSON`, `map`, `math`, `module`, `performance`, `promise`, `proxy`, `reflect`, `regexp`, `set`, `typedarrays`, `weakmap`, `weakref`, `weakset`).
+- `standard/`: one subpackage per built-in family (`arguments`, `atomics`, `bigdecimal`, `bigint`, `console`, `date`, `disposablestack`, `finalizationregistry`, `function`, `generator`, `global` (`StandardObjects` is the registry, `StandardLibrary` the installer), `iterator`, `JSON`, `map`, `math`, `module`, `performance`, `promise`, `proxy`, `reflect`, `regexp`, `set`, `shadowrealm`, `temporal`, `typedarrays`, `weakmap`, `weakref`, `weakset`).
 
 ## Source
 

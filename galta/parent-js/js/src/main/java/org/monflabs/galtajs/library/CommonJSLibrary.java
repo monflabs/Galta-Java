@@ -58,7 +58,7 @@ public class CommonJSLibrary extends GlobalLibrary {
 		}
 
 		@Override
-		public Object call(Object _this, Object[] parameters) {
+		protected Object invoke(Object _this, Object[] parameters) {
 			switch(index) {
 				case require: {
 					String name = paramString(parameters, 0);

@@ -196,3 +196,17 @@ const d = new D();
 assertEquals(1, d.m());
 assertEquals(2, d.y);
 assertEquals(3, d.z);
+
+// A class expression evaluated while another class body is being defined,
+// as a computed member name (its string conversion is the key)
+{
+  const k1 = String(class {});
+  class E1 { get [class {}]() { return 1; } }
+  assertEquals(1, new E1()[k1]);
+  class E2 { [class { static x = 1 }]() { return 2; } }
+  assertEquals(2, Object.getOwnPropertyNames(E2.prototype).length);
+  class E3 { static [class {}] = 3; }
+  assertEquals(3, E3[k1]);
+  class E4 { [class A { m() {} }] = 4; }
+  assertEquals(1, Object.keys(new E4()).length);
+}

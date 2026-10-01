@@ -138,7 +138,7 @@ public class Console extends NativeObject {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	        switch(methodId){
 	        	case assert_ -> {
 	        		boolean assertion = paramBoolean(args, 0, false);

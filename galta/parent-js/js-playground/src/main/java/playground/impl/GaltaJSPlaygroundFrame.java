@@ -60,7 +60,7 @@ import org.monflabs.galtajs.debug.api.DebugOptions;
 import org.monflabs.galtajs.debug.api.impl.DebuggerImpl;
 import org.monflabs.galtajs.modules.JSInterpretedUnit;
 import org.monflabs.galtajs.modules.JSPathModuleResolver;
-import org.monflabs.galtajs.modules.node.NodeModuleResolver;
+import org.monflabs.galtajs.library.node.NodeModuleResolver;
 import org.monflabs.galtajs.node.ASTNode;
 import org.monflabs.galtajs.node.ASTProgram;
 import org.monflabs.galtajs.rt.DebugUtil;

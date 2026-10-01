@@ -15,15 +15,19 @@
  */
 package doc_examples;
 
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.environments.JavaScriptEnvironment;
 import org.monflabs.galtajs.library.StaticLibrary;
 import org.monflabs.galtajs.library.UnitTestLibrary;
 import org.monflabs.galtajs.library.node.NodeLibrary;
+import org.monflabs.galtajs.library.node.NodeModuleResolver;
 import org.monflabs.galtajs.library.platform.FetchLibrary;
 import org.monflabs.galtajs.library.platform.HostLibrary;
 import org.monflabs.galtajs.rt.JSRuntimeUncatchableException;
@@ -54,6 +58,20 @@ public class BundledLibrariesExamples extends __BaseTestCase {
 		assertEquals("hello", (Object)env.evaluateScript("import fs from 'node:fs'; fs.writeFileSync(path, 'hello'); fs.readFileSync(path, 'utf8')"));
 		assertEquals("hello", (Object)env.evaluateScript("import { readFile } from 'node:fs/promises'; await readFile(path, 'utf8')"));
 		assertEquals(true, (Object)env.evaluateScript("import { existsSync } from 'fs'; existsSync(path)"));
+	}
+
+	public void testNodeModulesInAGivenFileSystem() throws Exception {
+		// A zip file system stands in for any java.nio.file.FileSystem (the
+		// playground passes its snippet file system)
+		Path zip = Files.createTempDirectory("galta").resolve("sandbox.zip");
+		try(FileSystem fs = FileSystems.newFileSystem(zip, Map.of("create", "true"))) {
+			JSEnvironment env = JavaScriptEnvironment.newBuilder()
+					.addModuleResolver(new NodeModuleResolver(fs))
+					.build();
+			assertEquals("hello", (Object)env.evaluateScript("import fs from 'node:fs'; fs.writeFileSync('/note.txt', 'hello'); fs.readFileSync('/note.txt', 'utf8')"));
+			assertEquals("hello", (Object)env.evaluateScript("import { readFile } from 'node:fs/promises'; await readFile('/note.txt', 'utf8')"));
+			assertEquals("hello", Files.readString(fs.getPath("/note.txt")));
+		}
 	}
 
 	public void testFetchLibraryObjects() {

@@ -36,7 +36,6 @@ To use a module, import `galta-bom` and declare it without a version - see
 |---|---|---|
 | `js` | [js](api/js/index.html ':ignore') | The GaltaJS engine: interpreter, transpiler to Java, standard library, Java interop |
 | `js-debugger` | [js-debugger](api/js-debugger/index.html ':ignore') | Swing debugger speaking the Chrome DevTools Protocol |
-| `js-mod-node` | [js-mod-node](api/js-mod-node/index.html ':ignore') | Node.js-style modules (`fs`, `path`...) |
 | `js-template` | [js-template](api/js-template/index.html ':ignore') | JSP-like text templates |
 | `js-vb` | [js-vb](api/js-vb/index.html ':ignore') | Expression-language value bindings |
 | `js-precompiled-beautify-js` | [js-precompiled-beautify-js](api/js-precompiled-beautify-js/index.html ':ignore') | js-beautify JavaScript formatter, transpiled to Java |

@@ -1,6 +1,6 @@
 # GaltaJS Extensions
 
-GaltaJS implements ECMAScript and, on top of it, a set of extensions aimed at scripting the JVM and working with JSON data: Java number types and arbitrary-precision decimals, JSON-path-style sequence operators, small syntax additions, TypeScript-style type hints, and direct use of Java values. Every extension is a configuration flag on the `JSEnvironment.Builder` and is off in a bare builder or in `JavaScriptEnvironment`; `enableGaltaJSExtensions()` (used by `GaltaJSEnvironment`) turns most of them on at once.
+GaltaJS implements ECMAScript and, on top of it, a set of extensions aimed at scripting the JVM and working with JSON data: Java number types and arbitrary-precision decimals, JSON-path-style sequence operators, small syntax additions, TypeScript-style type hints, and direct use of Java values. Every extension is a configuration flag on the `JSEnvironment.Builder` and is off in a bare builder or in `JavaScriptEnvironment` (except `supportImportExportInScripts`, on by default); `enableGaltaJSExtensions()` (used by `GaltaJSEnvironment`) turns most of them on at once.
 
 | Page | Extension |
 |---|---|
@@ -25,6 +25,7 @@ Defaults come from `ConfigurationImpl`; the third column is what `enableGaltaJSE
 | `mustDeclareAllVariables` | `false` | `true` | Assigning an undeclared name is a `ReferenceError` | [Syntax](/GaltaJS/Extensions/Syntax) |
 | `supportIdentifierAtSign` | `false` | `true` | The `@` current-item reference in filters and maps | [Syntax](/GaltaJS/Extensions/Syntax) |
 | `supportReturnOutsideFunction` | `false` | `true` | `return` at the top level of a script | [Syntax](/GaltaJS/Extensions/Syntax) |
+| `supportImportExportInScripts` | `true` | `true` | `import`/`export` declarations at the top level of a script, not only of a module; set it to `false` for strict ECMAScript (the test262 environment does) | [Modules](/GaltaJS/UserGuide/Modules) |
 | `supportSequenceExtensions` | `false` | `true` | Sequence and JSON-path operators | [Sequences](/GaltaJS/Extensions/Sequences) |
 | `supportTypeHints` | `false` | `true` | TypeScript-style annotations are parsed and discarded | [Type Hints](/GaltaJS/Extensions/TypeHints) |
 | `supportLongPromotion` | `false` | `true` | `int` overflow gives a `Long` instead of a `Double` | [Numbers](/GaltaJS/Extensions/Numbers) |

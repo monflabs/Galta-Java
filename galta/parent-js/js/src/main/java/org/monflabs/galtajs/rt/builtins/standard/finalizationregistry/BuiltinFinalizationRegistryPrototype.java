@@ -60,7 +60,7 @@ public class BuiltinFinalizationRegistryPrototype extends BasePrototype {
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			if(!(obj instanceof BuiltinFinalizationRegistry registry)) {
 				throw RuntimeUtil.typeError("Method FinalizationRegistry.prototype.{0} called on incompatible receiver {1}", methodId.name(), obj!=null?obj.getClass():"null");
 			}

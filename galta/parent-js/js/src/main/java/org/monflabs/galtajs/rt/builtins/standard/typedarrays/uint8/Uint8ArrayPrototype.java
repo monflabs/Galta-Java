@@ -66,7 +66,7 @@ public class Uint8ArrayPrototype extends BasePrototype {
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			JSEnvironment env = getEnvironment();
 			switch(methodId) {
 				case toBase64 -> {

@@ -83,7 +83,9 @@ public class BuiltinAsyncGeneratorFunctionConstructor extends BaseStandardConstr
 		String code = b.toString();
 		try {
 			ASTFunctionDecl fct = env.createFunction(code);
-			JSRuntimeContext parentContext = JSRuntimeContext.get().getMainContext();
+			// The function belongs to this constructor's realm (like Function)
+			JSRuntimeContext ambientMain = JSRuntimeContext.get().getMainContext();
+			JSRuntimeContext parentContext = ambientMain.getEnvironment()==getEnvironment() ? ambientMain : getEnvironment().getRealmContext();
 			JSInterpretedRuntimeContext ctx = new FunctionConstructorParentContext(parentContext);
 			JSResult r = new JSResult();
 			ctx.run( () -> {

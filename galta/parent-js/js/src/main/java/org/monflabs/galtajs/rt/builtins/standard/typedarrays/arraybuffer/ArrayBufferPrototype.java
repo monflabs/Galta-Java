@@ -146,7 +146,7 @@ public class ArrayBufferPrototype extends BasePrototype {
 		}
 
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	if(!(obj instanceof ArrayBuffer)) {
 	    		throw RuntimeUtil.typeError("Method ArrayBuffer.prototype.{0} called on incompatible receiver {1}", methodId.toString(), RuntimeUtil.objectTypeName(getEnvironment(),obj));
 	    	}

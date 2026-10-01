@@ -81,7 +81,7 @@ public class RhinoShellLibrary extends RhinoLibrary {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	        switch(methodId){
 	        	case version:{
 	        		if(args.length==1) {

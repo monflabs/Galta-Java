@@ -162,7 +162,7 @@ public class BuiltinObjectPrototype extends BasePrimitivePrototype {
 		}
 		
 	    @Override
-		public Object call(Object obj, final Object[] args) {
+		protected Object invoke(Object obj, final Object[] args) {
 	    	switch(methodId) {
 	        	case hasOwnProperty -> {
 	        		// Spec: "Let P be ? ToPropertyKey(V)" happens BEFORE "Let O

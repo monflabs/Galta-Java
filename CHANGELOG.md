@@ -70,7 +70,33 @@ First public release: Galta is published to Maven Central under the
   class element rules, malformed string escapes and more. Code that GaltaJS
   used to accept (or reject only when it ran) is now a `SyntaxError`. The
   test262 harness checks negative tests strictly (expected error type and
-  phase); the remaining gaps are listed in the Known ECMAScript Gaps page.
+  phase), and every test262 file in scope now passes with none filtered:
+  module-only rules (HTML-like comments, duplicate exports, unpaired
+  surrogates in export names), `await`/`yield` restrictions, class heritage
+  and static block rules, `in` in a `for (;;)` head, the ASI restrictions
+  (no semicolon inserted before `else` on the same line, nor after `throw`,
+  nor before `=>`), tagged templates in optional chains and more.
+- Module graphs are linked before they run: every import and re-export is
+  resolved first, so a missing, ambiguous or circular export, or a syntax
+  error in any dependency, is a `SyntaxError` before any module code runs.
+  `import`/`export` at the top level of a script stays allowed by default;
+  the new `supportImportExportInScripts(false)` builder option rejects it.
+- `Reflect.defineProperty` returns `false` instead of throwing when the
+  property cannot be defined, and a proxy `set` trap returning false throws
+  a `TypeError` in strict code.
+- Proper tail calls: a call in tail position in strict code runs in constant
+  stack space, in both execution modes.
+- Multiple realms: a built-in function runs in the realm it belongs to (its
+  errors, prototypes and new objects come from that realm), and values of one
+  realm used from another keep their own intrinsics.
+- `Temporal`: the whole namespace (`Instant`, `ZonedDateTime`, `PlainDate`,
+  `PlainTime`, `PlainDateTime`, `PlainYearMonth`, `PlainMonthDay`, `Duration`,
+  `Now`) with the ISO 8601 calendar and the IANA time zones of `java.time`,
+  plus `Date.prototype.toTemporalInstant()`. Other calendars and
+  `toLocaleString()` formatting need ECMA-402, which GaltaJS does not provide.
+- `ShadowRealm`: code evaluated in a separate realm, which only exchanges
+  primitives and wrapped functions with its caller. With these, test262 runs
+  with no feature skipped and passes in all three execution modes.
 - Regular expressions: the customized Joni engine is merged into the core `js`
   module and remains the default (`RegExpEngineJoni`); the separate
   `js-regexp-joni-custom` module and `RegExpEngineJoniCustom` are removed, and
@@ -83,6 +109,9 @@ First public release: Galta is published to Maven Central under the
   reserved class characters, quantified lookbehinds and a bare `\k` in a
   pattern with named groups. The legacy static properties (`RegExp.$1`-`$9`,
   `lastMatch`, `leftContext`, ...) now track the last match.
+- The `js-mod-node` module is removed: the core `NodeLibrary` provides `fs`
+  and `fs/promises`, and `new NodeModuleResolver(fileSystem)` resolves their
+  paths in a given `java.nio.file.FileSystem`.
 - Modules: a missing export is a `SyntaxError`, a rejected top-level `await` is
   reported, and modules waiting on an async dependency run in the
   specification's order.

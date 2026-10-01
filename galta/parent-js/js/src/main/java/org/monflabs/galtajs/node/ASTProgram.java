@@ -95,6 +95,16 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 	// direct eval's caller (callerForcedStrict, see field comment).
 	@Override
 	public boolean isGenuinelyStrictMode() {
+		// Module code is always strict
+		return isDirectiveStrictMode() || isModule;
+	}
+
+	// Strict because of a directive (its own, or the caller's for eval code),
+	// not because it is a module: what the runtime context of the unit is
+	// forced to (module code gets its strictness from the init context, and
+	// a module sharing the global context with a script must not make the
+	// script strict)
+	public boolean isDirectiveStrictMode() {
 		return isForceStrictMode() || callerForcedStrict;
 	}
 
@@ -111,6 +121,15 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 	// scripts don't have.
 	public boolean isModule() {
 		return isModule;
+	}
+
+	// Statements labelled "yield" (see JSParser), checked by EarlyErrorsValidator
+	private java.util.List<ASTNode> yieldLabelledStatements = java.util.Collections.emptyList();
+	public java.util.List<ASTNode> getYieldLabelledStatements() {
+		return yieldLabelledStatements;
+	}
+	public void setYieldLabelledStatements(java.util.List<ASTNode> statements) {
+		this.yieldLabelledStatements = statements;
 	}
 
 	// See isEval field's own doc comment.
@@ -639,7 +658,7 @@ public class ASTProgram extends ASTRootStatementList implements TopNode {
 		checkParameterExpressionArgumentsRestriction(callerInParameterExpressionScope);
 		checkFieldInitializerArgumentsRestriction(callerInFieldInitializer);
 		PrivateNameValidator.check(this, callerPrivateNames);
-		EarlyErrorsValidator.check(this);
+		EarlyErrorsValidator.check(this, env.supportImportExportInScripts());
 	}
 
 	// A direct eval whose call site is inside a function's default parameter-

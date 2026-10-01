@@ -304,7 +304,7 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 		}
 
 	    @Override
-		public Object call(Object obj, final Object[] args) {
+		protected Object invoke(Object obj, final Object[] args) {
 	    	if(RuntimeUtil.isNullOrUndefined(obj)) {
 	    		throw nullThis();
 	    	}

@@ -19,7 +19,6 @@
 		<module>js-debugger</module>
 		<module>js-transpiler-maven</module>
 		<module>js-transpiler-maven-tests</module>
-		<module>js-mod-node</module>
 		<module>js-playground</module>
 		<module>js-playground-cheerpj</module>
 		<module>js-template</module>

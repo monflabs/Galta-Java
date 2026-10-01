@@ -44,7 +44,13 @@ public class BaseSetter extends BaseCallableObject {
 
 	@Override
 	public boolean set(Object base, Object key, Object value) {
-		return setter.set(base, key, value);
+		// A built-in accessor runs in its own realm (JSEnvironment.enterRealm())
+		Object realm = JSEnvironment.enterRealm(getEnvironment());
+		try {
+			return setter.set(base, key, value);
+		} finally {
+			JSEnvironment.exitRealm(realm);
+		}
 	}
 
 	// Reached only when JS code explicitly extracts this setter function

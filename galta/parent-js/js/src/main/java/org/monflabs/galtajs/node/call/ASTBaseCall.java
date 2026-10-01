@@ -101,10 +101,29 @@ public abstract class ASTBaseCall extends ASTNode {
 		getParamValues(context, null, paramResult);
 	}
 
+	// In tail position (TailPosition): a JavaScript function is not called
+	// here but returned as a TailCall, performed by the function that
+	// returns it once its own frame is gone
+	private boolean tailCall;
+
+	protected void setTailCall(boolean tailCall) {
+		this.tailCall = tailCall;
+	}
+
+	public boolean isTailCall() {
+		return tailCall;
+	}
+
 	protected Object call(JSInterpretedRuntimeContext context, Object function, Object _this, JSResult paramResult) {
 		// Should the parameters be calculated once for each call, or just one time for all calls?
 		// Feels safer to evaluate them per call in case of side effects
 		Object[] paramValues = getParamValues(context, function, paramResult);
+		if(tailCall) {
+			org.monflabs.galtajs.rt.TailCall tc = org.monflabs.galtajs.rt.TailCall.create(function, _this, paramValues);
+			if(tc!=null) {
+				return tc;
+			}
+		}
 		ASTNode oldCaller = context.setCallerNode(this);
 		try {
 			return RuntimeUtil.call(context.getEnvironment(), function, _this, paramValues);

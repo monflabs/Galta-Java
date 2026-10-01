@@ -68,6 +68,12 @@ public interface JSConfiguration {
 	public boolean supportReturnOutsideFunction();
 
 	//
+	// Modules
+	//
+	// import/export declarations at the top level of a script, not only of a module
+	public boolean supportImportExportInScripts();
+
+	//
 	// Type hints (TypeScript-style, parsed and discarded - no type checking)
 	//
 	public boolean supportTypeHints();

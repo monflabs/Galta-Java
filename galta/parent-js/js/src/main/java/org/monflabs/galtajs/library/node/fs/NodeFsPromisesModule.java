@@ -15,6 +15,8 @@
  */
 package org.monflabs.galtajs.library.node.fs;
 
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.JSModuleDescriptor;
 import org.monflabs.galtajs.jsonfactory.JSObject;
@@ -32,20 +34,27 @@ import org.monflabs.galtajs.rt.executors.JSExecutor;
 public final class NodeFsPromisesModule extends JSNativeModule {
 
 	public NodeFsPromisesModule(JSEnvironment env, JSModuleDescriptor descriptor) {
+		this(env, descriptor, FileSystems.getDefault());
+	}
+
+	/**
+	 * @param fs the file system the module's paths are resolved in
+	 */
+	public NodeFsPromisesModule(JSEnvironment env, JSModuleDescriptor descriptor, FileSystem fs) {
 		super(env, descriptor);
 		JSObject api = JSObject.create(env);
-		api.setOwnMethod(new Method(env, MethodId.readFile,   1));
-		api.setOwnMethod(new Method(env, MethodId.writeFile,  2));
-		api.setOwnMethod(new Method(env, MethodId.appendFile, 2));
-		api.setOwnMethod(new Method(env, MethodId.stat,       1));
-		api.setOwnMethod(new Method(env, MethodId.access,     1));
-		api.setOwnMethod(new Method(env, MethodId.realpath,   1));
-		api.setOwnMethod(new Method(env, MethodId.mkdir,      1));
-		api.setOwnMethod(new Method(env, MethodId.rm,         1));
-		api.setOwnMethod(new Method(env, MethodId.readdir,    1));
-		api.setOwnMethod(new Method(env, MethodId.unlink,     1));
-		api.setOwnMethod(new Method(env, MethodId.rename,     2));
-		api.setOwnMethod(new Method(env, MethodId.copyFile,   2));
+		api.setOwnMethod(new Method(env, fs, MethodId.readFile,   1));
+		api.setOwnMethod(new Method(env, fs, MethodId.writeFile,  2));
+		api.setOwnMethod(new Method(env, fs, MethodId.appendFile, 2));
+		api.setOwnMethod(new Method(env, fs, MethodId.stat,       1));
+		api.setOwnMethod(new Method(env, fs, MethodId.access,     1));
+		api.setOwnMethod(new Method(env, fs, MethodId.realpath,   1));
+		api.setOwnMethod(new Method(env, fs, MethodId.mkdir,      1));
+		api.setOwnMethod(new Method(env, fs, MethodId.rm,         1));
+		api.setOwnMethod(new Method(env, fs, MethodId.readdir,    1));
+		api.setOwnMethod(new Method(env, fs, MethodId.unlink,     1));
+		api.setOwnMethod(new Method(env, fs, MethodId.rename,     2));
+		api.setOwnMethod(new Method(env, fs, MethodId.copyFile,   2));
 		// Default export mirrors named exports so both work:
 		//   import fsp from 'node:fs/promises'
 		//   import { readFile } from 'node:fs/promises'
@@ -71,53 +80,55 @@ public final class NodeFsPromisesModule extends JSNativeModule {
 	private final static class Method extends BaseMethod {
 		private final MethodId methodId;
 		private final JSEnvironment env;
+		private final FileSystem fs;
 
-		private Method(JSEnvironment env, MethodId methodId, int length) {
+		private Method(JSEnvironment env, FileSystem fs, MethodId methodId, int length) {
 			super(env, methodId.name(), length);
 			this.env = env;
+			this.fs = fs;
 			this.methodId = methodId;
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			final Object a0 = arg(args, 0), a1 = arg(args, 1), a2 = arg(args, 2);
 			JSExecutor executor = JSRuntimeContext.get().getGlobalContext().getExecutor();
 			switch (methodId) {
 				case readFile -> {
-					return executor.asyncFunction(() -> NodeFsOps.readFile(NodeFsOps.pathOf(a0), a1));
+					return executor.asyncFunction(() -> NodeFsOps.readFile(NodeFsOps.pathOf(fs, a0), a1));
 				}
 				case writeFile -> {
-					return executor.asyncFunction(() -> { NodeFsOps.writeFile(NodeFsOps.pathOf(a0), a1, a2); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.writeFile(NodeFsOps.pathOf(fs, a0), a1, a2); return null; });
 				}
 				case appendFile -> {
-					return executor.asyncFunction(() -> { NodeFsOps.appendFile(NodeFsOps.pathOf(a0), a1, a2); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.appendFile(NodeFsOps.pathOf(fs, a0), a1, a2); return null; });
 				}
 				case stat -> {
-					return executor.asyncFunction(() -> NodeFsOps.stat(env, NodeFsOps.pathOf(a0)));
+					return executor.asyncFunction(() -> NodeFsOps.stat(env, NodeFsOps.pathOf(fs, a0)));
 				}
 				case access -> {
-					return executor.asyncFunction(() -> { NodeFsOps.access(NodeFsOps.pathOf(a0)); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.access(NodeFsOps.pathOf(fs, a0)); return null; });
 				}
 				case realpath -> {
-					return executor.asyncFunction(() -> NodeFsOps.realpath(NodeFsOps.pathOf(a0)));
+					return executor.asyncFunction(() -> NodeFsOps.realpath(NodeFsOps.pathOf(fs, a0)));
 				}
 				case mkdir -> {
-					return executor.asyncFunction(() -> { NodeFsOps.mkdir(NodeFsOps.pathOf(a0), a1); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.mkdir(NodeFsOps.pathOf(fs, a0), a1); return null; });
 				}
 				case rm -> {
-					return executor.asyncFunction(() -> { NodeFsOps.rm(NodeFsOps.pathOf(a0), a1); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.rm(NodeFsOps.pathOf(fs, a0), a1); return null; });
 				}
 				case readdir -> {
-					return executor.asyncFunction(() -> NodeFsOps.readdir(env, NodeFsOps.pathOf(a0)));
+					return executor.asyncFunction(() -> NodeFsOps.readdir(env, NodeFsOps.pathOf(fs, a0)));
 				}
 				case unlink -> {
-					return executor.asyncFunction(() -> { NodeFsOps.unlink(NodeFsOps.pathOf(a0)); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.unlink(NodeFsOps.pathOf(fs, a0)); return null; });
 				}
 				case rename -> {
-					return executor.asyncFunction(() -> { NodeFsOps.rename(NodeFsOps.pathOf(a0), NodeFsOps.pathOf(a1)); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.rename(NodeFsOps.pathOf(fs, a0), NodeFsOps.pathOf(fs, a1)); return null; });
 				}
 				case copyFile -> {
-					return executor.asyncFunction(() -> { NodeFsOps.copyFile(NodeFsOps.pathOf(a0), NodeFsOps.pathOf(a1)); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.copyFile(NodeFsOps.pathOf(fs, a0), NodeFsOps.pathOf(fs, a1)); return null; });
 				}
 				default -> {
 					throw new IllegalStateException();

@@ -66,8 +66,12 @@ public class ASTStringTemplate extends ASTNode {
 		}
 	}
 	
+	// A tagged template in tail position (see ASTBaseCall's tailCall)
+	private boolean tailCall;
+
 	@Override
 	protected void init(InitContext initContext) {
+		this.tailCall = tagFunction!=null && org.monflabs.galtajs.node.TailPosition.isTailCall(this, initContext.getEnvironment().isStrictMode());
 		this.strings = JSArray.create(initContext.getEnvironment());
 		int expressionCount = 0;
 		
@@ -253,6 +257,12 @@ public class ASTStringTemplate extends ASTNode {
 						}
 					}
 					// And call the function
+					if(tailCall) {
+						org.monflabs.galtajs.rt.TailCall tc = org.monflabs.galtajs.rt.TailCall.create(c, tagThis, parameters);
+						if(tc!=null) {
+							return tc;
+						}
+					}
 					return c.call(tagThis, parameters);
 				} else {
                 	throw RuntimeUtil.typeError("Tag is not a callable");
@@ -298,7 +308,7 @@ public class ASTStringTemplate extends ASTNode {
 			if(tagFunction instanceof MemberNode m && m.isSingleIndex()) {
 				// A tag reached through a member access (obj.tag`...`) binds "this" to
 				// the base object, exactly like a normal method call.
-				b.append("templateTagMethod(");
+				b.append(tailCall && tagFunction instanceof ASTMember ? "tailTemplateTagMethod(" : "templateTagMethod(");
 				b.append(JSTranspiler.MAIN_CONTEXT);
 				b.append(",");
 				b.append(JSTranspiler.asValue(jsContext,m.getNode()));
@@ -314,7 +324,7 @@ public class ASTStringTemplate extends ASTNode {
 					throw new IllegalStateException("Internal error: should not be here");
 				}
 			} else {
-				b.append("templateTagFunction(");
+				b.append(tailCall ? "tailTemplateTagFunction(" : "templateTagFunction(");
 				b.append(JSTranspiler.MAIN_CONTEXT);
 				b.append(",");
 				b.append(JSTranspiler.asCallable(jsContext,tagFunction));

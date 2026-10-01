@@ -270,7 +270,7 @@ public class AbstractTypedArrayConstructor extends BaseConstructor {
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			switch(methodId) {
 
 				// %TypedArray%.of/from use `this` (the receiver, per spec's

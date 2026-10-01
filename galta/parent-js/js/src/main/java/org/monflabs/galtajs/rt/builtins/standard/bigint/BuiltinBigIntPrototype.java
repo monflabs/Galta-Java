@@ -76,7 +76,7 @@ public class BuiltinBigIntPrototype extends BasePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	if(!(obj instanceof BigInteger)) {
 	    		throw RuntimeUtil.typeError("Method BigInt.prototype.{0} called on incompatible receiver {1}", methodId.toString(), RuntimeUtil.objectTypeName(getEnvironment(),obj));
 	    	}

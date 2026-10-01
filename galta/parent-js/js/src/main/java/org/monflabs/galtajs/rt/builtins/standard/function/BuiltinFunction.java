@@ -19,6 +19,7 @@ import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.JSObject;
 import org.monflabs.galtajs.rt.JSRuntimeContext;
 import org.monflabs.galtajs.rt.RuntimeUtil;
+import org.monflabs.galtajs.rt.TailCall;
 import org.monflabs.galtajs.rt.builtins.BaseCallableObject;
 import org.monflabs.galtajs.rt.builtins.Constructor;
 import org.monflabs.galtajs.rt.builtins.HomeObject;
@@ -254,7 +255,7 @@ public abstract class BuiltinFunction extends BaseCallableObject implements Home
 		Object prototype = RuntimeUtil.getPrototypeFromConstructor(getEnvironment(), topConstructor!=null ? topConstructor : this, org.monflabs.galtajs.rt.builtins.primitives.object.BuiltinObjectPrototype.get(getEnvironment()));
 		JSObject _this = JSObject.createWithPrototype(getEnvironment(),prototype);
 
-		Object v = call(_this,parameters,topConstructor);
+		Object v = resolveTailCalls(call(_this,parameters,topConstructor));
 		if(v==null || v==RuntimeUtil.UNDEFINED) {
 			return _this;
 		}
@@ -263,10 +264,22 @@ public abstract class BuiltinFunction extends BaseCallableObject implements Home
 
 	@Override
 	public final Object call(Object _this, Object[] parameters) {
-		return call(_this, parameters, null);
+		return resolveTailCalls(call(_this, parameters, null));
 	}
 
+	// Performs the call, except that a call in tail position in its body is
+	// returned as a TailCall instead of being performed - see resolveTailCalls()
 	protected abstract Object call(Object _this, Object[] parameters, Constructor newTarget);
+
+	// Performs the chain of tail calls a function returned, each through the
+	// raw call(..., newTarget) so that the next one comes back here instead of
+	// nesting: the Java stack does not grow with the chain
+	public static Object resolveTailCalls(Object result) {
+		while(result instanceof TailCall tc) {
+			result = tc.getFunction().call(tc.getThisValue(), tc.getArguments(), null);
+		}
+		return result;
+	}
 
 
 	@Override

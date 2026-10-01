@@ -15,6 +15,8 @@
  */
 package org.monflabs.galtajs.node.call;
 
+import org.monflabs.galtajs.node.TailPosition;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +116,7 @@ public class ASTCall extends ASTBaseCall implements ChainingNode {
 		}
 		
 		super.init(initContext);
+		setTailCall(TailPosition.isTailCall(this, initContext.getEnvironment().isStrictMode()));
 	}
 
 	@Override
@@ -516,9 +519,13 @@ public class ASTCall extends ASTBaseCall implements ChainingNode {
 	    	// field was read back) - nor the per-call lambda-allocation cost
 	    	// wrapping it in executeIsolated used to pay for zero added safety
 	    	// (executeIsolated is just `return supplier.get();`, RuntimeUtil.java).
+	    	boolean tail = isTailCall() && !isNullOp();
+	    	if(tail) {
+	    		allowDirect = false;
+	    	}
 	    	if(unwrapped instanceof ASTMember mn && !isSuper && !isPrivateCall) {
 		    	StringBuilder b = new StringBuilder(128);
-		    	b.append("invokeResolvedMethod(");
+		    	b.append(tail ? "tailInvokeResolvedMethod(" : "invokeResolvedMethod(");
 		    	b.append(jsContext.getContextJavaName());
 		    	b.append(",resolveMethodTarget(");
 		    	b.append(jsContext.getContextJavaName());
@@ -589,7 +596,15 @@ public class ASTCall extends ASTBaseCall implements ChainingNode {
     		String extraParam = null;
    			extraParam = transpileSpecialFunctions(jsContext);
 	    	StringBuilder b = new StringBuilder(128);
-	    	b.append("invokeFunction(");
+	    	if(isTailCall() && !isNullOp() && extraParam!=null) {
+	    		// A call to an identifier named eval: a direct eval when it is %eval%, else a tail call
+	    		b.append("tailInvokeEvalCandidate(").append(JSTranspiler.MAIN_CONTEXT).append(",").append(JSTranspiler.asValue(jsContext,node)).append(",");
+	    		b.append(parameters.length>0 ? transpileParams(jsContext,getParameters(),hasSpread(),null,false) : "EMPTY_PARAMS");
+	    		b.append(",").append(extraParam).append(")");
+	    		return b.toString();
+	    	}
+	    	boolean tail = isTailCall() && !isNullOp() && extraParam==null;
+	    	b.append(tail ? "tailInvokeFunction(" : "invokeFunction(");
 	    	b.append(JSTranspiler.MAIN_CONTEXT);
 	    	b.append(",");
 	    	b.append(JSTranspiler.asValue(jsContext,node));
@@ -598,7 +613,7 @@ public class ASTCall extends ASTBaseCall implements ChainingNode {
 	    	// which StandardLibrary.GlobalFunction picks up via `args[1]` from the
 	    	// Object[]; direct-arg would break that contract. All other function
 	    	// calls can use the direct-arg fast path.
-	    	boolean allowDirect = (extraParam == null);
+	    	boolean allowDirect = (extraParam == null) && !tail;
 	    	if(parameters.length>0 || extraParam!=null) {
 	    		b.append(",");
 	    		b.append(transpileParams(jsContext,getParameters(),hasSpread(),extraParam,allowDirect));

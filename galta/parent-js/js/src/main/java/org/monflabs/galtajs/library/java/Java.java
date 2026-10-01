@@ -52,7 +52,7 @@ public class Java extends NativeObject {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	        switch(methodId){
             	case type:{
         			String arg0 = paramString(args, 0);

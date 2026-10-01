@@ -135,7 +135,7 @@ public class BuiltinAsyncGeneratorPrototype extends BasePrototype {
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			// AsyncGeneratorEnqueue (spec) always returns a real Promise, even
 			// when resuming the generator throws synchronously - so every path
 			// through drive() below settles `p` instead of throwing/returning a

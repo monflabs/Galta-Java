@@ -110,7 +110,7 @@ public class BuiltinGeneratorPrototype extends BasePrototype {
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			Generator<Object,Object> gen = asGenerator(obj);
 			Object arg = args.length>0 ? args[0] : RuntimeUtil.UNDEFINED;
 			switch(methodId) {

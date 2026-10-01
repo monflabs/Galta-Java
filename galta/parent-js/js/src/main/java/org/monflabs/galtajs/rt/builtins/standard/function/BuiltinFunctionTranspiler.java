@@ -326,57 +326,57 @@ public class BuiltinFunctionTranspiler extends BuiltinFunction {
 	// full semantics.
 	@Override
 	public Object call(Object _this) {
-		if(isContextElidable()) return callVoid0(acquireElidedContext(), RuntimeUtil.UNDEFINED);
+		if(isContextElidable()) return resolveTailCalls(callVoid0(acquireElidedContext(), RuntimeUtil.UNDEFINED));
 		return call(_this, RuntimeUtil.EMPTY_PARAMS);
 	}
 	@Override
 	public Object call(Object _this, Object p1) {
-		if(isContextElidable()) return callVoid1(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1);
+		if(isContextElidable()) return resolveTailCalls(callVoid1(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1));
 		return call(_this, new Object[]{p1});
 	}
 	@Override
 	public Object call(Object _this, Object p1, Object p2) {
-		if(isContextElidable()) return callVoid2(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2);
+		if(isContextElidable()) return resolveTailCalls(callVoid2(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2));
 		return call(_this, new Object[]{p1,p2});
 	}
 	@Override
 	public Object call(Object _this, Object p1, Object p2, Object p3) {
-		if(isContextElidable()) return callVoid3(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3);
+		if(isContextElidable()) return resolveTailCalls(callVoid3(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3));
 		return call(_this, new Object[]{p1,p2,p3});
 	}
 	@Override
 	public Object call(Object _this, Object p1, Object p2, Object p3, Object p4) {
-		if(isContextElidable()) return callVoid4(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4);
+		if(isContextElidable()) return resolveTailCalls(callVoid4(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4));
 		return call(_this, new Object[]{p1,p2,p3,p4});
 	}
 	@Override
 	public Object call(Object _this, Object p1, Object p2, Object p3, Object p4, Object p5) {
-		if(isContextElidable()) return callVoid5(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5);
+		if(isContextElidable()) return resolveTailCalls(callVoid5(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5));
 		return call(_this, new Object[]{p1,p2,p3,p4,p5});
 	}
 	@Override
 	public Object call(Object _this, Object p1, Object p2, Object p3, Object p4, Object p5, Object p6) {
-		if(isContextElidable()) return callVoid6(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6);
+		if(isContextElidable()) return resolveTailCalls(callVoid6(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6));
 		return call(_this, new Object[]{p1,p2,p3,p4,p5,p6});
 	}
 	@Override
 	public Object call(Object _this, Object p1, Object p2, Object p3, Object p4, Object p5, Object p6, Object p7) {
-		if(isContextElidable()) return callVoid7(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6, p7);
+		if(isContextElidable()) return resolveTailCalls(callVoid7(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6, p7));
 		return call(_this, new Object[]{p1,p2,p3,p4,p5,p6,p7});
 	}
 	@Override
 	public Object call(Object _this, Object p1, Object p2, Object p3, Object p4, Object p5, Object p6, Object p7, Object p8) {
-		if(isContextElidable()) return callVoid8(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6, p7, p8);
+		if(isContextElidable()) return resolveTailCalls(callVoid8(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6, p7, p8));
 		return call(_this, new Object[]{p1,p2,p3,p4,p5,p6,p7,p8});
 	}
 	@Override
 	public Object call(Object _this, Object p1, Object p2, Object p3, Object p4, Object p5, Object p6, Object p7, Object p8, Object p9) {
-		if(isContextElidable()) return callVoid9(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6, p7, p8, p9);
+		if(isContextElidable()) return resolveTailCalls(callVoid9(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6, p7, p8, p9));
 		return call(_this, new Object[]{p1,p2,p3,p4,p5,p6,p7,p8,p9});
 	}
 	@Override
 	public Object call(Object _this, Object p1, Object p2, Object p3, Object p4, Object p5, Object p6, Object p7, Object p8, Object p9, Object p10) {
-		if(isContextElidable()) return callVoid10(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10);
+		if(isContextElidable()) return resolveTailCalls(callVoid10(acquireElidedContext(), RuntimeUtil.UNDEFINED, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10));
 		return call(_this, new Object[]{p1,p2,p3,p4,p5,p6,p7,p8,p9,p10});
 	}
 

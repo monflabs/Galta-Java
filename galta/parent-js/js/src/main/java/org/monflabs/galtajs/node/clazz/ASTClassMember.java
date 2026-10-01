@@ -138,7 +138,7 @@ public abstract class ASTClassMember extends ASTNode {
 			ctx.setOwnProperty("private", isPrivate);
 			ctx.setOwnProperty("addInitializer", new BaseMethod(env, "addInitializer", 1) {
 				@Override
-				public Object call(Object obj, Object[] args) {
+				protected Object invoke(Object obj, Object[] args) {
 					if(args.length==0 || !(args[0] instanceof Callable)) {
 						throw RuntimeUtil.typeError("addInitializer argument must be a function");
 					}

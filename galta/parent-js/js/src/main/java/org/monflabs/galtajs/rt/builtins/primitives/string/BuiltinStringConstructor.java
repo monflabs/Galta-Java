@@ -96,7 +96,7 @@ public class BuiltinStringConstructor extends BasePrimitiveConstructor {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	        switch(methodId){
 	        	case fromCharCode -> {
 	        		if(args.length==0) {

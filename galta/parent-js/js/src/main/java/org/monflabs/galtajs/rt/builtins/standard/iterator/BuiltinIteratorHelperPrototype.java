@@ -117,7 +117,7 @@ public class BuiltinIteratorHelperPrototype extends BasePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	if(!(obj instanceof Iterator<?>)) {
 	    		throw RuntimeUtil.typeError("Method Iterator.prototype.{0} called on incompatible receiver {1}", methodId.toString(), obj!=null?obj.getClass():"null");
 	    	}

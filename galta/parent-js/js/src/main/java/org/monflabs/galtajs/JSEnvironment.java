@@ -151,11 +151,69 @@ public final class JSEnvironment implements JSConfiguration {
 	
 
 	public static JSEnvironment getEnvironment() {
-		return JSContext.get().getEnvironment();
+		JSContext ctx = JSContext.get();
+		if(realmOverrides) {
+			RealmOverride o = REALM_OVERRIDE.get();
+			if(o!=null && o.context==ctx) {
+				return o.realm;
+			}
+		}
+		return ctx.getEnvironment();
 	}
 	public static JSEnvironment getEnvironmentUnchecked() {
 		JSContext ctx = JSContext.getUnchecked();
+		if(ctx!=null && realmOverrides) {
+			RealmOverride o = REALM_OVERRIDE.get();
+			if(o!=null && o.context==ctx) {
+				return o.realm;
+			}
+		}
 		return ctx!=null ? ctx.getEnvironment() : null;
+	}
+
+	// The current realm while a built-in function of another realm runs
+	// (ECMA-262 10.3 [[Call]] of a built-in function: its realm becomes the
+	// current Realm Record): objects it creates, the errors it throws above
+	// all, belong to its own realm. Tied to the JSContext at entry, so a
+	// JavaScript function the built-in calls back (which runs in its own
+	// context) is unaffected.
+	private record RealmOverride(JSContext context, JSEnvironment realm, RealmOverride previous) {}
+	private static final ThreadLocal<RealmOverride> REALM_OVERRIDE = new ThreadLocal<>();
+	// Set once a built-in has been called from another realm: until then
+	// getEnvironment() does not even look at the override
+	private static volatile boolean realmOverrides;
+	private static final RealmOverride SAME_REALM = new RealmOverride(null, null, null);
+
+	/**
+	 * Makes realm the current realm, when it is not already, until
+	 * {@link #exitRealm(Object)} is called with the returned token.
+	 */
+	public static Object enterRealm(JSEnvironment realm) {
+		JSContext ctx = JSContext.getUnchecked();
+		if(ctx==null) {
+			return SAME_REALM;
+		}
+		JSEnvironment current = ctx.getEnvironment();
+		RealmOverride o = null;
+		if(realmOverrides) {
+			o = REALM_OVERRIDE.get();
+			if(o!=null && o.context==ctx) {
+				current = o.realm;
+			}
+		}
+		if(current==realm) {
+			return SAME_REALM;
+		}
+		realmOverrides = true;
+		RealmOverride entered = new RealmOverride(ctx, realm, o);
+		REALM_OVERRIDE.set(entered);
+		return entered;
+	}
+
+	public static void exitRealm(Object token) {
+		if(token!=SAME_REALM) {
+			REALM_OVERRIDE.set(((RealmOverride)token).previous);
+		}
 	}
 	
 	public static class Builder extends ObjectBuilder<JSEnvironment> {
@@ -178,7 +236,8 @@ public final class JSEnvironment implements JSConfiguration {
 			this.configuration.deprecatedApis = true;
 			this.configuration.mustDeclareAllVariables = true;
 			this.configuration.supportIdentifierAtSign = true;
-			this.configuration.supportReturnOutsideFunction = true;;
+			this.configuration.supportReturnOutsideFunction = true;
+			this.configuration.supportImportExportInScripts = true;
 			this.configuration.supportLongPromotion = true;
 			this.configuration.supportBigIntPromotion = false;
 			this.configuration.supportBigDecimal = true;
@@ -278,6 +337,12 @@ public final class JSEnvironment implements JSConfiguration {
 			return this;
 		}
 		
+		public Builder supportImportExportInScripts(boolean supportImportExportInScripts) {
+			checkBuilder();
+			this.configuration.supportImportExportInScripts = supportImportExportInScripts;
+			return this;
+		}
+
 		public Builder supportReturnOutsideFunction(boolean supportReturnOutsideFunction) {
 			checkBuilder();
 			this.configuration.supportReturnOutsideFunction = supportReturnOutsideFunction;
@@ -405,6 +470,11 @@ public final class JSEnvironment implements JSConfiguration {
 	
 	public static Builder newBuilder() {
 		return new Builder();
+	}
+
+	// A new realm with the same configuration and libraries (ShadowRealm)
+	public JSEnvironment createRealm() {
+		return new JSEnvironment(sharedData);
 	}
 
 	
@@ -541,6 +611,7 @@ public final class JSEnvironment implements JSConfiguration {
 		standardObjects.setOwnProperty(BuiltinPromiseConstructor.CLASSNAME,new BuiltinPromiseConstructor(this),PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(BuiltinDisposableStackConstructor.CLASSNAME,new BuiltinDisposableStackConstructor(this),PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(BuiltinAsyncDisposableStackConstructor.CLASSNAME,new BuiltinAsyncDisposableStackConstructor(this),PropertyDescriptor.DESC_METHOD);
+		standardObjects.setOwnProperty(org.monflabs.galtajs.rt.builtins.standard.shadowrealm.ShadowRealmObject.CLASSNAME,new org.monflabs.galtajs.rt.builtins.standard.shadowrealm.ShadowRealmObject.ConstructorImpl(this),PropertyDescriptor.DESC_METHOD);
 
 		standardObjects.setOwnProperty(ArrayBufferConstructor.CLASSNAME,new ArrayBufferConstructor(this),PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(SharedArrayBufferConstructor.CLASSNAME,new SharedArrayBufferConstructor(this),PropertyDescriptor.DESC_METHOD);
@@ -716,15 +787,17 @@ public final class JSEnvironment implements JSConfiguration {
 	// host object) - written by ObjectWrapperAccessor, and by far the most
 	// frequently populated of the five.
 	public PrimitivePropertyMap getObjectProperties() {
-		return objectProperties;
+		// Linked realms: the map is needed to find their entries
+		return realmGroup!=null ? getObjectProperties(true) : objectProperties;
 	}
 	public PrimitivePropertyMap getObjectProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = objectProperties;
-		if(m==null && autoCreate) {
+		// Linked realms: the map is needed to find their entries
+		if(m==null && (autoCreate || realmGroup!=null)) {
 			synchronized(this) {
 				m = objectProperties;
 				if(m==null) {
-					objectProperties = m = new PrimitivePropertyMap(this);
+					objectProperties = m = new PrimitivePropertyMap(this, PROPERTIES_OBJECT);
 				}
 			}
 		}
@@ -735,15 +808,17 @@ public final class JSEnvironment implements JSConfiguration {
 	// (the concatenation rope) can never be boxed, so a caller holding a
 	// CharSequence must narrow to String before consulting this.
 	public PrimitivePropertyMap getStringProperties() {
-		return stringProperties;
+		// Linked realms: the map is needed to find their entries
+		return realmGroup!=null ? getStringProperties(true) : stringProperties;
 	}
 	public PrimitivePropertyMap getStringProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = stringProperties;
-		if(m==null && autoCreate) {
+		// Linked realms: the map is needed to find their entries
+		if(m==null && (autoCreate || realmGroup!=null)) {
 			synchronized(this) {
 				m = stringProperties;
 				if(m==null) {
-					stringProperties = m = new PrimitivePropertyMap(this);
+					stringProperties = m = new PrimitivePropertyMap(this, PROPERTIES_STRING);
 				}
 			}
 		}
@@ -754,15 +829,17 @@ public final class JSEnvironment implements JSConfiguration {
 	// Short, Float, BigInteger, BigDecimal). This is the one the arithmetic
 	// and comparison inline caches consult, so keeping it null matters most.
 	public PrimitivePropertyMap getNumberProperties() {
-		return numberProperties;
+		// Linked realms: the map is needed to find their entries
+		return realmGroup!=null ? getNumberProperties(true) : numberProperties;
 	}
 	public PrimitivePropertyMap getNumberProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = numberProperties;
-		if(m==null && autoCreate) {
+		// Linked realms: the map is needed to find their entries
+		if(m==null && (autoCreate || realmGroup!=null)) {
 			synchronized(this) {
 				m = numberProperties;
 				if(m==null) {
-					numberProperties = m = new PrimitivePropertyMap(this);
+					numberProperties = m = new PrimitivePropertyMap(this, PROPERTIES_NUMBER);
 				}
 			}
 		}
@@ -772,15 +849,17 @@ public final class JSEnvironment implements JSConfiguration {
 	// Boxed Booleans - `new Boolean(false)`/`Object(true)`. Almost never
 	// populated in practice.
 	public PrimitivePropertyMap getBooleanProperties() {
-		return booleanProperties;
+		// Linked realms: the map is needed to find their entries
+		return realmGroup!=null ? getBooleanProperties(true) : booleanProperties;
 	}
 	public PrimitivePropertyMap getBooleanProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = booleanProperties;
-		if(m==null && autoCreate) {
+		// Linked realms: the map is needed to find their entries
+		if(m==null && (autoCreate || realmGroup!=null)) {
 			synchronized(this) {
 				m = booleanProperties;
 				if(m==null) {
-					booleanProperties = m = new PrimitivePropertyMap(this);
+					booleanProperties = m = new PrimitivePropertyMap(this, PROPERTIES_BOOLEAN);
 				}
 			}
 		}
@@ -789,15 +868,17 @@ public final class JSEnvironment implements JSConfiguration {
 
 	// Boxed Symbols - `Object(sym)`. Almost never populated in practice.
 	public PrimitivePropertyMap getSymbolProperties() {
-		return symbolProperties;
+		// Linked realms: the map is needed to find their entries
+		return realmGroup!=null ? getSymbolProperties(true) : symbolProperties;
 	}
 	public PrimitivePropertyMap getSymbolProperties(boolean autoCreate) {
 		PrimitivePropertyMap m = symbolProperties;
-		if(m==null && autoCreate) {
+		// Linked realms: the map is needed to find their entries
+		if(m==null && (autoCreate || realmGroup!=null)) {
 			synchronized(this) {
 				m = symbolProperties;
 				if(m==null) {
-					symbolProperties = m = new PrimitivePropertyMap(this);
+					symbolProperties = m = new PrimitivePropertyMap(this, PROPERTIES_SYMBOL);
 				}
 			}
 		}
@@ -881,6 +962,10 @@ public final class JSEnvironment implements JSConfiguration {
 	@Override
 	public final boolean supportReturnOutsideFunction() {
 		return configuration.supportReturnOutsideFunction();
+	}
+	@Override
+	public final boolean supportImportExportInScripts() {
+		return configuration.supportImportExportInScripts();
 	}
 	@Override
 	public final boolean supportTypeHints() {
@@ -1200,11 +1285,16 @@ public final class JSEnvironment implements JSConfiguration {
 
 	// callerPrivateNames: see ASTProgram.__init()'s matching parameter.
 	protected ASTProgram compileProgram(String text, String moduleName, int flags, boolean forceStrict, boolean callerHasNewTarget, boolean callerIsMethod, boolean callerIsDerivedCtor, boolean callerInParameterExpressionScope, boolean callerInFieldInitializer, Set<String> callerPrivateNames) {
-        JSParser parser=new JSParser(this,text,isDebugEnabled());
+        boolean module = (flags & SCRIPT_MODULE)!=0;
+        JSParser parser=new JSParser(this,text,isDebugEnabled(),module);
         return new ParserContextImpl(this).with( () -> {
 	        ASTProgram program = null;
 	        try {
 	            program= parser.MainProgram(text);
+	            if(module) {
+	            	parser.checkModuleCode();
+	            }
+	            program.setYieldLabelledStatements(parser.getYieldLabelledStatements());
 	            program.__init(this,(flags & SCRIPT_COMMONJS)!=0,(flags & SCRIPT_MODULE)!=0,(flags & SCRIPT_EVAL)!=0,forceStrict,callerHasNewTarget,callerIsMethod,callerIsDerivedCtor,callerInParameterExpressionScope,callerInFieldInitializer,callerPrivateNames);
 	            ScriptOptimizer scriptOptimizer = getScriptOptimizer();
 	            if(scriptOptimizer!=null) {
@@ -1336,8 +1426,90 @@ public final class JSEnvironment implements JSConfiguration {
 					ctx = realmContext = new InterpretedGlobalRuntimeContext(this, createProgramExecutor());
 				}
 			}
+			// Asked from code running in another realm: the two realms now
+			// share objects (a realm created by a script, a function created
+			// in another realm) - see linkRealms()
+			JSEnvironment creator = getEnvironmentUnchecked();
+			if(creator!=null && creator!=this) {
+				linkRealms(creator, this);
+			}
 		}
 		return ctx;
+	}
+
+	// Kinds of PrimitivePropertyMap (see findInLinkedRealms())
+	public static final int PROPERTIES_OBJECT = 0;
+	public static final int PROPERTIES_STRING = 1;
+	public static final int PROPERTIES_NUMBER = 2;
+	public static final int PROPERTIES_BOOLEAN = 3;
+	public static final int PROPERTIES_SYMBOL = 4;
+
+	// Realms that exchange objects: a boxed primitive or a Java-backed value
+	// (a Date...) keeps its state (prototype, properties) in the
+	// PrimitivePropertyMap of the realm that created it, where the others
+	// look for it. Null for an environment that is not linked to another.
+	private volatile java.util.List<java.lang.ref.WeakReference<JSEnvironment>> realmGroup;
+
+	public boolean hasLinkedRealms() {
+		return realmGroup!=null;
+	}
+
+	/**
+	 * Links two realms (and the realms already linked to either).
+	 */
+	public static void linkRealms(JSEnvironment a, JSEnvironment b) {
+		synchronized(JSEnvironment.class) {
+			java.util.List<java.lang.ref.WeakReference<JSEnvironment>> group = a.realmGroup!=null ? a.realmGroup
+					: b.realmGroup!=null ? b.realmGroup : new java.util.concurrent.CopyOnWriteArrayList<>();
+			for(JSEnvironment e: new JSEnvironment[] {a, b}) {
+				if(e.realmGroup!=null && e.realmGroup!=group) {
+					for(java.lang.ref.WeakReference<JSEnvironment> r: e.realmGroup) {
+						JSEnvironment m = r.get();
+						if(m!=null) {
+							m.realmGroup = group;
+							addToGroup(group, m);
+						}
+					}
+				}
+				e.realmGroup = group;
+				addToGroup(group, e);
+			}
+		}
+	}
+
+	private static void addToGroup(java.util.List<java.lang.ref.WeakReference<JSEnvironment>> group, JSEnvironment e) {
+		for(java.lang.ref.WeakReference<JSEnvironment> r: group) {
+			if(r.get()==e) {
+				return;
+			}
+		}
+		group.add(new java.lang.ref.WeakReference<>(e));
+	}
+
+	public org.monflabs.galtajs.jsonfactory.JSObjectImpl findInLinkedRealms(int kind, Object key) {
+		java.util.List<java.lang.ref.WeakReference<JSEnvironment>> group = realmGroup;
+		if(group==null) {
+			return null;
+		}
+		for(java.lang.ref.WeakReference<JSEnvironment> r: group) {
+			JSEnvironment other = r.get();
+			if(other!=null && other!=this) {
+				PrimitivePropertyMap m = switch(kind) {
+					case PROPERTIES_OBJECT -> other.objectProperties;
+					case PROPERTIES_STRING -> other.stringProperties;
+					case PROPERTIES_NUMBER -> other.numberProperties;
+					case PROPERTIES_BOOLEAN -> other.booleanProperties;
+					default -> other.symbolProperties;
+				};
+				if(m!=null) {
+					org.monflabs.galtajs.jsonfactory.JSObjectImpl v = m.getLocal(key);
+					if(v!=null) {
+						return v;
+					}
+				}
+			}
+		}
+		return null;
 	}
 
 	@SuppressWarnings("unchecked")

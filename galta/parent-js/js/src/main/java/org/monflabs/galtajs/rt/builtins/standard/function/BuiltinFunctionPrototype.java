@@ -132,7 +132,7 @@ public class BuiltinFunctionPrototype extends BuiltinFunction {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	switch(methodId){
         		case apply -> {
         	    	if(!(obj instanceof Callable)) {

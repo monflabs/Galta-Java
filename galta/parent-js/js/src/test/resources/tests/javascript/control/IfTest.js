@@ -10,10 +10,15 @@ assertEquals(2,v)
 if(false) {v=3}
 assertEquals(2,v)
 
-if(true) v=4 else v=5
+if(true) v=4; else v=5
 assertEquals(4,v)
-if(false) v=6 else v=7
+if(false) v=6; else v=7
 assertEquals(7,v)
+if(false) v=8
+else v=9
+assertEquals(9,v)
+// No automatic semicolon insertion before "else" on the same line
+assertThrows(SyntaxError, () => eval("if(true) v=4 else v=5"))
 
 if(1) v=10
 assertEquals(10,v)

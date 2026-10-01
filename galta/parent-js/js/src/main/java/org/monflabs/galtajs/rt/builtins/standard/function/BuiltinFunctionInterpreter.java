@@ -495,9 +495,9 @@ public class BuiltinFunctionInterpreter extends BuiltinFunction {
 							// class/subclass/derived-class-return-override-
 							// with-*.js).
 							if(getClassConstructor().getSuperClass()!=null && v!=RuntimeUtil.UNDEFINED) {
-								throw RuntimeUtil.typeError("Derived constructor may only return object or undefined");
+								throw org.monflabs.galtajs.rt.ConstructResultError.invalidReturnValue();
 							}
-							return bodyContext.getThis();
+							return constructorThis(bodyContext);
 						}
 						return v;
 					}
@@ -514,9 +514,18 @@ public class BuiltinFunctionInterpreter extends BuiltinFunction {
 		}
 
 		if(getClassConstructor()!=null) {
-			return bodyContext.getThis();
+			return constructorThis(bodyContext);
 		}
 		return RuntimeUtil.UNDEFINED;
+	}
+
+	// The this value a class constructor returns: a derived constructor that
+	// never called super() fails its [[Construct]] (see ConstructResultError)
+	private static Object constructorThis(JSInterpretedRuntimeContext bodyContext) {
+		if(bodyContext.getFunctionContext() instanceof org.monflabs.galtajs.rt.interpreter.InterpretedFunctionRuntimeContext f && !f.isThisSet()) {
+			throw org.monflabs.galtajs.rt.ConstructResultError.thisNotInitialized();
+		}
+		return bodyContext.getThis();
 	}
 
 	// Generator calls must perform FunctionDeclarationInstantiation (parameter

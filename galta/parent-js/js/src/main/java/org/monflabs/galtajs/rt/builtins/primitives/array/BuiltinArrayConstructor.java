@@ -113,7 +113,7 @@ public class BuiltinArrayConstructor extends BasePrimitiveConstructor {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final @NonNull Object[] args) {
+		protected Object invoke(final Object obj, final @NonNull Object[] args) {
 	        switch(methodId) {
 	        	case from -> {
                     Object arrayLike = param(args, 0);

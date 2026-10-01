@@ -19,7 +19,7 @@ rest follows.
 |---|---|
 | Utilities | `utilities`, `filesystem` (java.nio file systems: memory, sandboxed, ZIP, classpath), `javacompiler` (runtime Java compilation), `test` (JUnit support) |
 | JSON | `json` (parser, values, JSONPath, JSON Pointer, schema), `json-serialization`, `json-config`, `json-impexp`, `json-impexp-fastcsv`, `json-memdb`, `json-yaml-snakeyaml`, `json-jsonpath-jayway`, `json-jsonschema-jsonschemafriend` |
-| GaltaJS | `js` (the engine), `js-transpiler-maven` (Maven plugin), `js-template`, `js-vb`, `js-mod-node`, `js-debugger`, `js-precompiled-beautify-js`/`-css`/`-html`, `js-playground` |
+| GaltaJS | `js` (the engine), `js-transpiler-maven` (Maven plugin), `js-template`, `js-vb`, `js-debugger`, `js-precompiled-beautify-js`/`-css`/`-html`, `js-playground` |
 | UI | `ui-commons`, `ui-swing`, `ui-swing-ide`, `playground-core`, `playground-ui-swing` |
 
 Import the `galta-bom` bill of materials once, then declare the modules you use

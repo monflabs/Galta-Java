@@ -4,7 +4,6 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -47,155 +46,17 @@ public abstract class Test262BaseTest extends BaseTestSuiteTest {
 	// -----------------------------------------------------------------------
 	// Features GaltaJS does not support -- skip any test that requires them
 	// -----------------------------------------------------------------------
-	private static final Set<String> UNSUPPORTED_FEATURES = new HashSet<>(Arrays.asList(
-		"tail-call-optimization",
-		// Multiple realms are partially supported ($262.createRealm() returns
-		// a real second JSEnvironment with its own root context and
-		// evalScript; GetFunctionRealm / proto-from-ctor-realm resolution is
-		// implemented; all but 26 of the 203 tagged files pass in interpreted mode)
-		// but the remainder needs a "current realm" switch on every builtin
-		// entry, which is not planned. Skipped wholesale so the sweeps stay
-		// at zero; see docs/GaltaJS/KnownGaps.md's "Multiple realms" entry.
-		"cross-realm",
-		// ES2024 Explicit Resource Management is implemented except
-		// `using`/`await using` as a for-of/for-await-of loop HEAD
-		// declaration (needs `for-await-of` grammar support - see
-		// KnownGaps.md) - filtered individually below by path, not by this
-		// wholesale flag, so the rest stays test262-visible.
-		// ShadowRealm isn't implemented at all - a new global constructor plus
-		// callable-boundary wrapping on top of the multi-realm support above.
-		"ShadowRealm",
-		// Temporal (the whole Temporal.* namespace) isn't implemented at
-		// all - zero classes exist for it. A ~4500-test subdirectory;
-		// skipped wholesale rather than an exhaustive per-file FILTER list.
-		"Temporal"
-	));
+	// Every feature test262 covers is supported (intl402 is out of scope and
+	// filtered by path).
+	private static final Set<String> UNSUPPORTED_FEATURES = new HashSet<>();
 
 	// -----------------------------------------------------------------------
 	// File path filters – skip files whose relative path contains any token
 	// -----------------------------------------------------------------------
-	// Negative tests the strict harness (negativeMismatch()) fails because the
-	// engine does not report the early error at parse time, grouped by cause;
-	// each group is described in docs/GaltaJS/KnownGaps.md, "Early errors".
+	// Files skipped because of a known engine gap, each explained in
+	// docs/GaltaJS/KnownGaps.md. Empty: every test262 file in scope passes,
+	// negative tests included (checked strictly, see negativeMismatch()).
 	public static final String[] FILTER = new String[] {
-		// KnownGaps.md "Early errors": ClassHeritage early errors
-		"language/expressions/class/elements/syntax/early-errors/class-heritage-array-literal-arrow-heritage.js",
-		"language/expressions/class/elements/syntax/early-errors/class-heritage-array-literal-async-arrow-heritage.js",
-		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-array-literal.js",
-		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-chained-usage.js",
-		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-function-expression.js",
-		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-obj-literal.js",
-		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-recursive.js",
-		"language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage.js",
-		"language/statements/class/elements/syntax/early-errors/class-heritage-array-literal-arrow-heritage.js",
-		"language/statements/class/elements/syntax/early-errors/class-heritage-array-literal-async-arrow-heritage.js",
-		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-array-literal.js",
-		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-chained-usage.js",
-		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-function-expression.js",
-		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-obj-literal.js",
-		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-recursive.js",
-		"language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage.js",
-		// KnownGaps.md "Early errors": Module import/export names are not resolved before evaluation
-		"language/import/import-attributes/json-named-bindings.js",
-		"language/module-code/ambiguous-export-bindings/error-export-from-named-as.js",
-		"language/module-code/ambiguous-export-bindings/error-export-from-named.js",
-		"language/module-code/ambiguous-export-bindings/error-import-named-as.js",
-		"language/module-code/ambiguous-export-bindings/error-import-named.js",
-		"language/module-code/early-export-global.js",
-		"language/module-code/early-export-unresolvable.js",
-		"language/module-code/instn-iee-err-circular-as.js",
-		"language/module-code/instn-iee-err-dflt-thru-star-as.js",
-		"language/module-code/instn-iee-err-dflt-thru-star.js",
-		"language/module-code/instn-iee-err-not-found-as.js",
-		"language/module-code/instn-iee-err-not-found.js",
-		"language/module-code/instn-named-err-dflt-thru-star-as.js",
-		"language/module-code/instn-named-err-dflt-thru-star-dflt.js",
-		"language/module-code/instn-named-err-not-found-as.js",
-		"language/module-code/instn-named-err-not-found-dflt.js",
-		"language/module-code/instn-named-err-not-found.js",
-		// KnownGaps.md "Early errors": Module-only grammar early errors
-		"language/module-code/comment-multi-line-html-close.js",
-		"language/module-code/comment-single-line-html-close.js",
-		"language/module-code/comment-single-line-html-open.js",
-		"language/module-code/early-dup-export-as-star-as.js",
-		"language/module-code/early-dup-export-dflt-id.js",
-		"language/module-code/early-dup-export-id-as.js",
-		"language/module-code/early-dup-export-id.js",
-		"language/module-code/early-dup-export-star-as-dflt.js",
-		"language/module-code/early-dup-lables.js",
-		"language/module-code/early-export-ill-formed-string.js",
-		"language/module-code/export-expname-from-as-unpaired-surrogate.js",
-		"language/module-code/export-expname-from-unpaired-surrogate.js",
-		"language/module-code/export-expname-import-unpaired-surrogate.js",
-		"language/module-code/export-expname-string-binding.js",
-		"language/module-code/export-expname-unpaired-surrogate.js",
-		"language/module-code/import-attributes/allow-nlt-before-with.js",
-		"language/module-code/parse-err-export-dflt-expr.js",
-		"language/module-code/parse-err-invoke-anon-fun-decl.js",
-		"language/module-code/parse-err-invoke-anon-gen-decl.js",
-		"language/module-code/parse-err-yield.js",
-		// KnownGaps.md "Early errors": import/export declarations tolerated in scripts (GaltaJS extension)
-		"language/global-code/export.js",
-		"language/global-code/import.js",
-		// KnownGaps.md "Early errors": await/yield as identifiers in some contexts
-		"language/expressions/arrow-function/param-dflt-yield-expr.js",
-		"language/expressions/async-arrow-function/await-as-param-ident-nested-arrow-parameter-position.js",
-		"language/expressions/async-arrow-function/await-as-param-nested-arrow-body-position.js",
-		"language/expressions/async-arrow-function/await-as-param-nested-arrow-parameter-position.js",
-		"language/expressions/async-arrow-function/await-as-param-rest-nested-arrow-parameter-position.js",
-		"language/expressions/async-arrow-function/early-errors-arrow-await-in-formals-default.js",
-		"language/expressions/async-arrow-function/early-errors-arrow-await-in-formals.js",
-		"language/expressions/async-generator/early-errors-expression-await-as-function-binding-identifier.js",
-		"language/expressions/async-generator/early-errors-expression-yield-as-function-binding-identifier.js",
-		"language/expressions/await/await-BindingIdentifier-nested.js",
-		"language/expressions/generators/yield-as-generator-expression-binding-identifier.js",
-		"language/expressions/yield/in-iteration-stmt.js",
-		"language/expressions/yield/star-in-iteration-stmt.js",
-		"language/statements/await-using/syntax/await-using-invalid-switchstatement-caseclause.js",
-		"language/statements/await-using/syntax/await-using-invalid-switchstatement-defaultclause.js",
-		"language/statements/await-using/syntax/with-initializer-case-expression-statement-list.js",
-		"language/statements/await-using/syntax/with-initializer-default-statement-list.js",
-		"language/statements/class/definition/methods-gen-yield-as-function-expression-binding-identifier.js",
-		"language/statements/class/static-init-invalid-await.js",
-		"language/statements/class/static-init-invalid-yield.js",
-		"language/statements/labeled/static-init-invalid-await.js",
-		"language/statements/labeled/value-await-module-escaped.js",
-		"language/statements/labeled/value-await-module.js",
-		"language/statements/labeled/value-yield-strict-escaped.js",
-		"language/statements/labeled/value-yield-strict.js",
-		"language/statements/let/syntax/let-newline-yield-in-generator-function.js",
-		// KnownGaps.md "Early errors": Class static block early errors
-		"language/statements/class/static-init-invalid-label-dup.js",
-		"language/statements/class/static-init-invalid-return.js",
-		// KnownGaps.md "Early errors": Other remaining early errors
-		"annexB/language/comments/single-line-html-close.js",
-		"language/asi/S7.9_A11_T4.js",
-		"language/asi/S7.9_A4.js",
-		"language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid-parenless-parameters-expression-body.js",
-		"language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid-parenless-parameters.js",
-		"language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid.js",
-		"language/expressions/conditional/in-branch-2.js",
-		"language/expressions/conditional/in-condition.js",
-		"language/expressions/in/private-field-in.js",
-		"language/expressions/in/private-field-invalid-rhs.js",
-		"language/expressions/object/__proto__-duplicate.js",
-		"language/expressions/object/cover-initialized-name.js",
-		"language/expressions/object/getter-param-dflt.js",
-		"language/expressions/optional-chaining/early-errors-tail-position-null-optchain-template-string-esi.js",
-		"language/expressions/optional-chaining/early-errors-tail-position-null-optchain-template-string.js",
-		"language/expressions/optional-chaining/early-errors-tail-position-optchain-template-string-esi.js",
-		"language/expressions/optional-chaining/early-errors-tail-position-optchain-template-string.js",
-		"language/identifiers/vertical-tilde-continue.js",
-		"language/identifiers/vertical-tilde-start.js",
-		"language/statements/for-of/head-decl-no-expr.js",
-		"language/statements/for-of/head-expr-no-expr.js",
-		"language/statements/for-of/head-lhs-async-invalid.js",
-		"language/statements/for-of/head-var-no-expr.js",
-		"language/statements/for/S12.6.3_A4_T1.js",
-		"language/statements/for/S12.6.3_A4_T2.js",
-		"language/statements/let/syntax/let-let-declaration-split-across-two-lines.js",
-		"language/statements/let/syntax/let-let-declaration-with-initializer-split-across-two-lines.js",
-		"language/statements/try/early-catch-function.js",
 	};
 
 	// -----------------------------------------------------------------------
@@ -561,7 +422,9 @@ public abstract class Test262BaseTest extends BaseTestSuiteTest {
 		if ("parse".equals(expectedPhase) && phase != ExecPhase.PARSE) {
 			return "expected " + expectedType + " at parse, " + got;
 		}
-		if ("resolution".equals(expectedPhase) && phase != ExecPhase.PARSE && phase != ExecPhase.EXECUTE) {
+		// Resolution (module linking) happens before evaluation: at run time in
+		// interpreted mode, when the module is compiled in transpiled mode
+		if ("resolution".equals(expectedPhase) && phase != ExecPhase.PARSE && phase != ExecPhase.TRANSPILE && phase != ExecPhase.EXECUTE) {
 			return "expected " + expectedType + " at resolution, " + got;
 		}
 		if (expectedType != null && !expectedType.equals(actual)) {

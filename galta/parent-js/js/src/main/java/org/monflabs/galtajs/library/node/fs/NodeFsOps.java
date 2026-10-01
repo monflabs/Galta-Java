@@ -22,8 +22,8 @@ import java.nio.file.CopyOption;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.FileSystem;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -50,12 +50,12 @@ public final class NodeFsOps {
 	 * Options / coercion                                                 *
 	 * ------------------------------------------------------------------ */
 
-	static Path pathOf(Object v) {
+	static Path pathOf(FileSystem fs, Object v) {
 		if (v == null) {
 			throw RuntimeUtil.typeError("fs: path must be a string");
 		}
 		if (v instanceof CharSequence cs) {
-			return Paths.get(cs.toString());
+			return fs.getPath(cs.toString());
 		}
 		throw RuntimeUtil.typeError("fs: path must be a string");
 	}

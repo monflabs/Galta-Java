@@ -1850,7 +1850,7 @@ public abstract class ASTFunction extends ASTRootStatementList {
 		// unreachable statement.
 		if(!endsWithUnconditionalExit(statements)) {
 			if(isClassConstructor()) {
-				b.println("return checkThisBinding({0});", JSTranspiler.THIS_VAR);
+				b.println("return checkThisBindingOnReturn({0});", JSTranspiler.THIS_VAR);
 			} else {
 				b.println("return UNDEFINED;");
 			}

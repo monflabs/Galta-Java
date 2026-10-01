@@ -426,6 +426,8 @@ public class GaltaJSTestSuite {
 
 		// WeakRef
 		suite.addTestSuite(tests.javascript.builtin.weakref.WeakRefTest.class);
+		suite.addTestSuite(tests.javascript.builtin.temporal.TemporalTest.class);
+		suite.addTestSuite(tests.javascript.builtin.shadowrealm.ShadowRealmTest.class);
 
 		// WeakSet
 		suite.addTestSuite(tests.javascript.builtin.weakset.prototype.AddTest.class);
@@ -491,6 +493,7 @@ public class GaltaJSTestSuite {
 		
 		// functions
 		suite.addTestSuite(tests.javascript.functions.ArgumentsMappingTest.class);
+		suite.addTestSuite(tests.javascript.functions.TailCallTest.class);
 		suite.addTestSuite(tests.javascript.functions.ArgumentsNoStrictTest.class);
 		suite.addTestSuite(tests.javascript.functions.ArgumentsTest.class);
 		suite.addTestSuite(tests.javascript.functions.ArrowArgumentsTest.class);

@@ -186,7 +186,7 @@ public class RegExpPrototype extends BasePrototype {
 		}
 		
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	// test/search/toString are spec-generic - they work on ANY
 	    	// object (consulting a possibly-custom "exec"/"source"/"flags"
 	    	// property via RegExpExec/Get), not just genuine RegExp

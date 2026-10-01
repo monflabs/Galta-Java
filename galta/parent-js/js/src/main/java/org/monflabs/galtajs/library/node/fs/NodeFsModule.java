@@ -15,6 +15,8 @@
  */
 package org.monflabs.galtajs.library.node.fs;
 
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.JSModuleDescriptor;
 import org.monflabs.galtajs.jsonfactory.JSObject;
@@ -50,36 +52,43 @@ import org.monflabs.galtajs.rt.executors.MicroTask;
 public final class NodeFsModule extends JSNativeModule {
 
 	public NodeFsModule(JSEnvironment env, JSModuleDescriptor descriptor) {
+		this(env, descriptor, FileSystems.getDefault());
+	}
+
+	/**
+	 * @param fs the file system the module's paths are resolved in
+	 */
+	public NodeFsModule(JSEnvironment env, JSModuleDescriptor descriptor, FileSystem fs) {
 		super(env, descriptor);
 		JSObject api = JSObject.create(env);
 		// Sync API
-		api.setOwnMethod(new Method(env, MethodId.readFileSync,   1));
-		api.setOwnMethod(new Method(env, MethodId.writeFileSync,  2));
-		api.setOwnMethod(new Method(env, MethodId.appendFileSync, 2));
-		api.setOwnMethod(new Method(env, MethodId.existsSync,     1));
-		api.setOwnMethod(new Method(env, MethodId.statSync,       1));
-		api.setOwnMethod(new Method(env, MethodId.mkdirSync,      1));
-		api.setOwnMethod(new Method(env, MethodId.rmSync,         1));
-		api.setOwnMethod(new Method(env, MethodId.readdirSync,    1));
-		api.setOwnMethod(new Method(env, MethodId.unlinkSync,     1));
-		api.setOwnMethod(new Method(env, MethodId.renameSync,     2));
-		api.setOwnMethod(new Method(env, MethodId.copyFileSync,   2));
-		api.setOwnMethod(new Method(env, MethodId.realpathSync,   1));
-		api.setOwnMethod(new Method(env, MethodId.accessSync,     1));
+		api.setOwnMethod(new Method(env, fs, MethodId.readFileSync,   1));
+		api.setOwnMethod(new Method(env, fs, MethodId.writeFileSync,  2));
+		api.setOwnMethod(new Method(env, fs, MethodId.appendFileSync, 2));
+		api.setOwnMethod(new Method(env, fs, MethodId.existsSync,     1));
+		api.setOwnMethod(new Method(env, fs, MethodId.statSync,       1));
+		api.setOwnMethod(new Method(env, fs, MethodId.mkdirSync,      1));
+		api.setOwnMethod(new Method(env, fs, MethodId.rmSync,         1));
+		api.setOwnMethod(new Method(env, fs, MethodId.readdirSync,    1));
+		api.setOwnMethod(new Method(env, fs, MethodId.unlinkSync,     1));
+		api.setOwnMethod(new Method(env, fs, MethodId.renameSync,     2));
+		api.setOwnMethod(new Method(env, fs, MethodId.copyFileSync,   2));
+		api.setOwnMethod(new Method(env, fs, MethodId.realpathSync,   1));
+		api.setOwnMethod(new Method(env, fs, MethodId.accessSync,     1));
 		// Callback-async API
-		api.setOwnMethod(new Method(env, MethodId.readFile,   2));
-		api.setOwnMethod(new Method(env, MethodId.writeFile,  3));
-		api.setOwnMethod(new Method(env, MethodId.appendFile, 3));
-		api.setOwnMethod(new Method(env, MethodId.exists,     2));
-		api.setOwnMethod(new Method(env, MethodId.stat,       2));
-		api.setOwnMethod(new Method(env, MethodId.mkdir,      2));
-		api.setOwnMethod(new Method(env, MethodId.rm,         2));
-		api.setOwnMethod(new Method(env, MethodId.readdir,    2));
-		api.setOwnMethod(new Method(env, MethodId.unlink,     2));
-		api.setOwnMethod(new Method(env, MethodId.rename,     3));
-		api.setOwnMethod(new Method(env, MethodId.copyFile,   3));
-		api.setOwnMethod(new Method(env, MethodId.realpath,   2));
-		api.setOwnMethod(new Method(env, MethodId.access,     2));
+		api.setOwnMethod(new Method(env, fs, MethodId.readFile,   2));
+		api.setOwnMethod(new Method(env, fs, MethodId.writeFile,  3));
+		api.setOwnMethod(new Method(env, fs, MethodId.appendFile, 3));
+		api.setOwnMethod(new Method(env, fs, MethodId.exists,     2));
+		api.setOwnMethod(new Method(env, fs, MethodId.stat,       2));
+		api.setOwnMethod(new Method(env, fs, MethodId.mkdir,      2));
+		api.setOwnMethod(new Method(env, fs, MethodId.rm,         2));
+		api.setOwnMethod(new Method(env, fs, MethodId.readdir,    2));
+		api.setOwnMethod(new Method(env, fs, MethodId.unlink,     2));
+		api.setOwnMethod(new Method(env, fs, MethodId.rename,     3));
+		api.setOwnMethod(new Method(env, fs, MethodId.copyFile,   3));
+		api.setOwnMethod(new Method(env, fs, MethodId.realpath,   2));
+		api.setOwnMethod(new Method(env, fs, MethodId.access,     2));
 		setDefaultExport(api);
 		setNamedExports(api);
 	}
@@ -118,61 +127,63 @@ public final class NodeFsModule extends JSNativeModule {
 	private final static class Method extends BaseMethod {
 		private final MethodId methodId;
 		private final JSEnvironment env;
+		private final FileSystem fs;
 
-		private Method(JSEnvironment env, MethodId methodId, int length) {
+		private Method(JSEnvironment env, FileSystem fs, MethodId methodId, int length) {
 			super(env, methodId.name(), length);
 			this.env = env;
+			this.fs = fs;
 			this.methodId = methodId;
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			switch (methodId) {
 				case readFileSync -> {
-					return NodeFsOps.readFile(NodeFsOps.pathOf(arg(args, 0)), arg(args, 1));
+					return NodeFsOps.readFile(NodeFsOps.pathOf(fs, arg(args, 0)), arg(args, 1));
 				}
 				case writeFileSync -> {
-					NodeFsOps.writeFile(NodeFsOps.pathOf(arg(args, 0)), arg(args, 1), arg(args, 2));
+					NodeFsOps.writeFile(NodeFsOps.pathOf(fs, arg(args, 0)), arg(args, 1), arg(args, 2));
 					return null;
 				}
 				case appendFileSync -> {
-					NodeFsOps.appendFile(NodeFsOps.pathOf(arg(args, 0)), arg(args, 1), arg(args, 2));
+					NodeFsOps.appendFile(NodeFsOps.pathOf(fs, arg(args, 0)), arg(args, 1), arg(args, 2));
 					return null;
 				}
 				case existsSync -> {
-					return NodeFsOps.exists(NodeFsOps.pathOf(arg(args, 0)));
+					return NodeFsOps.exists(NodeFsOps.pathOf(fs, arg(args, 0)));
 				}
 				case statSync -> {
-					return NodeFsOps.stat(env, NodeFsOps.pathOf(arg(args, 0)));
+					return NodeFsOps.stat(env, NodeFsOps.pathOf(fs, arg(args, 0)));
 				}
 				case mkdirSync -> {
-					NodeFsOps.mkdir(NodeFsOps.pathOf(arg(args, 0)), arg(args, 1));
+					NodeFsOps.mkdir(NodeFsOps.pathOf(fs, arg(args, 0)), arg(args, 1));
 					return null;
 				}
 				case rmSync -> {
-					NodeFsOps.rm(NodeFsOps.pathOf(arg(args, 0)), arg(args, 1));
+					NodeFsOps.rm(NodeFsOps.pathOf(fs, arg(args, 0)), arg(args, 1));
 					return null;
 				}
 				case readdirSync -> {
-					return NodeFsOps.readdir(env, NodeFsOps.pathOf(arg(args, 0)));
+					return NodeFsOps.readdir(env, NodeFsOps.pathOf(fs, arg(args, 0)));
 				}
 				case unlinkSync -> {
-					NodeFsOps.unlink(NodeFsOps.pathOf(arg(args, 0)));
+					NodeFsOps.unlink(NodeFsOps.pathOf(fs, arg(args, 0)));
 					return null;
 				}
 				case renameSync -> {
-					NodeFsOps.rename(NodeFsOps.pathOf(arg(args, 0)), NodeFsOps.pathOf(arg(args, 1)));
+					NodeFsOps.rename(NodeFsOps.pathOf(fs, arg(args, 0)), NodeFsOps.pathOf(fs, arg(args, 1)));
 					return null;
 				}
 				case copyFileSync -> {
-					NodeFsOps.copyFile(NodeFsOps.pathOf(arg(args, 0)), NodeFsOps.pathOf(arg(args, 1)));
+					NodeFsOps.copyFile(NodeFsOps.pathOf(fs, arg(args, 0)), NodeFsOps.pathOf(fs, arg(args, 1)));
 					return null;
 				}
 				case realpathSync -> {
-					return NodeFsOps.realpath(NodeFsOps.pathOf(arg(args, 0)));
+					return NodeFsOps.realpath(NodeFsOps.pathOf(fs, arg(args, 0)));
 				}
 				case accessSync -> {
-					NodeFsOps.access(NodeFsOps.pathOf(arg(args, 0)));
+					NodeFsOps.access(NodeFsOps.pathOf(fs, arg(args, 0)));
 					return null;
 				}
 				case readFile -> {
@@ -181,7 +192,7 @@ public final class NodeFsModule extends JSNativeModule {
 					final Object path = arg(args, 0);
 					final Object options = last >= 2 ? args[1] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> NodeFsOps.readFile(NodeFsOps.pathOf(path), options));
+					runAsync(cb, () -> NodeFsOps.readFile(NodeFsOps.pathOf(fs, path), options));
 					return null;
 				}
 				case writeFile -> {
@@ -191,7 +202,7 @@ public final class NodeFsModule extends JSNativeModule {
 					final Object data = arg(args, 1);
 					final Object options = last >= 3 ? args[2] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> { NodeFsOps.writeFile(NodeFsOps.pathOf(path), data, options); return null; });
+					runAsync(cb, () -> { NodeFsOps.writeFile(NodeFsOps.pathOf(fs, path), data, options); return null; });
 					return null;
 				}
 				case appendFile -> {
@@ -200,20 +211,20 @@ public final class NodeFsModule extends JSNativeModule {
 					final Object data = arg(args, 1);
 					final Object options = last >= 3 ? args[2] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> { NodeFsOps.appendFile(NodeFsOps.pathOf(path), data, options); return null; });
+					runAsync(cb, () -> { NodeFsOps.appendFile(NodeFsOps.pathOf(fs, path), data, options); return null; });
 					return null;
 				}
 				case exists -> {
 					// exists(path, cb) — legacy signature: cb(exists) — no error arg.
 					final Object path = arg(args, 0);
 					Callable cb = extractCallback(arg(args, 1));
-					runAsyncExists(cb, () -> NodeFsOps.exists(NodeFsOps.pathOf(path)));
+					runAsyncExists(cb, () -> NodeFsOps.exists(NodeFsOps.pathOf(fs, path)));
 					return null;
 				}
 				case stat -> {
 					final Object path = arg(args, 0);
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> NodeFsOps.stat(env, NodeFsOps.pathOf(path)));
+					runAsync(cb, () -> NodeFsOps.stat(env, NodeFsOps.pathOf(fs, path)));
 					return null;
 				}
 				case mkdir -> {
@@ -221,7 +232,7 @@ public final class NodeFsModule extends JSNativeModule {
 					final Object path = arg(args, 0);
 					final Object options = last >= 2 ? args[1] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> { NodeFsOps.mkdir(NodeFsOps.pathOf(path), options); return null; });
+					runAsync(cb, () -> { NodeFsOps.mkdir(NodeFsOps.pathOf(fs, path), options); return null; });
 					return null;
 				}
 				case rm -> {
@@ -229,45 +240,45 @@ public final class NodeFsModule extends JSNativeModule {
 					final Object path = arg(args, 0);
 					final Object options = last >= 2 ? args[1] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> { NodeFsOps.rm(NodeFsOps.pathOf(path), options); return null; });
+					runAsync(cb, () -> { NodeFsOps.rm(NodeFsOps.pathOf(fs, path), options); return null; });
 					return null;
 				}
 				case readdir -> {
 					final Object path = arg(args, 0);
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> NodeFsOps.readdir(env, NodeFsOps.pathOf(path)));
+					runAsync(cb, () -> NodeFsOps.readdir(env, NodeFsOps.pathOf(fs, path)));
 					return null;
 				}
 				case unlink -> {
 					final Object path = arg(args, 0);
 					Callable cb = extractCallback(arg(args, 1));
-					runAsync(cb, () -> { NodeFsOps.unlink(NodeFsOps.pathOf(path)); return null; });
+					runAsync(cb, () -> { NodeFsOps.unlink(NodeFsOps.pathOf(fs, path)); return null; });
 					return null;
 				}
 				case rename -> {
 					final Object src = arg(args, 0);
 					final Object dst = arg(args, 1);
 					Callable cb = extractCallback(arg(args, 2));
-					runAsync(cb, () -> { NodeFsOps.rename(NodeFsOps.pathOf(src), NodeFsOps.pathOf(dst)); return null; });
+					runAsync(cb, () -> { NodeFsOps.rename(NodeFsOps.pathOf(fs, src), NodeFsOps.pathOf(fs, dst)); return null; });
 					return null;
 				}
 				case copyFile -> {
 					final Object src = arg(args, 0);
 					final Object dst = arg(args, 1);
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> { NodeFsOps.copyFile(NodeFsOps.pathOf(src), NodeFsOps.pathOf(dst)); return null; });
+					runAsync(cb, () -> { NodeFsOps.copyFile(NodeFsOps.pathOf(fs, src), NodeFsOps.pathOf(fs, dst)); return null; });
 					return null;
 				}
 				case realpath -> {
 					final Object path = arg(args, 0);
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> NodeFsOps.realpath(NodeFsOps.pathOf(path)));
+					runAsync(cb, () -> NodeFsOps.realpath(NodeFsOps.pathOf(fs, path)));
 					return null;
 				}
 				case access -> {
 					final Object path = arg(args, 0);
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> { NodeFsOps.access(NodeFsOps.pathOf(path)); return null; });
+					runAsync(cb, () -> { NodeFsOps.access(NodeFsOps.pathOf(fs, path)); return null; });
 					return null;
 				}
 				default -> {

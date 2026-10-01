@@ -30,9 +30,15 @@ public abstract class ASTImpExp extends ASTNode {
 	public static final class Item {
 		private String name;
 		private String alias;
-		Item(String name, String alias) {
+		private boolean stringName;
+		Item(String name, String alias, boolean stringName) {
 			this.name = name;
 			this.alias = alias;
+			this.stringName = stringName;
+		}
+		// The name is a string literal (a ModuleExportName), not an identifier
+		public boolean isStringName() {
+			return stringName;
 		}
 		public String getName() {
 			return name;
@@ -72,7 +78,11 @@ public abstract class ASTImpExp extends ASTNode {
 	}
 	
 	public void addItem(String name, String alias) {
-		items.add(new Item(name, alias));
+		addItem(name, alias, false);
+	}
+
+	public void addItem(String name, String alias, boolean stringName) {
+		items.add(new Item(name, alias, stringName));
 	}
 
 	public String getFrom() {

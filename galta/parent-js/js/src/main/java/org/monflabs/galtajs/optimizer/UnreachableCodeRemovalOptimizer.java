@@ -103,9 +103,14 @@ public class UnreachableCodeRemovalOptimizer extends NodeOptimizer {
 		boolean remove = false;
 		for(Iterator<ASTNode> it=newStatements.iterator(); it.hasNext(); ) {
 			ASTNode n = it.next();
-			if(remove) {
+			// import/export declarations are not reached by the flow: they
+			// are linked before the module runs, so they are never dead code
+			if(remove && !(ASTNode.skipTransparent(n) instanceof org.monflabs.galtajs.node.control.ASTImpExp)) {
 				update = true;
 				it.remove();
+				continue;
+			}
+			if(remove) {
 				continue;
 			}
 			remove = terminatesFlow(context, n);

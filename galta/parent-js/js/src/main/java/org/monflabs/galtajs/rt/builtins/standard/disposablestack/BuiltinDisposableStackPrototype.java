@@ -94,7 +94,7 @@ public class BuiltinDisposableStackPrototype extends BasePrototype {
 		}
 
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	JSEnvironment env = getEnvironment();
 	    	BuiltinDisposableStack stack = asStack(obj);
 

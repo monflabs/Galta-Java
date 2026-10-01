@@ -64,7 +64,7 @@ public class BuiltinBooleanPrototype extends BasePrimitivePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	if(RuntimeUtil.isNullOrUndefined(obj)) {
 	    		throw nullThis();
 	    	}

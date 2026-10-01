@@ -43,7 +43,13 @@ public class BaseGetter extends BaseCallableObject {
 
 	@Override
 	public Object get(Object base, Object key) {
-		return getter.get(base, key);
+		// A built-in accessor runs in its own realm (JSEnvironment.enterRealm())
+		Object realm = JSEnvironment.enterRealm(getEnvironment());
+		try {
+			return getter.get(base, key);
+		} finally {
+			JSEnvironment.exitRealm(realm);
+		}
 	}
 
 	// Reached only when JS code explicitly extracts this getter function

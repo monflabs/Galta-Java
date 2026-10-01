@@ -125,6 +125,11 @@ public class JSTranspiler {
 		// self-reference detection (a re-export/import resolving to THIS
 		// SAME module, by comparing ModuleUtil.resolvePath(moduleName,...)
 		// against moduleName itself).
+		if(script.getProgram().isModule() && env!=null) {
+			// Link the module graph (resolve every import and re-export)
+			// before any of it can run - see StaticModuleLinker
+			org.monflabs.galtajs.modules.StaticModuleLinker.link(env, script.getDescriptor().getName(), script.getProgram());
+		}
 		return compileResult(fullClassName,resultClass,script.getProgram(),script.getDescriptor().getName()).getJavaCode();
 	}
 	

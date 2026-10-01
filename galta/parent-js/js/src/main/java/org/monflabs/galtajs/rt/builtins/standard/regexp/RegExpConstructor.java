@@ -223,7 +223,7 @@ public class RegExpConstructor extends BaseStandardConstructor {
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			switch(methodId) {
 				case escape -> {
 					Object arg = args.length > 0 ? args[0] : RuntimeUtil.UNDEFINED;

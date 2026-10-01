@@ -181,7 +181,7 @@ public class UnitTestLibrary extends GlobalLibrary {
 		}
 
 		@Override
-		public Object call(Object _this, Object[] parameters) {
+		protected Object invoke(Object _this, Object[] parameters) {
 			switch(index) {
 				case suite: {
                     String title = paramString(parameters, 0);

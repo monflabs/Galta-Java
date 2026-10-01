@@ -83,7 +83,7 @@ public class JSON extends NativeObject {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	        switch(methodId) {
 	        
             	case parse -> {

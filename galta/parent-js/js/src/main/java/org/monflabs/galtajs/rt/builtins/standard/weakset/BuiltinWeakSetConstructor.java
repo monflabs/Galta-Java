@@ -108,7 +108,7 @@ public class BuiltinWeakSetConstructor extends BaseStandardConstructor {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	        switch(methodId){
 	            
 	            default -> {

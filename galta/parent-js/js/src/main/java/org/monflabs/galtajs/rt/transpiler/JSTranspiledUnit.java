@@ -1564,9 +1564,9 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 			return value;
 		}
 		if(value==RuntimeUtil.UNDEFINED) {
-			return RuntimeUtil.checkThisBinding(_this);
+			return RuntimeUtil.checkThisBindingOnReturn(_this);
 		}
-		throw RuntimeUtil.typeError("Derived constructors may only return object or undefined");
+		throw org.monflabs.galtajs.rt.ConstructResultError.invalidReturnValue();
 	}
 
 
@@ -2369,6 +2369,33 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 	// value - no shared mutable state of any kind, so every nested call
 	// (including a reentrant one) gets its own independent invocation
 	// with no risk of clobbering another's result.
+	// A call in tail position (see TailCall): a JavaScript function is
+	// returned as a TailCall, performed by the function returning it
+	public static Object tailInvokeFunction(JSTranspiledRuntimeContext context, Object function, Object[] parameters) {
+		org.monflabs.galtajs.rt.TailCall tc = org.monflabs.galtajs.rt.TailCall.create(function, RuntimeUtil.UNDEFINED, parameters!=null ? parameters : RuntimeUtil.EMPTY_PARAMS);
+		if(tc!=null) {
+			return tc;
+		}
+		return invokeFunction(context, function, parameters);
+	}
+	public static Object tailInvokeEvalCandidate(JSTranspiledRuntimeContext context, Object function, Object[] parameters, Object evalParameter) {
+		org.monflabs.galtajs.rt.TailCall tc = org.monflabs.galtajs.rt.TailCall.create(function, RuntimeUtil.UNDEFINED, parameters);
+		if(tc!=null) {
+			return tc;
+		}
+		Object[] all = java.util.Arrays.copyOf(parameters, parameters.length+1);
+		all[parameters.length] = evalParameter;
+		return invokeFunction(context, function, all);
+	}
+	public static Object tailInvokeResolvedMethod(JSTranspiledRuntimeContext context, Object resolved, String method, Object[] parameters) {
+		Object[] r = (Object[])resolved;
+		org.monflabs.galtajs.rt.TailCall tc = org.monflabs.galtajs.rt.TailCall.create(r[1], r[0], parameters!=null ? parameters : RuntimeUtil.EMPTY_PARAMS);
+		if(tc!=null) {
+			return tc;
+		}
+		return invokeResolvedMethod(context, resolved, method, parameters);
+	}
+
 	public static Object[] resolveMethodTarget(JSTranspiledRuntimeContext context, Object base, String method) {
 		return new Object[]{base, RuntimeUtil.getProperty(context.getEnvironment(), base, method)};
 	}
@@ -2600,6 +2627,22 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 	}
 	public static Object templateTagMethod(JSTranspiledRuntimeContext context, Object base, Object index, Object...parameters) {
 		return invokeMethod(context, base, index, parameters);
+	}
+	// A tagged template in tail position - see tailInvokeFunction()
+	public static Object tailTemplateTagFunction(JSRuntimeContext context, Callable callable, Object...parameters) {
+		org.monflabs.galtajs.rt.TailCall tc = org.monflabs.galtajs.rt.TailCall.create(callable, RuntimeUtil.UNDEFINED, parameters);
+		if(tc!=null) {
+			return tc;
+		}
+		return callable.call(RuntimeUtil.UNDEFINED, parameters);
+	}
+	public static Object tailTemplateTagMethod(JSTranspiledRuntimeContext context, Object base, String method, Object...parameters) {
+		Object function = RuntimeUtil.getProperty(context.getEnvironment(), base, method);
+		org.monflabs.galtajs.rt.TailCall tc = org.monflabs.galtajs.rt.TailCall.create(function, base, parameters);
+		if(tc!=null) {
+			return tc;
+		}
+		return invokeMethod(context, base, method, parameters);
 	}
 	// GetTemplateObject (spec): the SAME tagged-template literal (the same
 	// call site, i.e. the same Template Literal parse node) must produce

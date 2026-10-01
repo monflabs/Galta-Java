@@ -169,7 +169,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			// obj is the 'this' value - the constructor these static methods were
 			// called on. Per spec, all/allSettled/any/race/resolve/reject each
 			// start with "If Type(C) is not Object, throw a TypeError" - was

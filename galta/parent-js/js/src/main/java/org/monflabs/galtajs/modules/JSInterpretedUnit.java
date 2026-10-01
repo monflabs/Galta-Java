@@ -168,19 +168,19 @@ public class JSInterpretedUnit extends JSScriptUnit {
     	return program.getText();
     }
 
-    // program.isGenuinelyStrictMode() (not isForceStrictMode()) - for an
-    // ordinary script/module program the two are identical (no caller to
-    // inherit strictness from), but for a direct eval's freshly-parsed
-    // program they diverge: isForceStrictMode() reflects only the eval'd
-    // text's own directive prologue, while isGenuinelyStrictMode() also
-    // folds in the calling context's genuine strictness (ASTProgram's
-    // callerForcedStrict, set from __init's `forceStrict` param) - which
+    // program.isDirectiveStrictMode() (not isForceStrictMode()) - for an
+    // ordinary script program the two are identical (no caller to inherit
+    // strictness from), but for a direct eval's freshly-parsed program they
+    // diverge: isForceStrictMode() reflects only the eval'd text's own
+    // directive prologue, while isDirectiveStrictMode() also folds in the
+    // calling context's genuine strictness (ASTProgram's callerForcedStrict,
+    // set from __init's `forceStrict` param) - which
     // every consumer of this method (executeForEval's eval-context runtime
     // strictness, InterpretedGlobalRuntimeContext/TranspiledGlobalRuntimeContext's
     // isStrictMode() while a nested eval is the active scriptUnit) needs.
     @Override
 	public boolean isForceStrictMode() {
-    	return program.isGenuinelyStrictMode();
+    	return program.isDirectiveStrictMode();
     }
 
 
@@ -205,6 +205,11 @@ public class JSInterpretedUnit extends JSScriptUnit {
     	JSInterpretedRuntimeContext context = (JSInterpretedRuntimeContext)_context;
     	this.executionContext = context;
     	if(program.isModule()) {
+    		if(CURRENT_LINK.get()==null) {
+    			// The first module of a graph to run: link the whole graph
+    			// (resolve every import and re-export) before any of it runs
+    			StaticModuleLinker.link(context.getEnvironment(), getDescriptor().getName(), program);
+    		}
     		// See ModuleStatus's own doc comment. Covers BOTH a root
     		// module (this method reached directly, never through
     		// initModule()) and a dependency (initModule() calls this

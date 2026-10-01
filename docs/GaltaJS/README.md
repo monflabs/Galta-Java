@@ -40,7 +40,6 @@ All artifacts use the `org.monflabs.galta` group id and share the project versio
 | `js-all` | A single fat jar bundling `js` and its dependencies (*not published*: built locally as `target/galtajs-all.jar`). |
 | `js-transpiler-maven` | Maven plugin transpiling `.js` files to Java sources at build time. |
 | `js-template`, `js-vb` | Text templates and `${...}` value bindings evaluated by the engine. |
-| `js-mod-node` | Node.js flavoured `fs` module (a core `NodeLibrary` also exists). |
 | `js-debugger` | Swing debugger front-end speaking the Chrome DevTools Protocol. |
 | `js-playground` | Interactive playground application. |
 | `js-precompiled-beautify-js`, `-css`, `-html` | js-beautify formatters transpiled to Java at build time. |

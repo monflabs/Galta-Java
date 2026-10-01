@@ -172,8 +172,13 @@ assertEquals("galta/7/config-v1", env.evaluateScript("import d, { host, version 
 
 `env.createScript(text, name, JSEnvironment.SCRIPT_MODULE)` parses a module; `unit.initModule(ctx, false)` links and evaluates it and returns the `JSModule` (`getExport(name)`, `getDefaultExport()`, `getModuleNamespaceObject()`). `ctx.importModule(unitContext, name)` on a `JSGlobalContext` imports by name through the resolvers. Modules are cached per global context.
 
+## Linking
+
+Before the first module of a graph runs, every module it imports (directly or through other modules) is parsed and every imported or re-exported name is resolved, as the specification's link step requires (`modules/StaticModuleLinker`). A dependency with a syntax error, a name no module exports (`export *` never re-exports `default`), an ambiguous name (two `export *` providing different bindings) or a circular re-export is a `SyntaxError`, and none of the graph runs. Native, CommonJS and JSON modules are not inspected; a module no resolver finds is reported when the graph is evaluated. In transpiled mode the graph is linked when the root module is compiled.
+
 ## Gotchas
 
+- `import`/`export` declarations are also accepted at the top level of a classic script (evaluated with `evaluateScript()`, for example): a GaltaJS extension, `supportImportExportInScripts`, on by default. Build the environment with `.supportImportExportInScripts(false)` to make them a `SyntaxError` outside modules, as in the specification.
 - `import.meta` is an empty object; there is no `url`. Using it in a classic script is a `SyntaxError`.
 - A classic-script root does not wait for a statically imported top-level-await module; use `await import()` or a module root.
 - CommonJS sources must come from a resolver with `setCommonJS(true)`; otherwise `module` is an unknown identifier.
@@ -183,4 +188,4 @@ assertEquals("galta/7/config-v1", env.evaluateScript("import d, { host, version 
 
 ## Source
 
-`JSModuleResolver.java`, `modules/AbstractModuleResolver.java`, `modules/JSSourceModuleResolver.java`, `modules/JSMemoryModuleResolver.java`, `modules/JSFileModuleResolver.java`, `modules/JSPathModuleResolver.java`, `modules/JSTranspiledModuleResolver.java`, `modules/NativeModuleResolver.java`, `modules/JSNativeModule.java`, `modules/JSInterpretedUnit.java`, `JSModule.java`, `library/CommonJSLibrary.java`
+`JSModuleResolver.java`, `modules/StaticModuleLinker.java`, `modules/AbstractModuleResolver.java`, `modules/JSSourceModuleResolver.java`, `modules/JSMemoryModuleResolver.java`, `modules/JSFileModuleResolver.java`, `modules/JSPathModuleResolver.java`, `modules/JSTranspiledModuleResolver.java`, `modules/NativeModuleResolver.java`, `modules/JSNativeModule.java`, `modules/JSInterpretedUnit.java`, `JSModule.java`, `library/CommonJSLibrary.java`

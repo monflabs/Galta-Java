@@ -64,7 +64,33 @@ public class EarlyErrorsValidator {
 	}
 
 	public static void check(ASTNode root) {
+		check(root, false);
+	}
+
+	// importExportInScripts: JSConfiguration.supportImportExportInScripts()
+	public static void check(ASTNode root, boolean importExportInScripts) {
 		boolean module = root instanceof ASTProgram p && p.isModule();
+		// import/export declarations are module items (GaltaJS extension:
+		// also allowed at the top level of a script)
+		if(root instanceof ASTProgram program && !module && !importExportInScripts) {
+			int n = program.getChildCount();
+			for(int i=0; i<n; i++) {
+				ASTNode child = ASTNode.skipTransparent(program.getChild(i));
+				if(child instanceof org.monflabs.galtajs.node.control.ASTImpExp) {
+					throw new JSParseException(null, child, "Cannot use import/export declarations outside a module");
+				}
+			}
+		}
+		if(module) {
+			ModuleEarlyErrors.check((ASTProgram)root);
+		}
+		if(root instanceof ASTProgram program) {
+			for(ASTNode s: program.getYieldLabelledStatements()) {
+				if(isStrictAt(s)) {
+					throw new JSParseException(null, s, "'yield' is not a valid label in strict mode code");
+				}
+			}
+		}
 		// Script and module code (not eval code, which ASTProgram.
 		// checkEvalCallerRestrictions() checks against its caller) has no
 		// new.target and no super
@@ -151,6 +177,12 @@ public class EarlyErrorsValidator {
 					all.addAll(java.util.Arrays.asList(cs.getStatements()));
 				}
 			}
+			// A using declaration is not allowed directly in a case clause
+			for(ASTNode st: all) {
+				if(ASTNode.skipTransparent(st) instanceof ASTVariableDecl decl && decl.getVarType()==VAR_TYPE.USING) {
+					throw new JSParseException(null, st, "A using declaration is not allowed directly in a case clause");
+				}
+			}
 			checkBlockDeclarations(caseBlock, all.toArray(new ASTNode[0]));
 		} else if(node instanceof ASTFor f && ASTNode.skipTransparent(f.getInitNode()) instanceof ASTVariableDecl decl && decl.getVarType()!=VAR_TYPE.VAR) {
 			checkBlockDeclarations(f, new ASTNode[] { decl, f.getBodyNode() });
@@ -189,6 +221,7 @@ public class EarlyErrorsValidator {
 		}
 		if(node instanceof org.monflabs.galtajs.node.literal.ASTObjectLiteral obj) {
 			obj.checkShorthands();
+			obj.checkEarlyErrors();
 		}
 		// "let" is never a lexically declared name
 		if(node instanceof ASTVariableDecl lexical && lexical.getVarType()!=VAR_TYPE.VAR) {
@@ -208,6 +241,39 @@ public class EarlyErrorsValidator {
 					throw new JSParseException(null, c, "Duplicate catch parameter '{0}'", name);
 				}
 			});
+		}
+		// A catch parameter cannot also be lexically declared (let, const,
+		// class, function) directly in the catch block
+		if(node instanceof org.monflabs.galtajs.node.control.ASTCatch c && c.getBodyNode()!=null && c.getBodyNode().getStatements()!=null) {
+			Set<String> params = new HashSet<>();
+			if(c.getBindingNode() instanceof org.monflabs.galtajs.node.literal.ASTContainerLiteral pattern) {
+				pattern.forEachVarName(params::add);
+			} else if(c.getIdentifier()!=null) {
+				params.add(c.getIdentifier());
+			}
+			for(ASTNode st: c.getBodyNode().getStatements()) {
+				ASTNode s = ASTNode.skipTransparent(st);
+				java.util.List<String> names = new java.util.ArrayList<>();
+				if(s instanceof ASTVariableDecl decl && decl.getVarType()!=VAR_TYPE.VAR) {
+					for(ASTVariableDecl.Entry e: decl.getEntries()) {
+						e.forEachVarName(names::add);
+					}
+				} else if(s instanceof ASTClassDecl cls && cls.isStatement() && cls.getClassName()!=null) {
+					names.add(cls.getClassName());
+				} else if(s instanceof ASTFunctionDecl fn && fn.isStatement() && fn.getFunctionName()!=null) {
+					names.add(fn.getFunctionName());
+				}
+				for(String name: names) {
+					if(params.contains(name)) {
+						throw new JSParseException(null, s, "Identifier '{0}' has already been declared", name);
+					}
+				}
+			}
+		}
+		// The right operand of "in" is a ShiftExpression, never an arrow function
+		if(node instanceof org.monflabs.galtajs.node.binaryop.ASTIn in
+				&& in.getRightNode() instanceof ASTFunction rhs && rhs.isArrow()) {
+			throw new JSParseException(null, node, "Unexpected arrow function as the right operand of 'in'");
 		}
 		if(node instanceof ASTNewMember && !newTarget) {
 			throw new JSParseException(null, node, "new.target expression is not allowed here");
@@ -245,6 +311,17 @@ public class EarlyErrorsValidator {
 		if(node instanceof ASTIdentifier id && isStrictReservedWord(id.getId()) && isStrictAt(node)) {
 			throw new JSParseException(null, node, "Unexpected strict mode reserved word '{0}'", id.getId());
 		}
+		if(node instanceof ASTFunction fn) {
+			checkFunctionYieldAwait(fn);
+		}
+		// A class static block is not a function body: no return statement
+		if(node instanceof org.monflabs.galtajs.node.control.ASTReturn) {
+			for(INode p=node.getParent(); p!=null && !(p instanceof ASTFunction); p=p.getParent()) {
+				if(p instanceof ASTClassStaticBlock) {
+					throw new JSParseException(null, node, "A return statement is not allowed in a class static block");
+				}
+			}
+		}
 		if(node.getStatementPosition()!=0) {
 			checkStatementPosition(node, node.getStatementPosition());
 		}
@@ -252,6 +329,130 @@ public class EarlyErrorsValidator {
 		for(int i=0; i<n; i++) {
 			walk(node.getChild(i), superCall, superProperty, noArguments, noAwait, module, newTarget);
 		}
+	}
+
+	// The head of a for(;;) statement is an Expression[~In] (or declarations
+	// whose initializers are [~In]): an "in" operator is only allowed where a
+	// production resets the parameter - in parentheses, brackets, arguments,
+	// a function or the middle operand of a conditional
+	public static void checkNoIn(ASTNode node) {
+		node = ASTNode.skipTransparent(node);
+		if(node==null) {
+			return;
+		}
+		if(node instanceof org.monflabs.galtajs.node.binaryop.ASTIn) {
+			throw new JSParseException(null, node, "Unexpected 'in' in the head of a for statement");
+		}
+		if(node instanceof ASTVariableDecl decl) {
+			for(ASTVariableDecl.Entry e: decl.getEntries()) {
+				checkNoIn(e.getInitNode());
+			}
+		} else if(node instanceof org.monflabs.galtajs.node.ternaryop.ASTTernaryOp t) {
+			// The condition and the else branch (ASTTernaryTest stores it as
+			// op2, the then branch as op3), not the then branch
+			checkNoIn(t.getOp1Node());
+			checkNoIn(t.getOp2Node());
+		} else if(node instanceof org.monflabs.galtajs.node.binaryop.ASTBinaryOp b) {
+			checkNoIn(b.getLeftNode());
+			checkNoIn(b.getRightNode());
+		} else if(node instanceof org.monflabs.galtajs.node.assignop.ASTAbstractAssign a) {
+			checkNoIn(a.getRightNode());
+		} else if(node instanceof ASTExpression
+				|| node instanceof org.monflabs.galtajs.node.control.ASTYield
+				|| node instanceof org.monflabs.galtajs.node.control.ASTYieldStar
+				|| (node instanceof org.monflabs.galtajs.node.unaryop.ASTUnaryOp && !(node instanceof org.monflabs.galtajs.node.unaryop.ASTParen)
+					&& !(node instanceof ASTImportCall))) {
+			int n = node.getChildCount();
+			for(int i=0; i<n; i++) {
+				checkNoIn(node.getChild(i));
+			}
+		}
+	}
+
+	// yield/await rules on a function's name and an arrow's parameters
+	private static void checkFunctionYieldAwait(ASTFunction fn) {
+		String name = fn.isMethod() || fn.isArrow() ? null : fn.getFunctionName();
+		if(name!=null) {
+			// A generator/async function expression's own name is in its own
+			// [Yield]/[Await] context
+			if(!fn.isStatement() && (("yield".equals(name) && fn.isGenerator()) || ("await".equals(name) && fn.isAsync()))) {
+				throw new JSParseException(null, fn, "'{0}' is not a valid name for this function expression", name);
+			}
+			// A function declaration's name is in the context of the
+			// enclosing code: "await" inside an async function
+			if(fn.isStatement() && "await".equals(name) && enclosingFunctionIsAsync(fn)) {
+				throw new JSParseException(null, fn, "'await' is not a valid function name in an async function");
+			}
+			if(fn.isStatement() && "yield".equals(name) && enclosingFunction(fn) instanceof ASTFunction outer && outer.isGenerator()) {
+				throw new JSParseException(null, fn, "'yield' is not a valid function name in a generator");
+			}
+			if(("yield".equals(name) || "let".equals(name) || "static".equals(name))
+					&& (fn.isGenuinelyStrictMode() || (fn.getParent() instanceof ASTNode parent && isStrictAt(parent)))) {
+				throw new JSParseException(null, fn, "'{0}' is not a valid function name in strict mode code", name);
+			}
+		}
+		if(fn.isArrow() && fn.getParameters()!=null) {
+			// ArrowParameters cannot contain a YieldExpression or an AwaitExpression
+			ASTNode found = findInParameters(fn.getParameters(), false);
+			if(found!=null) {
+				throw new JSParseException(null, found, "Arrow function parameters cannot contain a yield or await expression");
+			}
+			// The parameters of an async arrow function are in an [Await]
+			// context, nested arrow functions included
+			if(fn.isAsync()) {
+				found = findInParameters(fn.getParameters(), true);
+				if(found!=null) {
+					throw new JSParseException(null, found, "'await' is not a valid identifier in async arrow function parameters");
+				}
+			}
+		}
+	}
+
+	// awaitIdentifier false: the first yield/await expression, not entering
+	// nested functions; true: the first "await" identifier, entering nested
+	// arrow functions but not other functions
+	private static ASTNode findInParameters(ASTNode node, boolean awaitIdentifier) {
+		if(node==null) {
+			return null;
+		}
+		if(node instanceof ASTFunction f && (!awaitIdentifier || !f.isArrow())) {
+			return null;
+		}
+		if(awaitIdentifier ? node instanceof ASTIdentifier id && "await".equals(id.getId())
+				: node instanceof org.monflabs.galtajs.node.control.ASTYield || node instanceof org.monflabs.galtajs.node.control.ASTYieldStar
+					|| node instanceof org.monflabs.galtajs.node.unaryop.ASTAwait) {
+			return node;
+		}
+		int n = node.getChildCount();
+		for(int i=0; i<n; i++) {
+			ASTNode r = findInParameters(node.getChild(i), awaitIdentifier);
+			if(r!=null) {
+				return r;
+			}
+		}
+		return null;
+	}
+
+	private static ASTFunction enclosingFunction(ASTNode node) {
+		for(INode p=node.getParent(); p!=null; p=p.getParent()) {
+			if(p instanceof ASTFunction f) {
+				return f;
+			}
+		}
+		return null;
+	}
+
+	// An arrow function's body inherits the [Await] context of the enclosing code
+	private static boolean enclosingFunctionIsAsync(ASTNode node) {
+		for(INode p=node.getParent(); p!=null; p=p.getParent()) {
+			if(p instanceof ASTFunction f && (f.isAsync() || !f.isArrow())) {
+				return f.isAsync();
+			}
+			if(p instanceof ASTClassStaticBlock) {
+				return false;
+			}
+		}
+		return false;
 	}
 
 	private static ASTNode skipParens(ASTNode n) {
@@ -344,14 +545,17 @@ public class EarlyErrorsValidator {
 		boolean getter = accessor instanceof org.monflabs.galtajs.node.clazz.ASTClassGetter;
 		ASTFunction fn = getter ? ((org.monflabs.galtajs.node.clazz.ASTClassGetter)accessor).getFunctionDecl()
 				: ((org.monflabs.galtajs.node.clazz.ASTClassSetter)accessor).getFunctionDecl();
-		{
-			if(fn!=null && fn.getParameters()!=null) {
-				org.monflabs.galtajs.node.literal.ASTArrayLiteral params = fn.getParameters();
-				int count = params.getChildCount();
-				boolean rest = count>0 && params.getChild(count-1) instanceof org.monflabs.galtajs.node.literal.ASTArrayLiteral.InitializerSpread;
-				if(getter ? count!=0 : (count!=1 || rest)) {
-					throw new JSParseException(null, accessor, getter ? "Getter must not have any formal parameters" : "Setter must have exactly one formal parameter");
-				}
+		checkAccessorParameters(accessor, fn, getter);
+	}
+
+	// A getter has no parameter, a setter exactly one (not a rest parameter)
+	public static void checkAccessorParameters(ASTNode accessor, ASTFunction fn, boolean getter) {
+		if(fn!=null && fn.getParameters()!=null) {
+			org.monflabs.galtajs.node.literal.ASTArrayLiteral params = fn.getParameters();
+			int count = params.getChildCount();
+			boolean rest = count>0 && params.getChild(count-1) instanceof org.monflabs.galtajs.node.literal.ASTArrayLiteral.InitializerSpread;
+			if(getter ? count!=0 : (count!=1 || rest)) {
+				throw new JSParseException(null, accessor, getter ? "Getter must not have any formal parameters" : "Setter must have exactly one formal parameter");
 			}
 		}
 	}
@@ -423,7 +627,7 @@ public class EarlyErrorsValidator {
 	}
 
 	// VarDeclaredNames: the var declarations of a statement, not entering functions or classes
-	private static void collectVarNames(ASTNode node, Set<String> names) {
+	static void collectVarNames(ASTNode node, Set<String> names) {
 		if(node==null || node instanceof ASTFunction || node instanceof org.monflabs.galtajs.node.clazz.ASTBaseClass) {
 			return;
 		}

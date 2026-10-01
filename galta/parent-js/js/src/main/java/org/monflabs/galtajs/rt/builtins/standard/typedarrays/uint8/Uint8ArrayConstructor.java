@@ -74,7 +74,7 @@ public class Uint8ArrayConstructor extends TypedArrayConstructor {
 		}
 
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			JSEnvironment env = getEnvironment();
 			Object stringArg = param(args, 0, RuntimeUtil.UNDEFINED);
 			if(!(stringArg instanceof String s) || !Base64HexCodec.isStringPrimitive(env, stringArg)) {

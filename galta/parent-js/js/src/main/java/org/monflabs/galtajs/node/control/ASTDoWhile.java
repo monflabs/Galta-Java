@@ -197,7 +197,11 @@ loop:		while(true) {
 			b.println("{0}:", label);
 		}
 
-		b.println("do {");
+		// The body is wrapped in "if(true)": for javac an if statement can
+		// always complete normally, so a body that always returns (e.g.
+		// "do { return f(); } while(false)") does not make the code after
+		// the loop an "unreachable statement" compile error
+		b.println("do { if(true) {");
     	b.incIndent();
 		if(bodyNode instanceof ASTBlock block) {
 			block.transpileJavaStatementNoBrace(whileContext,b);
@@ -206,7 +210,7 @@ loop:		while(true) {
 			bodyNode.transpileJavaStatement(whileContext, b);
 		}
     	b.decIndent();
-		b.println("} while({0});", JSTranspiler.asBoolean(whileContext, testNode));
+		b.println("} } while({0});", JSTranspiler.asBoolean(whileContext, testNode));
     }
     
     

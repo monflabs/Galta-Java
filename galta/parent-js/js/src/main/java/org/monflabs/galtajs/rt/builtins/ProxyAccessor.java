@@ -782,6 +782,10 @@ public class ProxyAccessor extends JSAccessor {
 			Object target = proxy.getTarget();
 			Object result = fct.call(proxy.getHandler(), new Object[] { target, member, value, receiver });
 			boolean booleanTrapResult = RuntimeUtil.toBoolean(env,result);
+			// PutValue: a [[Set]] that fails throws in strict mode code
+			if(!booleanTrapResult && RuntimeUtil.isStrictCheck(check)) {
+				throw RuntimeUtil.typeError("'set' on proxy: trap returned falsish");
+			}
 			if(booleanTrapResult) {
 				validateSetResult(value, targetAcc.getOwnPropertyDescriptor(target, member), () -> targetAcc.getOwnProperty(target, member, RuntimeUtil.UNDEFINED, target), member);
 			}
@@ -800,6 +804,10 @@ public class ProxyAccessor extends JSAccessor {
 			Object target = proxy.getTarget();
 			Object result = fct.call(proxy.getHandler(), new Object[] { target, Long.toString(index), value, receiver });
 			boolean booleanTrapResult = RuntimeUtil.toBoolean(env,result);
+			// PutValue: a [[Set]] that fails throws in strict mode code
+			if(!booleanTrapResult && RuntimeUtil.isStrictCheck(check)) {
+				throw RuntimeUtil.typeError("'set' on proxy: trap returned falsish");
+			}
 			if(booleanTrapResult) {
 				validateSetResult(value, targetAcc.getOwnPropertyDescriptor(target, index), () -> targetAcc.getOwnProperty(target, index, RuntimeUtil.UNDEFINED, target), Long.toString(index));
 			}
@@ -818,6 +826,10 @@ public class ProxyAccessor extends JSAccessor {
 			Object target = proxy.getTarget();
 			Object result = fct.call(proxy.getHandler(), new Object[] { target, symbol, value, receiver });
 			boolean booleanTrapResult = RuntimeUtil.toBoolean(env,result);
+			// PutValue: a [[Set]] that fails throws in strict mode code
+			if(!booleanTrapResult && RuntimeUtil.isStrictCheck(check)) {
+				throw RuntimeUtil.typeError("'set' on proxy: trap returned falsish");
+			}
 			if(booleanTrapResult) {
 				validateSetResult(value, targetAcc.getOwnPropertyDescriptor(target, symbol), () -> targetAcc.getOwnProperty(target, symbol, RuntimeUtil.UNDEFINED, target), symbol.toString());
 			}

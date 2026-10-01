@@ -227,7 +227,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 		}
 
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	JSEnvironment env = getEnvironment();
 	    	// %Iterator.prototype%[Symbol.iterator]() just returns `this`
 	    	// unconditionally, per spec - not even an object-type check,

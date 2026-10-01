@@ -74,7 +74,7 @@ public class BuiltinWeakSetPrototype extends BasePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	if(!(obj instanceof BuiltinWeakSet)) {
 	    		throw RuntimeUtil.typeError("Method WeakSet.prototype.{0} called on incompatible receiver {1}", methodId.toString(), obj!=null?obj.getClass():"null");
 	    	}

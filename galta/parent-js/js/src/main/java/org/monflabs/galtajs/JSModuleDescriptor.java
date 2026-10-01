@@ -76,6 +76,15 @@ public interface JSModuleDescriptor {
 	// placeholder comment below, a precompiled transpiled module its
 	// retained source when it has one (see JSTranspiledModuleResolver).
 	//
+	/**
+	 * The source of an ECMAScript module (not a CommonJS or a native one),
+	 * which can be parsed to resolve its imports and exports statically
+	 * before any module runs - see StaticModuleLinker. Null by default.
+	 */
+	public default String getESModuleSource() {
+		return null;
+	}
+
 	public default String getModuleSourceText() {
 		return isScript() ? null : nativeModuleSourceText(getName());
 	}

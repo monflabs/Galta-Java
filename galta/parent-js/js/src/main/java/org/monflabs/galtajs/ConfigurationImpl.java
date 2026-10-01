@@ -60,6 +60,7 @@ public final class ConfigurationImpl implements JSConfiguration {
 	boolean supportIdentifierAtSign=false;
 	
 	boolean supportReturnOutsideFunction=false;
+	boolean supportImportExportInScripts=true;
 
 	boolean supportTypeHints=false;
 
@@ -161,6 +162,10 @@ public final class ConfigurationImpl implements JSConfiguration {
 	//
 	// Return statement
 	//
+	@Override
+	public final boolean supportImportExportInScripts() {
+		return supportImportExportInScripts;
+	}
 	@Override
 	public final boolean supportReturnOutsideFunction() {
 		return supportReturnOutsideFunction;

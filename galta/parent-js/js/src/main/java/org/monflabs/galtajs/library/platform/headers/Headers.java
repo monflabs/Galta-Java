@@ -131,7 +131,7 @@ public class Headers extends NativeObject {
 		}
 
 		@Override
-		public Object call(Object obj, Object[] args) {
+		protected Object invoke(Object obj, Object[] args) {
 			JSEnvironment env = getEnvironment();
 			switch (methodName) {
 				case "append": {

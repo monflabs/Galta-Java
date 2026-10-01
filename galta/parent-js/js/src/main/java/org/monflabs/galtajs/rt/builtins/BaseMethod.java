@@ -44,8 +44,23 @@ public abstract class BaseMethod extends BaseNativeMethod {
 		return id;
 	}
 
+	// A built-in function runs in its own realm (see JSEnvironment.enterRealm()):
+	// implement invoke(). A subclass that overrides call() itself instead (the
+	// original extension point, still supported) runs in the caller's realm.
 	@Override
-	public abstract Object call(final Object obj, final Object[] args);
+	public Object call(final Object obj, final Object[] args) {
+		Object realm = JSEnvironment.enterRealm(getEnvironment());
+		try {
+			return invoke(obj, args);
+		} finally {
+			JSEnvironment.exitRealm(realm);
+		}
+	}
+
+	// The function itself, see call()
+	protected Object invoke(final Object obj, final Object[] args) {
+		throw new UnsupportedOperationException(getClass().getName()+" must implement invoke() or call()");
+	}
 	
 	
 }

@@ -53,6 +53,12 @@ public final class ThrowTypeErrorFunction extends BaseCallableObject {
 
 	@Override
 	public Object call(Object _this, @NonNull Object[] parameters) {
-		throw RuntimeUtil.typeError("'callee', 'caller', and 'arguments' properties may not be accessed on strict mode functions or the arguments objects for calls to them");
+		// A function of its own realm (JSEnvironment.enterRealm())
+		Object realm = JSEnvironment.enterRealm(getEnvironment());
+		try {
+			throw RuntimeUtil.typeError("'callee', 'caller', and 'arguments' properties may not be accessed on strict mode functions or the arguments objects for calls to them");
+		} finally {
+			JSEnvironment.exitRealm(realm);
+		}
 	}
 }

@@ -94,7 +94,7 @@ public class BuiltinAsyncDisposableStackPrototype extends BasePrototype {
 		}
 
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	JSEnvironment env = getEnvironment();
 
 	    	// disposeAsync/@@asyncDispose alone always returns a Promise, even

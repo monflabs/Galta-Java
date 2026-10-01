@@ -81,7 +81,7 @@ public class BuiltinWeakMapPrototype extends BasePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	if(!(obj instanceof BuiltinWeakMap)) {
 	    		throw RuntimeUtil.typeError("Method WeakMap.prototype.{0} called on incompatible receiver {1}", methodId.toString(), obj!=null?obj.getClass():"null");
 	    	}

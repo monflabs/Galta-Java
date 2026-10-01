@@ -138,7 +138,7 @@ public class BuiltinSetPrototype extends BasePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	if(!(obj instanceof Set<?>)) {
 	    		throw RuntimeUtil.typeError("Method Set.prototype.{0} called on incompatible receiver {1}", methodId.toString(), obj!=null?obj.getClass():"null");
 	    	}

@@ -165,7 +165,7 @@ public class Error extends BaseError {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	switch(methodId){
 	    		case toString-> {
 	    			// Error.prototype.toString works on ANY object (Type(O) is
@@ -199,7 +199,7 @@ public class Error extends BaseError {
 			super(env,"isError",1);
 		}
 		@Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 			// Error.isError(arg): true iff arg has an [[ErrorData]] internal
 			// slot - a brand check, not an instanceof/prototype-chain check,
 			// so it works across realms and isn't fooled by a fake object

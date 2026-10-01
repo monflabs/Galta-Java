@@ -66,7 +66,7 @@ public class Performance extends NativeObject {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	        switch(methodId){
             	case clearMarks -> {
             		String arg0 = paramString(args, 0, null);

@@ -85,7 +85,7 @@ public class Reflect extends NativeObject {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	        switch(methodId) {
 	        
             	case apply -> {
@@ -133,7 +133,7 @@ public class Reflect extends NativeObject {
             		if(!(_attributes instanceof JSObject)) {
 						throw RuntimeUtil.typeError("Attributes must be an object {0}", RuntimeUtil.objectTypeName(getEnvironment(), _attributes));
 					}
-            		return RuntimeUtil.defineProperty(getEnvironment(), _target, _propertyKey, (JSObject)_attributes);
+            		return RuntimeUtil.defineProperty(getEnvironment(), _target, _propertyKey, (JSObject)_attributes, DESC_CHECK.NO_EXCEPTION);
             	}
             	case deleteProperty -> {
             		Object _target = param(args, 0 );

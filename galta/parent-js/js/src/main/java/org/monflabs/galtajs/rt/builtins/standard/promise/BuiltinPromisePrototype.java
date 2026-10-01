@@ -79,7 +79,7 @@ public class BuiltinPromisePrototype extends BasePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	// Promise.prototype.catch/finally are GENERIC (spec: "Return ?
 	    	// Invoke(promise, 'then', ...)") - unlike .then itself, they don't
 	    	// require a real [[PromiseState]] internal slot, and must work on

@@ -50,6 +50,7 @@ import org.monflabs.galtajs.rt.builtins.standard.global.StandardObjects;
 import org.monflabs.galtajs.rt.builtins.standard.math.MathObject;
 import org.monflabs.galtajs.rt.builtins.standard.performance.Performance;
 import org.monflabs.galtajs.rt.builtins.standard.reflect.Reflect;
+import org.monflabs.galtajs.rt.builtins.standard.temporal.TemporalNamespace;
 import org.monflabs.galtajs.rt.interpreter.InterpretedFunctionRuntimeContext;
 import org.monflabs.galtajs.rt.interpreter.InterpretedRuntimeContext;
 import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext;
@@ -77,6 +78,7 @@ public class StandardLibrary extends GlobalLibrary {
 		standardObjects.setOwnProperty(Reflect.OBJECTNAME, new Reflect(env), PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(MathObject.OBJECTNAME, new MathObject(env), PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(Atomics.OBJECTNAME, new Atomics(env), PropertyDescriptor.DESC_METHOD);
+		standardObjects.setOwnProperty(TemporalNamespace.OBJECTNAME, new TemporalNamespace(env), PropertyDescriptor.DESC_METHOD);
 		
 		// Global functions
 		BuiltinNumberConstructor ctor = (BuiltinNumberConstructor)standardObjects.getConstructor(BuiltinNumberConstructor.CLASSNAME);
@@ -572,7 +574,7 @@ public class StandardLibrary extends GlobalLibrary {
 		}
 
 		@Override
-		public Object call(Object _this, Object[] args) {
+		protected Object invoke(Object _this, Object[] args) {
 			switch(index) {
 				case eval -> {
 					JSRuntimeContext context = JSRuntimeContext.get();

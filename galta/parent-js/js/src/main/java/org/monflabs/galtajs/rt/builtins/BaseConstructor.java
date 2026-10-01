@@ -55,6 +55,11 @@ public abstract class BaseConstructor extends BaseNativeMethod implements Constr
 		if(newTarget!=null && newTarget!=this) {
 			Object proto = RuntimeUtil.getPrototypeFromConstructor(getEnvironment(), newTarget, getCreationPrototype());
 			RuntimeUtil.setPrototype(getEnvironment(), instance, proto);
+		} else if(getEnvironment().hasLinkedRealms() && !(instance instanceof org.monflabs.galtajs.jsonfactory.JSObjectImpl)) {
+			// A Java-backed value (a Date...) has no realm of its own: record
+			// this realm's prototype for it, so that a linked realm reading it
+			// finds it (JSEnvironment.findInLinkedRealms())
+			RuntimeUtil.setPrototype(getEnvironment(), instance, getCreationPrototype());
 		}
 		return instance;
 	}

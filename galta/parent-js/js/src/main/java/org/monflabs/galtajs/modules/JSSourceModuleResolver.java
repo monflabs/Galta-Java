@@ -50,6 +50,11 @@ public abstract class JSSourceModuleResolver extends ScriptModuleResolver {
 		protected BaseDescriptor(String name) {
 			this.name = name;
 		}
+
+		@Override
+		public String getESModuleSource() {
+			return isCommonJS() ? null : getScript();
+		}
 	
 		@Override
 		public String getName() {

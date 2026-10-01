@@ -80,7 +80,7 @@ public class BuiltinSymbolPrototype extends BasePrototype {
 		}
 		
 	    @Override
-		public Object call(final Object obj, final Object[] args) {
+		protected Object invoke(final Object obj, final Object[] args) {
 	    	if(!(obj instanceof Symbol)) {
 	    		throw RuntimeUtil.typeError("Method Symbol.prototype.{0} called on incompatible receiver {1}", methodId.toString(), obj!=null?obj.getClass():"null");
 	    	}

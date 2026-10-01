@@ -182,11 +182,6 @@
 			</dependency>
 			<dependency>
 				<groupId>org.monflabs.galta</groupId>
-				<artifactId>js-mod-node</artifactId>
-				<version>${revision}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.monflabs.galta</groupId>
 				<artifactId>js-template</artifactId>
 				<version>${revision}</version>
 			</dependency>
@@ -226,12 +221,6 @@
 			<dependency>
 				<groupId>org.monflabs.galta</groupId>
 				<artifactId>js</artifactId>
-				<version>${revision}</version>
-				<type>test-jar</type>
-			</dependency>
-			<dependency>
-				<groupId>org.monflabs.galta</groupId>
-				<artifactId>js-mod-node</artifactId>
 				<version>${revision}</version>
 				<type>test-jar</type>
 			</dependency>
