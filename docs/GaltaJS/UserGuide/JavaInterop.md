@@ -23,7 +23,7 @@ const p = new Person('Ann', 30);
 
 ## Properties, methods and overloads
 
-Bean properties are exposed as JavaScript properties: `p.name` calls `getName()`, `p.name = 'x'` calls `setName()`. Public fields are accessible as well. Method overloads are resolved from the runtime argument types with these rules (`JavaLibrary.JavaClassMetadata.isAssignable`): an exact class match is preferred; `null` matches any non-primitive parameter; any `Number` can convert to any numeric parameter; `String` and `Character` are interchangeable; a JavaScript function is acceptable for any interface parameter.
+Bean properties are exposed as JavaScript properties: `p.name` calls `getName()`, `p.name = 'x'` calls `setName()`. Public fields are accessible as well. Method overloads are resolved from the runtime argument types with these rules (`JavaLibrary.JavaClassMetadata.isAssignable`): an exact class match is preferred; `null` matches any non-primitive parameter (never exactly, so two unrelated reference overloads are an ambiguity); any `Number` can convert to any numeric parameter, the narrowest one reached by widening ranking first (as in Java); a one-character string can be passed as a `char`, and a `Character` as a `String`; a JavaScript function is acceptable for any interface parameter. Bridge methods are ignored, and a varargs method is called with its trailing arguments collected into an array when no overload matches the argument count (see [Reflection](/Utilities/Reflection)).
 
 Sample: `doc_examples/JavaInteropExamples.java` (`testBeanPropertiesAndOverloads`)
 

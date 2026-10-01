@@ -121,6 +121,36 @@ public class ReflectionExamples extends ProjectTestCase {
 		assertEquals("decimal 7", accessor.call(new Scale(), "of", new Object[] {new BigDecimal("7")}));
 	}
 
+	public static class Text {
+		public String pad(int width) {
+			return "int " + width;
+		}
+		public String pad(long width) {
+			return "long " + width;
+		}
+		public String first(char c) {
+			return "char " + c;
+		}
+		public String join(String separator, String... parts) {
+			return String.join(separator, parts);
+		}
+	}
+
+	public void testWideningAndVarargs() throws Exception {
+		PojoAccessor accessor = new PojoAccessor();
+		accessor.setUseExceptions(true);
+		Text text = new Text();
+		// Primitive widening: a Short goes to pad(int), as in Java
+		assertEquals("int 3", accessor.call(text, "pad", new Object[] {(short) 3}));
+		// A String is passed as a char only when it has one character
+		assertEquals("char x", accessor.call(text, "first", new Object[] {"x"}));
+		assertThrows(ModelException.class, () -> accessor.call(text, "first", new Object[] {"xyz"}));
+		// Variable arity: the trailing arguments are collected into the array
+		assertEquals("a-b-c", accessor.call(text, "join", new Object[] {"-", "a", "b", "c"}));
+		assertEquals("", accessor.call(text, "join", new Object[] {"-"}));
+		assertEquals("a", accessor.call(text, "join", new Object[] {"-", new String[] {"a"}}));   // the array itself
+	}
+
 	public void testIndexedAccess() throws Exception {
 		PojoAccessor accessor = new PojoAccessor();
 		int[] numbers = {1, 2, 3};

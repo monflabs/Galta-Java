@@ -17,8 +17,6 @@ package org.monflabs.util.iterators;
 
 import java.util.Iterator;
 import java.util.function.Function;
-import java.util.function.IntFunction;
-import java.util.function.LongFunction;
 import java.util.function.Predicate;
 
 /**

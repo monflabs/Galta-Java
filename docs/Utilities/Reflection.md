@@ -94,12 +94,15 @@ assertEquals("Invalid member missing for class " + Account.class.getName(), e.ge
 
 `call(instance, name, args)` picks a public method among the overloads with that name, then converts the arguments and invokes it. A field or property with the same name does not hide the method. The resolution works on the runtime classes of the arguments (primitive parameters count as their wrapper classes):
 
-1. Overloads with a different number of parameters are discarded (varargs are not supported).
-2. For each argument: the same class as the parameter is an exact match; an assignable class, a `String`/`Character` pair, or any `Number` for a `Number` parameter is a possible match; anything else rejects the overload. A `null` argument matches any non-primitive parameter exactly.
+1. Overloads with a different number of parameters are discarded. A synthetic bridge method (such as the `compareTo(Object)` the compiler generates for `compareTo(T)`) is ignored when the method it bridges is there.
+2. For each argument: the same class as the parameter is an exact match; an assignable class, a `Character` for a `String` parameter, a one-character `String` for a `char` parameter, or any `Number` for a `Number` parameter is a possible match; anything else rejects the overload. A `null` argument is a possible match for any non-primitive parameter, never an exact one, and never matches a primitive parameter.
 3. An overload where every argument matches exactly is chosen immediately.
-4. Otherwise the most specific of the possible overloads is chosen. When two candidates are unrelated, for example `long` and `BigDecimal` for an `Integer`, the call throws a `ModelException` "Ambiguity between ...".
+4. Otherwise the most specific of the possible overloads is chosen: a subclass is more specific than its super classes, and between two primitive numeric parameters, the narrower one that the argument reaches by widening (byte, short, char, int, long, float, double), as in Java: a `Short` picks `f(int)` over `f(long)`, a `Long` picks `f(double)` over `f(int)`. When two candidates are unrelated, for example `long` and `BigDecimal` for an `Integer`, or `String` and `Integer` for a `null`, the call throws a `ModelException` "Ambiguity between ...".
+5. When no overload applies with its declared number of parameters, the variable arity methods (varargs) are tried: the trailing arguments are matched against the component type of the last parameter and collected into an array. As in Java, a fixed arity match is always preferred, and an array passed in the last position is used as the array itself.
 
-The result of the resolution is cached per argument-class shape, so a repeated call does not scan the overloads again. When the method itself throws, `call` returns `UNHANDLED`, or with `useExceptions` set throws a `ModelException` whose cause is the method's exception. Note that `call` (like `constructObject`) converts the arguments in place, in the array it receives.
+The result of the resolution is cached per argument-class shape, so a repeated call does not scan the overloads again. When the method itself throws, `call` returns `UNHANDLED`, or with `useExceptions` set throws a `ModelException` whose cause is the method's exception. The arguments are converted into a copy: the array given to `call` (or `constructObject`) is left untouched.
+
+Note that the ranking does not reject lossy conversions: a `Double` is a possible match for an `int` parameter, so with `f(Object)` and `f(int)`, `3.7` calls `f(int)` with `3` (`Integer` is more specific than `Object`).
 
 Sample: `doc_examples/util/ReflectionExamples.java` (`testOverloads`)
 
@@ -133,6 +136,38 @@ assertTrue(e.getMessage().startsWith("Ambiguity between of("));
 // With a single candidate the argument is converted
 assertEquals("long 7", accessor.call(new Scale(), "of", new Object[] {7L}));
 assertEquals("decimal 7", accessor.call(new Scale(), "of", new Object[] {new BigDecimal("7")}));
+```
+
+Sample: `doc_examples/util/ReflectionExamples.java` (`Text`, `testWideningAndVarargs`)
+
+```java
+public static class Text {
+    public String pad(int width) {
+        return "int " + width;
+    }
+    public String pad(long width) {
+        return "long " + width;
+    }
+    public String first(char c) {
+        return "char " + c;
+    }
+    public String join(String separator, String... parts) {
+        return String.join(separator, parts);
+    }
+}
+
+PojoAccessor accessor = new PojoAccessor();
+accessor.setUseExceptions(true);
+Text text = new Text();
+// Primitive widening: a Short goes to pad(int), as in Java
+assertEquals("int 3", accessor.call(text, "pad", new Object[] {(short) 3}));
+// A String is passed as a char only when it has one character
+assertEquals("char x", accessor.call(text, "first", new Object[] {"x"}));
+assertThrows(ModelException.class, () -> accessor.call(text, "first", new Object[] {"xyz"}));
+// Variable arity: the trailing arguments are collected into the array
+assertEquals("a-b-c", accessor.call(text, "join", new Object[] {"-", "a", "b", "c"}));
+assertEquals("", accessor.call(text, "join", new Object[] {"-"}));
+assertEquals("a", accessor.call(text, "join", new Object[] {"-", new String[] {"a"}}));   // the array itself
 ```
 
 ## Arrays, lists and maps
@@ -196,7 +231,7 @@ assertEquals(3, names.length);
 | `byte`, `short`, `int`, `long`, `float`, `double` and wrappers | any `Number`, by Java narrowing | a `String` (parsed), a `Boolean` (1/0) |
 | `boolean`/`Boolean` | `Boolean` | a `Number` (non-zero is `true`), a `String` (`Boolean.parseBoolean`) |
 | `char`/`Character` | a `Number` (code point), a one-character `String` | |
-| `String` | `String` | anything, with `toString()` |
+| `String` | `String`, a `Character` | anything, with `toString()` |
 | `BigInteger`, `BigDecimal` | any `Number`, via `TypeUtil` | a `String`, a `Boolean` |
 
 `convertObjectPermissive(value, targetClass)` applies the permissive rules; `new PojoAccessor(metadata, true)` makes an accessor use them.
@@ -213,7 +248,9 @@ assertEquals('A', ClassMetadata.convertObject(65, char.class));
 
 ## ClassMetadata and the AccessManager
 
-`ClassMetadata` caches, per class, the members found by name (`ClassInfoCache`): `getProperty`, `getField`, `getMethod`, `getValueAccessor`, `getConstructors`, and the name sets `getValueAccessors()` (public fields), `getMethods()` and `getAllMembers()`. Only public members are considered (`getMethods()`, `getFields()`, `getConstructors()`), inherited ones included. The cache is thread-safe and grows with every class seen, so share one `ClassMetadata` rather than creating one per call. `new PojoAccessor()` creates its own; `PojoAccessor.getDataAccessor()` returns a shared instance.
+`ClassMetadata` caches, per class, the members found by name (`ClassInfoCache`): `getProperty`, `getField`, `getMethod`, `getValueAccessor`, `getConstructors`, and the name sets `getValueAccessors()` (public fields), `getMethods()` and `getAllMembers()`. Only public members are considered (`getMethods()`, `getFields()`, `getConstructors()`), inherited ones included. The cache is thread-safe and grows with every class seen, so share one `ClassMetadata` rather than creating one per call. `new PojoAccessor()` creates its own; `PojoAccessor.getDataAccessor()` returns a shared instance. Looking up a name that is not a member of the class is not cached, so probing arbitrary names does not grow the cache.
+
+A `ClassMetadata` that is no longer referenced is garbage collected with its cache. The entries of the classes of the JDK and of the application class path are held by the instance itself; those of classes from other class loaders (classes compiled at runtime, plugins) are attached to the class, through a `ClassValue`, so that the class loader can still be unloaded. Such an entry keeps its `ClassMetadata` alive as long as the class itself is alive, never longer.
 
 Sample: `doc_examples/util/ReflectionExamples.java` (`testClassMetadata`)
 
