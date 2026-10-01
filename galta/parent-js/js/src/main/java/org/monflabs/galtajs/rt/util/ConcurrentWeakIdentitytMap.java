@@ -32,7 +32,6 @@ import org.monflabs.util.Console;
 public class ConcurrentWeakIdentitytMap<K, V> {
 
     private static final int MINIMAL_SIZE = 16;
-    private static final int MINIMAL_RESIZE = 1024;
     private static final float LOAD_FACTOR = 0.75f;
     private static final int STRIPE_COUNT = 16;
     private static final int STRIPE_MASK = STRIPE_COUNT - 1;
@@ -41,6 +40,9 @@ public class ConcurrentWeakIdentitytMap<K, V> {
     private final ReentrantLock[] locks;
     private final ReferenceQueue<K> referenceQueue = new ReferenceQueue<>();
     private final AtomicInteger writeCounter = new AtomicInteger();
+    // Lookups that found nothing: a map only read from (or mostly missed)
+    // still gets its collected entries purged
+    private final AtomicInteger missCounter = new AtomicInteger();
 
     private volatile AtomicReferenceArray<Node<K, V>> table;
     // Updated under different stripe locks concurrently: must be atomic
@@ -150,12 +152,28 @@ public class ConcurrentWeakIdentitytMap<K, V> {
 
     public V get(@NonNull Object key) {
         Node<K, V> entry = getEntry(key);
-        return entry == null ? null : entry.getValue();
+        if (entry == null) {
+            missed();
+            return null;
+        }
+        return entry.getValue();
     }
 
     public V getOrDefault(@NonNull Object key, V defaultValue) {
         Node<K, V> entry = getEntry(key);
-        return entry == null ? defaultValue : entry.getValue();
+        if (entry == null) {
+            missed();
+            return defaultValue;
+        }
+        return entry.getValue();
+    }
+
+    // Every DRAIN_INTERVAL misses, purge the collected entries without
+    // waiting on any lock
+    private void missed() {
+        if (missCounter.incrementAndGet() % DRAIN_INTERVAL == 0) {
+            drain(-1);
+        }
     }
 
     public V getOrCreate(K key, Supplier<V> supplier) {
@@ -452,7 +470,7 @@ public class ConcurrentWeakIdentitytMap<K, V> {
         int count = elementCount.incrementAndGet();
 
         if (count > threshold) {
-            rehashGlobal(count, true);
+            rehashGlobal(count);
         }
     }
 
@@ -486,16 +504,20 @@ public class ConcurrentWeakIdentitytMap<K, V> {
     // stripe (the table length is a multiple of the stripe count), so a collected node
     // can only be unlinked under ITS stripe's lock: other stripes are only tried, never
     // waited on (waiting while holding a lock could deadlock), and are deferred if busy.
-    @SuppressWarnings("unchecked")
     private void maybeDrain(int h) {
         if (writeCounter.incrementAndGet() % DRAIN_INTERVAL != 0) {
             return;
         }
+        drain(h & STRIPE_MASK);
+    }
+
+    // `held`: the stripe whose lock the caller holds, -1 for none
+    @SuppressWarnings("unchecked")
+    private void drain(int held) {
         Node<K, V> polled;
         while ((polled = (Node<K, V>) referenceQueue.poll()) != null) {
             pendingRemovals.add(polled);
         }
-        int held = h & STRIPE_MASK;
         for (int n = pendingRemovals.size(); n > 0; n--) {
             Node<K, V> toRemove = pendingRemovals.poll();
             if (toRemove == null) {
@@ -516,22 +538,6 @@ public class ConcurrentWeakIdentitytMap<K, V> {
         }
     }
 
-//    @SuppressWarnings("unchecked")
-//    private void drainQueueGlobal() {
-//        Node<K, V> toRemove;
-//        while ((toRemove = (Node<K, V>) referenceQueue.poll()) != null) {
-//            removeEntryLocked(toRemove);
-//        }
-//
-//        AtomicReferenceArray<Node<K, V>> tab = table;
-//        int length = tab.length();
-//        if (elementCount > threshold) {
-//            rehashGlobal(elementCount, true);
-//        } else if (length > MINIMAL_SIZE && elementCount < (int) (length * (LOAD_FACTOR / 2f))) {
-//            rehashGlobal(elementCount, false);
-//        }
-//    }
-
     // Called while holding one stripe lock: blocking on the others (in any order) could
     // deadlock with another thread doing the same, or with clear(). So the other stripes
     // are only tried; if one is busy the resize is skipped - the map stays correct with
@@ -548,7 +554,7 @@ public class ConcurrentWeakIdentitytMap<K, V> {
         return true;
     }
 
-    private void rehashGlobal(int newSize, boolean resize) {
+    private void rehashGlobal(int newSize) {
         if (!tryLockAll()) {
             return;
         }
@@ -556,10 +562,9 @@ public class ConcurrentWeakIdentitytMap<K, V> {
             AtomicReferenceArray<Node<K, V>> oldTab = table;
             int oldLength = oldTab.length();
 
-            int targetLength = Math.max(
-                    resize ? MINIMAL_RESIZE : MINIMAL_SIZE,
-                    powerOfTwo(Math.max(1, (int) (newSize / LOAD_FACTOR)))
-            );
+            // Grows by doubling (the smallest power of two that fits)
+            int targetLength = Math.max(MINIMAL_SIZE,
+                    powerOfTwo(Math.max(1, (int) (newSize / LOAD_FACTOR) + 1)));
 
             if (oldLength == targetLength) {
                 return;

@@ -414,19 +414,23 @@ public class WeakIdentityMap<K,V> {
 
         BaseIterator() {
             expectedModCount = modCount;
-            nextEntry = elementData[0];
         }
-        
+
         protected abstract R iteratorValue(WeakEntry<K,V> e);
 
         @Override
         public boolean hasNext() {
             while (true) {
                 if (nextEntry!=null) {
-                    return true;
+                    // Skip the entries whose key was garbage collected
+                    if (nextEntry.get()!=null) {
+                        return true;
+                    }
+                    nextEntry = nextEntry.next;
                 } else {
-                    if(entrySlot < elementData.length) {
-                        nextEntry = elementData[entrySlot++];
+                    WeakEntry<K, V>[] data = elementData;
+                    if(data!=null && entrySlot < data.length) {
+                        nextEntry = data[entrySlot++];
                     } else {
                         return false;
                     }
@@ -439,7 +443,7 @@ public class WeakIdentityMap<K,V> {
             if (expectedModCount!=modCount) {
                 throw new ConcurrentModificationException();
             }
-            if (nextEntry==null) {
+            if (!hasNext()) {
                 throw new NoSuchElementException();
             }
             currentEntry = nextEntry;

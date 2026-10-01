@@ -241,8 +241,8 @@ public class ConsString implements ConsSequence {
 	        
 	        while (current != null) {
  	            while (current != null) {
-	                if (current instanceof ConsString) {
-	                    ConsString cons = (ConsString) current;
+	                if (current instanceof ConsString cons && cons.flatString == null) {
+	                    // (A flattened child is copied as its string, below)
 	                    if (cons.right != null) {
 	                        stack.push(cons.right);
 	                    }
@@ -265,6 +265,9 @@ public class ConsString implements ConsSequence {
     private int appendCharSequenceToArray(char[] chars, int offset, CharSequence seq) {
         if (seq instanceof EmptyCharSequence) {
             return offset; 
+        } else if (seq instanceof ConsString cons && cons.flatString instanceof String str) {
+            str.getChars(0, str.length(), chars, offset);
+            return offset + str.length();
         } else if (seq instanceof CharWrapper) {
             chars[offset] = ((CharWrapper) seq).getChar();
             return offset + 1;

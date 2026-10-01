@@ -65,18 +65,13 @@ public class JSRuntimeException extends JSException  {
 		return new JSRuntimeException(cause,jsException);
 	}
 	
-	public static final class StackEntry {
-		private StackEntry next;
-		private ASTNode node;
-		public StackEntry(StackEntry next, ASTNode node) {
-			this.next = next;
-			this.node = node;
-		}
-	}
-
-	
-	private StackEntry stackTrace;
 	private String stackTraceMessage;
+	// The stack trace message is formatted lazily, from what fillStackTrace()
+	// captured: most exceptions are caught by the script and never displayed
+	private boolean stackTraceFilled;
+	private java.util.List<Callstack> pendingCallstacks;
+	private java.util.List<String> pendingCallstackNames;
+	private ASTNode pendingSourceNode;
 	private Object javascriptException;
 	
     // The message is built lazily: reading "message" on a thrown object can run
@@ -132,28 +127,48 @@ public class JSRuntimeException extends JSException  {
     	if(m==null) {
     		m = super.getMessage();
     	}
-    	if(StringUtil.isNotEmpty(stackTraceMessage)) {
-    		return '\n' + m + '\n' + stackTraceMessage;
+    	String stm = getStackTraceMessage();
+    	if(StringUtil.isNotEmpty(stm)) {
+    		return '\n' + m + '\n' + stm;
     	}
         return m;
     }
 
 	public String getStackTraceMessage() {
+		formatPendingStackTrace();
         return this.stackTraceMessage;
     }
 
 	public void setStackTraceMessage(String stackTraceMessage) {
+		this.pendingCallstacks = null;
+		this.pendingCallstackNames = null;
+		this.pendingSourceNode = null;
+		this.stackTraceFilled = true;
         this.stackTraceMessage = stackTraceMessage;
     }
-    
-    public ASTNode errorNode() { 
-    	for(StackEntry e=stackTrace; e!=null; e=e.next) {
-    		if(e.next==null) {
-    			return e.node;
-    		}
-    	}
-    	return null;
-    }
+
+	private void formatPendingStackTrace() {
+		if(pendingCallstacks!=null) {
+			for(int i=0; i<pendingCallstacks.size(); i++) {
+				fillStackTrace(pendingCallstacks.get(i), pendingCallstackNames.get(i));
+			}
+			pendingCallstacks = null;
+			pendingCallstackNames = null;
+		}
+		if(pendingSourceNode!=null) {
+			fillSourceCode(pendingSourceNode);
+			pendingSourceNode = null;
+		}
+	}
+
+	private void addPendingCallstack(Callstack cs, String name) {
+		if(pendingCallstacks==null) {
+			pendingCallstacks = new java.util.ArrayList<>(2);
+			pendingCallstackNames = new java.util.ArrayList<>(2);
+		}
+		pendingCallstacks.add(cs);
+		pendingCallstackNames.add(name);
+	}
     
     public Object getJavascriptException() {
 		return javascriptException;
@@ -167,12 +182,13 @@ public class JSRuntimeException extends JSException  {
 		if(getSourceNode()==null) {
 			setSourceNode(node);
 		}
-    	if(stackTraceMessage==null) {
+    	if(!stackTraceFilled) {
+    		stackTraceFilled = true;
+    		// The call stacks are captured now, formatted when needed
     		JSContext c = JSContext.getUnchecked();
     		if(c instanceof JSRuntimeContext ctx) {
 	    		// Runtime execution
-	    		Callstack cs = new Callstack(ctx, node);
-				fillStackTrace(cs,"Stack Trace");
+	    		addPendingCallstack(new Callstack(ctx, node),"Stack Trace");
 
     			AsyncTask m = ctx.getGlobalContext().getExecutor().getCurrentAsyncTask();
     			if(m!=null) {
@@ -180,17 +196,17 @@ public class JSRuntimeException extends JSException  {
     			}
     		} else {
     			// Source code (compiler, ...)
-    			fillSourceCode(node);
+    			pendingSourceNode = node;
     		}
     	}
     }
-	
+
 	// Runtime error
 	private void fillStackTrace(AsyncTask asyncTask) {
 		for(AsyncTask m=asyncTask; m!=null; m=m.getParent()) {
 			Callstack cs = m.getCallstack();
 			if(cs!=null && !cs.getEntries().isEmpty()) {
-				fillStackTrace(cs, m.getName());
+				addPendingCallstack(cs, m.getName());
 			}
 		}
     }
