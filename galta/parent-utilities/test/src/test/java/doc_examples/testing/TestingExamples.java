@@ -8,6 +8,7 @@ import java.util.List;
 import org.monflabs.json.JsonArray;
 import org.monflabs.json.JsonObject;
 import org.monflabs.tests.JavaAccessor;
+import org.monflabs.tests.SuiteGuard;
 import org.monflabs.tests.__BaseTestCase;
 import org.monflabs.tests.leaks.ResourceLeakAgent;
 import org.monflabs.tests.leaks.ResourceTracker;
@@ -100,7 +101,7 @@ public class TestingExamples extends __BaseTestCase {
 		}
 	}
 
-	public void testRuleFailsLeakingTest() {
+	public void testRuleFailsLeakingTest() throws Exception {
 		org.junit.runner.Result result = org.junit.runner.JUnitCore.runClasses(LeakRuleExample.Leaking.class);
 		assertEquals(1, result.getFailureCount());
 		String message = result.getFailures().get(0).getMessage();
@@ -108,12 +109,17 @@ public class TestingExamples extends __BaseTestCase {
 		assertTrue(message.contains("Detected 1 leaked resource(s)"));
 		assertTrue(message.contains("Resource Type: FileChannelImpl"));
 
+		// Close what the leaking test left open
+		LeakRuleExample.Leaking.leaked.close();
+		Files.delete(LeakRuleExample.Leaking.file);
+
 		// The tracker is a JVM-wide singleton: clear what the nested run left behind,
 		// or this test's own leak check (in __BaseTestCase.tearDown) reports it too
-		ResourceTracker.getInstance().startTracking();
+		ResourceTracker.getInstance().startTracking(true);
 	}
 
 	/** A test case with leak tracking on: installing the agent is enough. */
+	@SuiteGuard.NotInSuite("leaks on purpose: run by testBaseTestCaseChecksLeaks")
 	public static class LeakyCase extends __BaseTestCase {
 		static {
 			ResourceLeakAgent.install();

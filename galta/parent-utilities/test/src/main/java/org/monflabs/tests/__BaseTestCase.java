@@ -18,15 +18,13 @@ package org.monflabs.tests;
 import java.util.List;
 import java.util.TimeZone;
 
-import org.junit.After;
-import org.junit.Before;
 import org.monflabs.tests.leaks.ResourceLeakAgent;
 import org.monflabs.tests.leaks.ResourceTracker;
 
 import junit.framework.TestCase;
 
 public abstract class __BaseTestCase extends TestCase {
-	
+
 	/**
 	 * Install the leak detection agent for all the test cases, from the system property
 	 * <code>monflabs.tests.trackLeaks</code> (<code>-Dmonflabs.tests.trackLeaks=true</code>).
@@ -34,7 +32,7 @@ public abstract class __BaseTestCase extends TestCase {
 	 * for example by {@link ResourceLeakAgent#install()} in a static block of the test class.
 	 */
 	public static final boolean TRACK_LEAKS = Boolean.getBoolean("monflabs.tests.trackLeaks");
-	
+
 // use setUp() and tearDown() instead of a Rule
 //  @Rule
 //  public ResourceLeakRule leakDetector = new ResourceLeakRule();
@@ -58,21 +56,25 @@ public abstract class __BaseTestCase extends TestCase {
 //	      support.print("Executing Test: {0}{1}", description.getMethodName(), getExtraDescription());
 //	   }
 //	};
-	
+
+	/**
+	 * The default time zone while a test runs (set by {@link #setUp()}, restored by
+	 * {@link #tearDown()}): the expected results with local dates and times are written for it,
+	 * whatever the time zone of the machine running the tests.
+	 */
+	public static final TimeZone TEST_TIME_ZONE = TimeZone.getTimeZone("America/New_York");
+
+	private TimeZone savedTimeZone;
+
 	protected __BaseTestCase() {
-		// https://stackoverflow.com/questions/9863625/difference-between-est-and-america-new-york-time-zones
-		// To simplify the error reporting, as all the date/time are GMT
-		//TimeZone.setDefault(TimeZone.getTimeZone("GMT"));
-		//TimeZone.setDefault(TimeZone.getTimeZone("EST"));
-		TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"));
 		this.support = new UnitTestSupport(this.getClass());
 	}
-	
+
 	public String getExtraDescription() {
 		return "";
 	}
-	
-	
+
+
 	public static void sleep() {
 		sleep(10);
 	}
@@ -84,22 +86,24 @@ public abstract class __BaseTestCase extends TestCase {
 		}
 	}
 
-	
+
     @Override
-	@Before
 	public void setUp() throws Exception {
     	super.setUp();
+    	savedTimeZone = TimeZone.getDefault();
+    	TimeZone.setDefault(TEST_TIME_ZONE);
     	if(shouldTrackResources() && ResourceLeakAgent.isInstalled()) {
-    		ResourceTracker.getInstance().startTracking();
+    		// Only the resources allocated by the test thread: the ones opened concurrently by
+    		// other threads (background tasks, other tests) are not leaks of this test
+    		ResourceTracker.getInstance().startTracking(true);
     	}
     	//support.print("--------------- START " + getName() + getExtraDescription() + "  ("+getClass().getName()+")");
     }
     protected boolean shouldTrackResources() {
     	return true;
     }
-    
+
     @Override
-	@After
 	public void tearDown() throws Exception {
     	//support.print("--------------- END " + getName() + getExtraDescription() + "  ("+getClass().getName()+")");
     	try {
@@ -111,10 +115,14 @@ public abstract class __BaseTestCase extends TestCase {
 		        }
 	    	}
     	} finally {
+    		if(savedTimeZone!=null) {
+    			TimeZone.setDefault(savedTimeZone);
+    			savedTimeZone = null;
+    		}
     		super.tearDown();
     	}
-    }	
-    
+    }
+
     protected void checkForLeaks() {
 //        System.gc();
 //        System.runFinalization();
@@ -140,13 +148,17 @@ public abstract class __BaseTestCase extends TestCase {
 	            }
 	        }
         }
-    }    
-    protected boolean shouldReportLeak(ResourceTracker.LeakInfo leakInfo) {
-    	// JAR connections when using openStream() are keeping the jar file open
-    	// We try to prevent this by ignoring the resources opened on a .jar file
-    	return !isJarFileContext(leakInfo.getAllocationInfo().getContext());
     }
-    
+    /**
+     * Tell if a leak is reported. By default, the filter shared with {@link org.monflabs.tests.leaks.ResourceLeakRule}:
+     * see {@link ResourceTracker#shouldReport(ResourceTracker.LeakInfo)}.
+     * @param leakInfo the leak
+     * @return true to report it
+     */
+    protected boolean shouldReportLeak(ResourceTracker.LeakInfo leakInfo) {
+    	return ResourceTracker.shouldReport(leakInfo);
+    }
+
     /**
      * Tell if an allocation context designates a jar file (a path ending with ".jar", possibly quoted,
      * or an entry inside a jar). A path merely containing ".jar" (e.g. "/data/my.jarvis/file.txt")
@@ -155,14 +167,6 @@ public abstract class __BaseTestCase extends TestCase {
      * @return true for a jar file
      */
     public static boolean isJarFileContext(String ctx) {
-    	if(ctx==null || ctx.isEmpty()) {
-    		return false;
-    	}
-    	String s = ctx.trim();
-    	if(s.endsWith("\"")) {
-    		s = s.substring(0, s.length()-1);
-    	}
-    	String lower = s.toLowerCase(java.util.Locale.ROOT);
-    	return lower.endsWith(".jar") || lower.contains(".jar!/");
+    	return ResourceTracker.isJarFileContext(ctx);
     }
 }

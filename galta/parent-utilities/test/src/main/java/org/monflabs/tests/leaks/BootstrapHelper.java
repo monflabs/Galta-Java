@@ -16,217 +16,175 @@
 package org.monflabs.tests.leaks;
 
 import java.io.File;
-import java.lang.reflect.Method;
 import java.nio.file.Path;
+import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
- * Minimal bootstrap helper class.
- * This class will be added to the bootstrap classloader and uses reflection
- * to call ResourceTracker (which stays in the application classloader).
- * 
- * IMPORTANT: Update TRACKER_CLASS_NAME to match your actual package!
- * 
- * This version initializes LAZILY when first called from the bootstrap classloader,
- * avoiding the double-loading issue.
+ * Bridge between the instrumented JDK classes and the {@link ResourceTracker}.
+ * <p>
+ * {@link ResourceLeakAgent#install()} appends this class to the bootstrap class path, so the
+ * advice inlined in the JDK classes (<code>FileInputStream</code>, <code>ZipFile</code>...) can
+ * call it. The bootstrap copy of the class cannot see the application classes: the agent hands
+ * it the tracker as JDK-typed callbacks ({@link #wire(BooleanSupplier, BiConsumer, Consumer)}),
+ * on both the bootstrap copy and the application copy of this class. Nothing is looked up by
+ * name, so the tracker works whatever the class loader that loaded the test library.
+ * <p>
+ * The callbacks are checked first: while the tracker does not record, an allocation or a closure
+ * costs a volatile read and a call; nothing is formatted.
+ * <p>
+ * This class must only use JDK types.
  */
 public class BootstrapHelper {
-    public static int TRACE_LEVEL = 0;
-    
-    public static void debug(String message) {
-    	if(TRACE_LEVEL>=2) {
-    		System.out.println("DEBUG: " + message);
-    	}
-    }
-    public static void info(String message) {
-    	if(TRACE_LEVEL>=1) {
-    		System.out.println("INFO:  " + message);
-    	}
-    }
-    public static void error(String message) {
-    	if(TRACE_LEVEL>=1) {
-    		System.err.println("ERROR:  " + message);
-    	}
-    }
-    public static void log(String message) {
-   		System.out.println(message);
-    }
-    public static boolean isDebug(String message) {
-    	return TRACE_LEVEL>=2;
-    }
-	
-	
-    // UPDATE THIS TO MATCH YOUR ACTUAL PACKAGE!️
-    private static final String TRACKER_CLASS_NAME = "org.monflabs.tests.leaks.ResourceTracker";
-    
-    private static Class<?> trackerClass;
-    private static Object trackerInstance;
-    private static Method recordAllocationMethod;
-    private static Method recordClosureMethod;
-    private static volatile boolean initialized = false;
-    private static volatile boolean initializing = false;
-    
-    /**
-     * Initialize the helper with reflection references to ResourceTracker.
-     * This is called LAZILY on first use from the bootstrap classloader.
-     */
-    private static synchronized void ensureInitialized() {
-        if (initialized || initializing) {
-            return;
-        }
-        
-        initializing = true;
-        
-        try {
-            info ("Initializing BootstrapHelper (from " + BootstrapHelper.class.getClassLoader() + ")...");
-            debug("Looking for ResourceTracker class: " + TRACKER_CLASS_NAME);
-            
-            // Get ResourceTracker class from the application classloader
-            // Use the system classloader to find it
-            ClassLoader systemCL = ClassLoader.getSystemClassLoader();
-            trackerClass = Class.forName(TRACKER_CLASS_NAME, true, systemCL);
-            debug("✓ Found ResourceTracker class: " + trackerClass);
-            debug("  ResourceTracker loaded by: " + trackerClass.getClassLoader());
-            
-            // Get the singleton instance
-            Method getInstanceMethod = trackerClass.getMethod("getInstance");
-            trackerInstance = getInstanceMethod.invoke(null);
-            debug("✓ Got ResourceTracker instance: " + trackerInstance);
-            
-            // Get the methods we need
-            recordAllocationMethod = trackerClass.getMethod("recordAllocation", 
-                Object.class, String.class, String.class);
-            recordClosureMethod = trackerClass.getMethod("recordClosure", Object.class);
-            debug("✓ Got methods: recordAllocation and recordClosure");
-            
-            initialized = true;
-            debug("✓ BootstrapHelper initialized successfully!");
-            
-        } catch (ClassNotFoundException e) {
-            error("   BootstrapHelper ERROR: Could not find ResourceTracker class: " + TRACKER_CLASS_NAME);
-            error("   Make sure TRACKER_CLASS_NAME in BootstrapHelper matches your actual package!");
-            error("   BootstrapHelper is loaded by: " + BootstrapHelper.class.getClassLoader());
-            e.printStackTrace();
-        } catch (Exception e) {
-        	error("   BootstrapHelper ERROR: Failed to initialize: " + e.getMessage());
-        	error("   BootstrapHelper is loaded by: " + BootstrapHelper.class.getClassLoader());
-            e.printStackTrace();
-        } finally {
-            initializing = false;
-        }
-    }
-    
-    /**
-     * Record a resource allocation with additional context.
-     * Called from instrumented constructors.
-     */
-    public static void recordAllocation(Object resource, String resourceType, String context) {
-        ensureInitialized();
-        
-        if (!initialized) {
-            return;
-        }
-        
-        if (recordAllocationMethod != null && trackerInstance != null) {
-            try {
-                recordAllocationMethod.invoke(trackerInstance, resource, resourceType, context);
-                debug("Recorded allocation: " + resourceType + " @ " + Integer.toHexString(System.identityHashCode(resource)) + " [" + context + "]");
-            } catch (Exception e) {
-                // Silently ignore to avoid breaking the application
-                error("Error recording allocation: " + e.getMessage());
-            }
-        }
-    }
-    
-    /**
-     * Record a resource allocation with constructor arguments.
-     * Extracts context (like file path) from the arguments.
-     * Called from instrumented file stream constructors.
-     */
-    public static void recordAllocationWithArgs(Object resource, String resourceType, Object[] args) {
-        String context = extractFilePathFromArgs(args);
-        recordAllocation(resource, resourceType, context);
-    }
-    
-    /**
-     * Extract file path from constructor arguments.
-     * Handles: String path, File object, FileDescriptor, etc.
-     */
-    private static String extractFilePathFromArgs(Object[] args) {
-        if (args == null || args.length == 0) {
-            return "";
-        }
 
-    	StringBuilder b = new StringBuilder();
-    	for(int i=0; i<args.length; i++) {
-	        Object arg = args[i];
-	        
-	        // Only interesting param types - ignore the others
-	        // (a Path is reported like a string, quoted)
-	        if (arg instanceof CharSequence || arg instanceof Path) {
-	    		if(!b.isEmpty()) {
-	    			b.append(",");
-	    		}
-				b.append("\"");
-	            b.append(arg.toString());
-				b.append("\"");
-	            continue;
-	        }
-	        if (arg instanceof File) {
-	    		if(!b.isEmpty()) {
-	    			b.append(",");
-	    		}
-		        b.append(arg.getClass().getSimpleName());
-				b.append("@");
-				b.append(Integer.toHexString(System.identityHashCode(arg)));
-				b.append(":");
-	            b.append(((File)arg).getPath());
-	            continue;
-	        }
-//	        // Handle File object: new FileInputStream(new File("/path"))
-//	        if (arg.getClass().getName().equals("java.io.File")) {
-//	            try {
-//	                // Use reflection to call getPath()
-//	                java.lang.reflect.Method getPath = arg.getClass().getMethod("getPath");
-//	                Object path = getPath.invoke(arg);
-//	                return path != null ? path.toString() : "unknown";
-//	            } catch (Exception e) {
-//	                return "File@" + Integer.toHexString(System.identityHashCode(arg));
-//	            }
-//	        }
-    	}
-        
-        // Handle FileDescriptor or other types
-        return b.toString();
-    }
+	/**
+	 * Trace level: 0 silent (default), 1 errors and main events, 2 debug.
+	 * The agent copies it to the bootstrap copy when installed; use
+	 * {@link ResourceLeakAgent#setTraceLevel(int)} to change both later.
+	 */
+	public static volatile int TRACE_LEVEL = 0;
 
-    /**
-     * Record a resource closure.
-     * Called from instrumented close() methods.
-     */
-    public static void recordClosure(Object resource) {
-        info("[BootstrapHelper] recordClosure() called for: " + resource.getClass().getSimpleName() + " @ " + Integer.toHexString(System.identityHashCode(resource)));
-        
-        ensureInitialized();
-        
-        if (!initialized) {
-            error("[BootstrapHelper] NOT initialized - cannot record closure");
-            return;
-        }
-        
-        if (recordClosureMethod != null && trackerInstance != null) {
-            try {
-                debug("[BootstrapHelper] Invoking recordClosure on ResourceTracker...");
-                recordClosureMethod.invoke(trackerInstance, resource);
-                debug("[BootstrapHelper] ✓ recordClosure invoked successfully");
-                info("   Recorded closure: " + resource.getClass().getSimpleName() + " @ " + Integer.toHexString(System.identityHashCode(resource)));
-            } catch (Exception e) {
-                error("[BootstrapHelper] ERROR invoking recordClosure: " + e.getMessage());
-                e.printStackTrace();
-            }
-        } else {
-        	error("[BootstrapHelper] recordClosureMethod or trackerInstance is NULL!");
-        	error("  recordClosureMethod: " + recordClosureMethod);
-        	error("  trackerInstance: " + trackerInstance);
-        }
-    }
+	// The callbacks, set by ResourceLeakAgent.install()
+	private static volatile BooleanSupplier recording;
+	private static volatile BiConsumer<Object,String[]> allocationSink;
+	private static volatile Consumer<Object> closureSink;
+
+	public static void debug(String message) {
+		if(TRACE_LEVEL>=2) {
+			System.out.println("DEBUG: " + message);
+		}
+	}
+	public static void info(String message) {
+		if(TRACE_LEVEL>=1) {
+			System.out.println("INFO:  " + message);
+		}
+	}
+	public static void error(String message) {
+		if(TRACE_LEVEL>=1) {
+			System.err.println("ERROR:  " + message);
+		}
+	}
+	public static void error(String message, Throwable t) {
+		if(TRACE_LEVEL>=1) {
+			System.err.println("ERROR:  " + message);
+			t.printStackTrace();
+		}
+	}
+	public static void log(String message) {
+		System.out.println(message);
+	}
+	public static boolean isDebug() {
+		return TRACE_LEVEL>=2;
+	}
+
+	/**
+	 * Connect the helper to a tracker.
+	 * @param recording tells if an allocation made by the current thread is recorded
+	 * @param allocationSink receives the allocated resource and {type, context}
+	 * @param closureSink receives the closed resource
+	 */
+	public static void wire(BooleanSupplier recording, BiConsumer<Object,String[]> allocationSink, Consumer<Object> closureSink) {
+		BootstrapHelper.allocationSink = allocationSink;
+		BootstrapHelper.closureSink = closureSink;
+		BootstrapHelper.recording = recording;
+	}
+
+	/**
+	 * Tell if the helper is connected to a tracker.
+	 * @return true if wired
+	 */
+	public static boolean isWired() {
+		return recording!=null && allocationSink!=null && closureSink!=null;
+	}
+
+	/**
+	 * Called by the instrumented constructors.
+	 * @param resource the resource being constructed
+	 * @param args the constructor arguments
+	 */
+	public static void constructed(Object resource, Object[] args) {
+		BooleanSupplier r = recording;
+		if(r==null || resource==null || !r.getAsBoolean()) {
+			return;
+		}
+		record(resource, resource.getClass().getSimpleName(), extractFilePathFromArgs(args));
+	}
+
+	/**
+	 * Record a resource allocation, the context (like a file path) being extracted from the
+	 * constructor arguments.
+	 */
+	public static void recordAllocationWithArgs(Object resource, String resourceType, Object[] args) {
+		BooleanSupplier r = recording;
+		if(r==null || resource==null || !r.getAsBoolean()) {
+			return;
+		}
+		record(resource, resourceType, extractFilePathFromArgs(args));
+	}
+
+	/**
+	 * Record a resource allocation with a context.
+	 */
+	public static void recordAllocation(Object resource, String resourceType, String context) {
+		BooleanSupplier r = recording;
+		if(r==null || resource==null || !r.getAsBoolean()) {
+			return;
+		}
+		record(resource, resourceType, context);
+	}
+
+	private static void record(Object resource, String resourceType, String context) {
+		BiConsumer<Object,String[]> sink = allocationSink;
+		if(sink!=null) {
+			try {
+				sink.accept(resource, new String[] {resourceType, context});
+			} catch(Throwable t) {
+				// Never break the application
+				error("Error recording an allocation", t);
+			}
+		}
+	}
+
+	/**
+	 * Extract the context from the constructor arguments: the strings and paths (quoted), and the
+	 * files. The other arguments are ignored.
+	 */
+	private static String extractFilePathFromArgs(Object[] args) {
+		if(args==null || args.length==0) {
+			return "";
+		}
+		StringBuilder b = new StringBuilder();
+		for(Object arg: args) {
+			if(arg instanceof CharSequence || arg instanceof Path) {
+				if(!b.isEmpty()) {
+					b.append(",");
+				}
+				b.append("\"").append(arg.toString()).append("\"");
+			} else if(arg instanceof File f) {
+				if(!b.isEmpty()) {
+					b.append(",");
+				}
+				b.append(f.getClass().getSimpleName()).append("@").append(Integer.toHexString(System.identityHashCode(f)))
+				 .append(":").append(f.getPath());
+			}
+		}
+		return b.toString();
+	}
+
+	/**
+	 * Record a resource closure. Called from the instrumented close() methods.
+	 * The closures are recorded whatever the thread.
+	 */
+	public static void recordClosure(Object resource) {
+		Consumer<Object> sink = closureSink;
+		if(sink==null || resource==null) {
+			return;
+		}
+		try {
+			sink.accept(resource);
+		} catch(Throwable t) {
+			error("Error recording a closure", t);
+		}
+	}
 }

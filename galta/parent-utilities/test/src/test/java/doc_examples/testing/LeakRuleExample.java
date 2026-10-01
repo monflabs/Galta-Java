@@ -6,6 +6,7 @@ import java.nio.file.Path;
 
 import org.junit.Rule;
 import org.junit.Test;
+import org.monflabs.tests.SuiteGuard;
 import org.monflabs.tests.leaks.ResourceLeakRule;
 
 /**
@@ -26,14 +27,20 @@ public class LeakRuleExample {
 	}
 
 	/** Run by TestingExamples.testRuleFailsLeakingTest, not by the suite: it leaks on purpose. */
+	@SuiteGuard.NotInSuite("leaks on purpose: run by TestingExamples.testRuleFailsLeakingTest")
 	public static class Leaking {
+		/** The file and stream left open, cleaned up by TestingExamples after the run. */
+		static Path file;
+		static java.io.InputStream leaked;
+
 		@Rule
 		public ResourceLeakRule leaks = new ResourceLeakRule();
 
 		@Test
 		public void forgetsToClose() throws Exception {
-			Path file = Files.createTempFile("leak-rule", ".txt");
-			Files.newInputStream(file).read();   // never closed
+			file = Files.createTempFile(Files.createDirectories(Path.of("target", "temp")), "leak-rule", ".txt");
+			leaked = Files.newInputStream(file);
+			leaked.read();   // never closed
 		}
 	}
 }

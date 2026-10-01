@@ -23,9 +23,6 @@ import java.io.FileWriter;
 import java.io.RandomAccessFile;
 import java.util.List;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
 import org.monflabs.tests.leaks.ResourceTracker;
 
 /**
@@ -37,7 +34,6 @@ public class FileIOLeakTest extends BaseLeakTest {
     private File tempFile;
     
     @Override
-	@Before
     public void setUp() throws Exception {
         // Create temp file
         tempFile = File.createTempFile("fileio-test", ".txt");
@@ -54,7 +50,6 @@ public class FileIOLeakTest extends BaseLeakTest {
     }
     
     @Override
-	@After
     public void tearDown() throws Exception {
         super.tearDown();
         
@@ -65,7 +60,6 @@ public class FileIOLeakTest extends BaseLeakTest {
     
    // ==================== FileInputStream Tests ====================
     
-    @Test
     public void testFileInputStreamLeak() throws Exception {
         FileInputStream fis = new FileInputStream(tempFile);
         
@@ -81,7 +75,6 @@ public class FileIOLeakTest extends BaseLeakTest {
         fis.close();
     }
     
-    @Test
     public void testFileInputStreamNoLeak() throws Exception {
         try (FileInputStream fis = new FileInputStream(tempFile)) {
             fis.read();
@@ -93,7 +86,6 @@ public class FileIOLeakTest extends BaseLeakTest {
     
     // ==================== FileOutputStream Tests ====================
     
-    @Test
     public void testFileOutputStreamLeak() throws Exception {
         FileOutputStream fos = new FileOutputStream(tempFile);
         
@@ -109,7 +101,6 @@ public class FileIOLeakTest extends BaseLeakTest {
         fos.close();
     }
     
-    @Test
     public void testFileOutputStreamNoLeak() throws Exception {
         try (FileOutputStream fos = new FileOutputStream(tempFile, true)) {
             fos.write("Appended data\n".getBytes());
@@ -121,7 +112,6 @@ public class FileIOLeakTest extends BaseLeakTest {
     
     // ==================== RandomAccessFile Tests ====================
     
-    @Test
     public void testRandomAccessFileLeak() throws Exception {
         RandomAccessFile raf = new RandomAccessFile(tempFile, "r");
         
@@ -137,7 +127,6 @@ public class FileIOLeakTest extends BaseLeakTest {
         raf.close();
     }
     
-    @Test
     public void testRandomAccessFileNoLeak() throws Exception {
         try (RandomAccessFile raf = new RandomAccessFile(tempFile, "rw")) {
             raf.seek(0);
@@ -150,7 +139,6 @@ public class FileIOLeakTest extends BaseLeakTest {
     
     // ==================== FileReader Tests ====================
     
-    @Test
     public void testFileReaderLeak() throws Exception {
         FileReader fr = new FileReader(tempFile);
         
@@ -167,7 +155,6 @@ public class FileIOLeakTest extends BaseLeakTest {
         fr.close();
     }
     
-    @Test
     public void testFileReaderNoLeak() throws Exception {
         try (FileReader fr = new FileReader(tempFile)) {
             char[] buffer = new char[100];
@@ -180,7 +167,6 @@ public class FileIOLeakTest extends BaseLeakTest {
     
     // ==================== FileWriter Tests ====================
     
-    @Test
     public void testFileWriterLeak() throws Exception {
         FileWriter fw = new FileWriter(tempFile, true);
         // Write some data
@@ -197,7 +183,6 @@ public class FileIOLeakTest extends BaseLeakTest {
         fw.close();
     }
     
-    @Test
     public void testFileWriterNoLeak() throws Exception {
         try (FileWriter fw = new FileWriter(tempFile, true)) {
             fw.write("Hello");
@@ -209,7 +194,6 @@ public class FileIOLeakTest extends BaseLeakTest {
     
     // ==================== Multiple Resources Test ====================
     
-    @Test
     public void testMultipleFileResourceLeaks() throws Exception {
         // Create multiple leaks
         FileInputStream fis = new FileInputStream(tempFile);
@@ -225,7 +209,6 @@ public class FileIOLeakTest extends BaseLeakTest {
         raf.close();
     }
     
-    @Test
     public void testMixedProperAndLeakedResources() throws Exception {
         
         // Properly closed
@@ -252,7 +235,6 @@ public class FileIOLeakTest extends BaseLeakTest {
     
     // ==================== Constructor Variants Test ====================
     
-    @Test
     public void testFileInputStreamConstructorVariants() throws Exception {
         // Constructor with String path
         FileInputStream fis1 = new FileInputStream(tempFile.getAbsolutePath());

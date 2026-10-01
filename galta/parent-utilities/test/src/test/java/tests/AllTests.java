@@ -22,13 +22,13 @@ import junit.framework.TestSuite;
 import tests.tests.AccessorTest;
 import tests.tests.JavaAccessorConcurrencyTest;
 import tests.tests.ReadStringTest;
+import tests.tests.SuiteGuardTest;
 import tests.tests.UnitTestSupportTest;
 import tests.tests.leaks.FileIOLeakTest;
 import tests.tests.leaks.FileSystemAPILeakTest;
-import tests.tests.leaks.JDBCLeakTest;
 import tests.tests.leaks.ResourceTrackerTest;
-import tests.tests.leaks.SocketLeakTest;
 import tests.tests.leaks.ZipFileLeakTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllTests extends TestSuite {
 
@@ -38,19 +38,20 @@ public class AllTests extends TestSuite {
 		suite.addTestSuite(AccessorTest.class);
 		suite.addTestSuite(ReadStringTest.class);
 		suite.addTestSuite(UnitTestSupportTest.class);
+		suite.addTestSuite(SuiteGuardTest.class);
 		suite.addTestSuite(JavaAccessorConcurrencyTest.class);
 		suite.addTestSuite(ResourceTrackerTest.class);
 		suite.addTestSuite(FileIOLeakTest.class);
 		suite.addTestSuite(FileSystemAPILeakTest.class);
 		suite.addTestSuite(ZipFileLeakTest.class);
 
-		// Disabled for now
-		suite.addTestSuite(JDBCLeakTest.class);
-		suite.addTestSuite(SocketLeakTest.class);
 
 		// Samples of docs/Utilities/Testing.md
 		suite.addTestSuite(TestingExamples.class);
 		suite.addTest(new JUnit4TestAdapter(LeakRuleExample.class));
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllTests.class));
 
 		return suite;
 	}

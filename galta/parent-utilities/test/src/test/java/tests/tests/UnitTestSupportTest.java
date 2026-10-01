@@ -152,6 +152,74 @@ public class UnitTestSupportTest extends __BaseTestCase {
 		assertFalse(s.checkJsonTemplate(JsonObject.of("a", "x", "b", org.monflabs.json.JsonArray.of(2, 1)), "j.json"));
 	}
 
+	public void testFailureMessageHasDiff() {
+		ScratchSupport s = newSupport();
+		s.saveText(getClass(), "d.txt", "line1\nline2\nexpected\nline4\n");
+		AssertionError e = assertThrows(() -> s.assertTextResult("line1\nline2\nactual\nline4\n", "d.txt"));
+		assertTrue(e.getMessage(), e.getMessage().contains("first difference at line 3"));
+		assertTrue(e.getMessage(), e.getMessage().contains("\n  line2\n- expected\n+ actual\n"));
+		// The file is named, so it can be inspected or updated
+		assertTrue(e.getMessage(), e.getMessage().contains(s.resourceFile(getClass(), "d.txt", false).getPath()));
+
+		AssertionError j = assertThrows(() -> s.assertJsonEquals(JsonObject.of("a", 1), JsonObject.of("a", 2)));
+		assertTrue(j.getMessage(), j.getMessage().contains("- ") && j.getMessage().contains("+ "));
+		AssertionError t = assertThrows(() -> s.assertNormalizedTextEquals("x\ny", "x\nz"));
+		assertTrue(t.getMessage(), t.getMessage().contains("- y\n+ z\n"));
+	}
+
+	public void testCompactDiff() {
+		assertEquals("first difference at line 1, column 3 (expected 1 lines, actual 1 lines):\n- abc\n+ abd\n",
+				UnitTestSupport.compactDiff("abc", "abd"));
+		// Extra lines only
+		assertEquals("first difference at line 2 (expected 1 lines, actual 2 lines):\n  a\n+ b\n",
+				UnitTestSupport.compactDiff("a", "a\nb"));
+		// Long lines are clipped around the difference
+		String base = "x".repeat(500);
+		String d = UnitTestSupport.compactDiff(base+"1", base+"2");
+		assertTrue(d, d.length() < 500);
+		assertTrue(d, d.contains("x1") && d.contains("x2"));
+	}
+
+	public void testSaveTemplatesRefusedOnCI() {
+		String old = System.getProperty(UnitTestSupport.SAVE_TEMPLATES_PROPERTY);
+		try {
+			System.setProperty(UnitTestSupport.SAVE_TEMPLATES_PROPERTY, "all");
+			ScratchSupport ci = new ScratchSupport(getClass(), support.getTargetTempDirectory("template-tests/"+getName(), true)) {
+				@Override
+				protected boolean isContinuousIntegration() {
+					return true;
+				}
+			};
+			IllegalStateException e = org.junit.Assert.assertThrows(IllegalStateException.class, () -> ci.checkTextResult("value", "ci.txt"));
+			assertTrue(e.getMessage(), e.getMessage().contains("CI"));
+			assertFalse(ci.resourceExists(getClass(), "ci.txt"));
+		} finally {
+			if(old==null) {
+				System.clearProperty(UnitTestSupport.SAVE_TEMPLATES_PROPERTY);
+			} else {
+				System.setProperty(UnitTestSupport.SAVE_TEMPLATES_PROPERTY, old);
+			}
+		}
+	}
+
+	public void testBomAndTrailingNewlines() {
+		ScratchSupport s = newSupport();
+		s.saveText(getClass(), "bom.txt", "﻿value\n\n");
+		assertTrue(s.checkTextResult("value", "bom.txt"));
+		assertTrue(s.checkTextResult("value\n", "bom.txt"));
+		assertFalse(s.checkTextResult("value\n\nmore", "bom.txt"));
+		s.saveText(getClass(), "bom.json", "﻿{\"a\":1}\n");
+		assertTrue(s.checkJsonTemplate(JsonObject.of("a", 1), "bom.json"));
+	}
+
+	public void testResourceFileForClass() {
+		ScratchSupport s = newSupport();
+		File dir = s.getTestResultsDirectory();
+		assertEquals(new File(dir, "tests/tests/UnitTestSupportTest.x"), s.resourceFileForClass(getClass(), ".x", false));
+		// A class without a package (here a primitive type: its name has no dot)
+		assertEquals(new File(dir, "int.x"), s.resourceFileForClass(int.class, ".x", false));
+	}
+
 	public void testNormalizeLineBreaks() {
 		assertEquals("a\nb", UnitTestSupport.normalizeLineBreaks("a\r\nb"));
 		assertEquals("a\nb", UnitTestSupport.normalizeLineBreaks("a\rb"));

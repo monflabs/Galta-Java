@@ -16,12 +16,15 @@
 package tests.tests.leaks;
 
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.util.List;
 
 import org.monflabs.tests.__BaseTestCase;
 import org.monflabs.tests.leaks.BootstrapHelper;
+import org.monflabs.tests.leaks.ResourceLeakAgent;
 import org.monflabs.tests.leaks.ResourceTracker;
 
 /**
@@ -103,6 +106,51 @@ public class ResourceTrackerTest extends BaseLeakTest {
 		tracker.recordClosure(r2);
 		tracker.recordClosure(null);
 		assertTrue(tracker.detectLeaks().isEmpty());
+	}
+
+	public void testAgentWiresBothHelperCopies() throws Exception {
+		assertTrue(ResourceLeakAgent.isInstalled());
+		assertTrue(BootstrapHelper.isWired());
+		// The copy called by the instrumented JDK classes
+		Class<?> boot = Class.forName(BootstrapHelper.class.getName(), false, null);
+		assertNull(boot.getClassLoader());
+		assertEquals(Boolean.TRUE, boot.getMethod("isWired").invoke(null));
+		// Installing again is a no-op
+		ResourceLeakAgent.install();
+	}
+
+	public void testNotRecordedWhenNotTracking() throws Exception {
+		ResourceTracker tracker = ResourceTracker.getInstance();
+		tracker.stopTracking();
+		try {
+			assertFalse(tracker.shouldRecord());
+			try(FileInputStream in = new FileInputStream(file)) {
+				assertTrue(tracker.detectLeaks().isEmpty());
+			}
+		} finally {
+			tracker.startTracking(true);
+		}
+		assertTrue(tracker.shouldRecord());
+	}
+
+	public void testStandardStreamsAreNotReported() throws Exception {
+		ResourceTracker tracker = ResourceTracker.getInstance();
+		@SuppressWarnings("resource")
+		FileOutputStream stdout = new FileOutputStream(FileDescriptor.out);
+		FileInputStream in = new FileInputStream(file);
+		try {
+			List<ResourceTracker.LeakInfo> leaks = tracker.detectLeaks();
+			assertEquals(2, leaks.size());
+			for(ResourceTracker.LeakInfo l: leaks) {
+				assertEquals(l.getResource()==in, ResourceTracker.shouldReport(l));
+			}
+			assertTrue(ResourceTracker.isStandardStream(stdout));
+			assertFalse(ResourceTracker.isStandardStream(in));
+		} finally {
+			in.close();
+			// Not closed on purpose (it would close stdout): stop tracking it
+			tracker.recordClosure(stdout);
+		}
 	}
 
 	public void testJarFileContext() {

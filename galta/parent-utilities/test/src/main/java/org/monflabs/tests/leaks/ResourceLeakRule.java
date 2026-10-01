@@ -25,13 +25,13 @@ import org.junit.runners.model.Statement;
 
 /**
  * JUnit 4 Rule that detects resource leaks in tests.
- * 
+ *
  * Usage:
  * <pre>
  * public class MyTest {
  *     &#64;Rule
  *     public ResourceLeakRule leakDetector = new ResourceLeakRule();
- *     
+ *
  *     &#64;Test
  *     public void testSomething() {
  *         // Your test code
@@ -41,7 +41,7 @@ import org.junit.runners.model.Statement;
  */
 public class ResourceLeakRule implements TestRule {
     private static volatile boolean agentInstalled = false;
-    
+
     @Override
     public Statement apply(Statement base, Description description) {
         return new Statement() {
@@ -49,10 +49,11 @@ public class ResourceLeakRule implements TestRule {
             public void evaluate() throws Throwable {
                 // Install agent once per JVM
                 installAgentIfNeeded();
-                
-                // Start tracking before test
-                ResourceTracker.getInstance().startTracking();
-                
+
+                // Start tracking before test: only the resources allocated by the test thread,
+                // so the resources opened concurrently by other threads are not reported
+                ResourceTracker.getInstance().startTracking(true);
+
                 Throwable testException = null;
                 try {
                     // Run the test
@@ -76,7 +77,7 @@ public class ResourceLeakRule implements TestRule {
                         // Always stop tracking
                         ResourceTracker.getInstance().stopTracking();
                     }
-                    
+
                     // Re-throw original test exception if any
                     if (testException != null) {
                         throw testException;
@@ -85,41 +86,43 @@ public class ResourceLeakRule implements TestRule {
             }
         };
     }
-    
+
     private synchronized void installAgentIfNeeded() {
         if (!agentInstalled) {
             ResourceLeakAgent.install();
             agentInstalled = true;
         }
     }
-    
+
     private void checkForLeaks() {
         // Give GC a chance to clean up - should we??
         //System.gc();
         //System.runFinalization();
-        
+
         // Small delay to let GC do its work
         //try {
         //    Thread.sleep(100);
         //} catch (InterruptedException e) {
         //    Thread.currentThread().interrupt();
         //}
-        
+
         List<ResourceTracker.LeakInfo> leaks = ResourceTracker.getInstance().detectLeaks();
+        // Same filter as __BaseTestCase
+        leaks.removeIf(l -> !ResourceTracker.shouldReport(l));
         if (!leaks.isEmpty()) {
             StringBuilder message = new StringBuilder();
             message.append("\n==================================================\n");
             message.append("    RESOURCE LEAK DETECTION FAILED!\n");
             message.append("==================================================\n");
             message.append("Detected ").append(leaks.size()).append(" leaked resource(s):\n\n");
-            
+
             for (int i = 0; i < leaks.size(); i++) {
                 ResourceTracker.LeakInfo leak = leaks.get(i);
                 message.append("Leak #").append(i + 1).append(":\n");
                 message.append(leak.formatReport());
                 message.append("\n");
             }
-            
+
             message.append("==================================================\n");
             fail(message.toString());
         }

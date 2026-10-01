@@ -22,7 +22,6 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
 import static net.bytebuddy.matcher.ElementMatchers.not;
 import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 import static org.monflabs.tests.leaks.BootstrapHelper.debug;
-import static org.monflabs.tests.leaks.BootstrapHelper.error;
 import static org.monflabs.tests.leaks.BootstrapHelper.info;
 
 import java.io.FileInputStream;
@@ -35,6 +34,9 @@ import java.net.Socket;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.zip.ZipFile;
 
 import net.bytebuddy.ByteBuddy;
@@ -59,6 +61,46 @@ public class ResourceLeakAgent {
     public static boolean isInstalled() {
     	return installed;
     }
+
+    /**
+     * Change the trace level of the tracker, in both copies of {@link BootstrapHelper}
+     * (the application one and the bootstrap one used by the instrumented JDK classes).
+     * @param level 0 silent, 1 errors and main events, 2 debug
+     */
+    public static synchronized void setTraceLevel(int level) {
+    	BootstrapHelper.TRACE_LEVEL = level;
+    	if(installed) {
+    		try {
+    			bootstrapCopy().getField("TRACE_LEVEL").setInt(null, level);
+    		} catch(Exception ex) {
+    			throw new IllegalStateException("Cannot set the trace level of the bootstrap helper", ex);
+    		}
+    	}
+    }
+
+    private static Class<?> bootstrapCopy() throws ClassNotFoundException {
+    	// The copy appended to the bootstrap class path (the one the JDK classes call)
+    	return Class.forName(BootstrapHelper.class.getName(), true, null);
+    }
+
+    /**
+     * Hand the tracker to both copies of the helper, as JDK-typed callbacks.
+     */
+    private static void wireTracker() throws Exception {
+    	ResourceTracker tracker = ResourceTracker.getInstance();
+    	BooleanSupplier recording = tracker::shouldRecord;
+    	BiConsumer<Object,String[]> allocations = (resource, info) -> tracker.recordAllocation(resource, info[0], info[1]);
+    	Consumer<Object> closures = tracker::recordClosure;
+    	BootstrapHelper.wire(recording, allocations, closures);
+    	Class<?> boot = bootstrapCopy();
+    	if(boot!=BootstrapHelper.class) {
+    		boot.getMethod("wire", BooleanSupplier.class, BiConsumer.class, Consumer.class).invoke(null, recording, allocations, closures);
+    		boot.getField("TRACE_LEVEL").setInt(null, BootstrapHelper.TRACE_LEVEL);
+    	}
+    	if(!Boolean.TRUE.equals(boot.getMethod("isWired").invoke(null))) {
+    		throw new IllegalStateException("The bootstrap helper is not connected to the resource tracker");
+    	}
+    }
     
     /**
      * Install the agent and instrument resource classes.
@@ -81,11 +123,11 @@ public class ResourceLeakAgent {
         	debug("[Agent] Adding BootstrapHelper to bootstrap classloader...");
             addBootstrapHelperToBootstrapClassLoader();
             
-            // NOTE: We don't call BootstrapHelper.initialize() here!
-            // It will initialize LAZILY when first called from the bootstrap classloader.
-            // This avoids the double-loading issue where BootstrapHelper gets loaded
-            // in both the application CL (from this call) and bootstrap CL (from FileInputStream).
-            debug("[Agent] ✓ BootstrapHelper will initialize on first use");
+            // BootstrapHelper is now loaded twice: by the application class loader (used by this
+            // class) and by the bootstrap class loader (used by the instrumented JDK classes).
+            // Both get the tracker callbacks, before any class is instrumented.
+            wireTracker();
+            debug("[Agent] ✓ BootstrapHelper connected to the tracker");
             
             // Use explicit RETRANSFORMATION strategy to handle already-loaded classes
             debug("[Agent] Creating retransformation strategy...");
@@ -129,9 +171,8 @@ public class ResourceLeakAgent {
             info("[Agent] ✓✓✓ INSTALLATION COMPLETE ✓✓✓");
             
         } catch (Exception e) {
-            error("[Agent] !!!! INSTALLATION FAILED !!!! ");
-            e.printStackTrace();
-            throw new RuntimeException("Failed to install resource leak detection agent", e);
+            BootstrapHelper.error("[Agent] !!!! INSTALLATION FAILED !!!! ", e);
+            throw new IllegalStateException("Failed to install resource leak detection agent", e);
         }
     }
     
@@ -358,11 +399,10 @@ public class ResourceLeakAgent {
         public static void exit(@Advice.This Object thiz, 
                                 @Advice.AllArguments Object[] args) {
             try {
-                // Just pass the arguments - extraction happens in BootstrapHelper
-                BootstrapHelper.recordAllocationWithArgs(thiz, thiz.getClass().getSimpleName(), args);
+                // The helper returns at once when not recording, before computing anything
+                BootstrapHelper.constructed(thiz, args);
             } catch (Throwable t) {
-                error("[FileStreamConstructorAdvice]: " + t.getMessage());
-                t.printStackTrace();
+                BootstrapHelper.error("[ConstructorAdvice]", t);
             }
         }
     }
@@ -375,11 +415,9 @@ public class ResourceLeakAgent {
         @Advice.OnMethodEnter
         public static void enter(@Advice.This Object thiz) {
             try {
-                debug("[CloseAdvice] close() called on: " + thiz.getClass().getSimpleName() + " @ " + Integer.toHexString(System.identityHashCode(thiz)));
                 BootstrapHelper.recordClosure(thiz);
             } catch (Throwable t) {
-                error("[CloseAdvice]: " + t.getMessage());
-                t.printStackTrace();
+                BootstrapHelper.error("[CloseAdvice]", t);
             }
         }
     }

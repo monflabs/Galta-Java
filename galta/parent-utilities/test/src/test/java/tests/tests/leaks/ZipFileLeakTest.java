@@ -31,9 +31,6 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
 import org.monflabs.tests.leaks.ResourceTracker;
 
 /**
@@ -44,7 +41,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
     private File tempZipFile;
     
     @Override
-	@Before
     public void setUp() throws Exception {
         // Create a temporary zip file with some content
         tempZipFile = File.createTempFile("test-archive", ".zip");
@@ -56,7 +52,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
     }
     
     @Override
-	@After
     public void tearDown() throws Exception {
         super.tearDown();
         
@@ -92,7 +87,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
     
     // ==================== ZipFile Tests ====================
     
-    @Test
     public void testZipFileLeak() throws Exception {
         ZipFile zipFile = new ZipFile(tempZipFile);
         
@@ -111,7 +105,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
         zipFile.close();
     }
     
-    @Test
     public void testZipFileNoLeak() throws Exception {
         try (ZipFile zipFile = new ZipFile(tempZipFile)) {
             ZipEntry entry = zipFile.getEntry("file1.txt");
@@ -125,7 +118,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
         assertEquals("No leak when properly closed", 0, leaks.size());
     }
     
-    @Test
     public void testZipFileReadAllEntries() throws Exception {
         ZipFile zipFile = new ZipFile(tempZipFile);
         Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -147,7 +139,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
         zipFile.close();
     }
     
-    @Test
     public void testZipFileConstructorVariants() throws Exception {
         // Constructor with File
         ZipFile zipFile1 = new ZipFile(tempZipFile);
@@ -165,7 +156,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
     
     // ==================== ZipInputStream Tests ====================
     
-    @Test
     public void testZipInputStreamLeak() throws Exception {
         FileInputStream fis = new FileInputStream(tempZipFile);
         ZipInputStream zis = new ZipInputStream(fis);
@@ -194,7 +184,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
         fis.close();
     }
     
-    @Test
     public void testZipInputStreamNoLeak() throws Exception {
         try (FileInputStream fis = new FileInputStream(tempZipFile);
             ZipInputStream zis = new ZipInputStream(fis)) {
@@ -217,7 +206,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
     
     // ==================== ZipOutputStream Tests ====================
     
-    @Test
     public void testZipOutputStreamLeak() throws Exception {
         File outputZip = File.createTempFile("output-test", ".zip");
         outputZip.deleteOnExit();
@@ -241,7 +229,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
         outputZip.delete();
     }
     
-    @Test
     public void testZipOutputStreamNoLeak() throws Exception {
         File outputZip = File.createTempFile("output-test", ".zip");
         outputZip.deleteOnExit();
@@ -263,7 +250,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
     
     // ==================== GZIPInputStream Tests ====================
     
-    @Test
     public void testGZIPInputStreamLeak() throws Exception {
         // Create a GZIP file
         File gzipFile = File.createTempFile("test", ".gz");
@@ -290,7 +276,6 @@ public class ZipFileLeakTest extends BaseLeakTest {
         gzipFile.delete();
     }
     
-    @Test
     public void testGZIPInputStreamNoLeak() throws Exception {
         // Create a GZIP file
         File gzipFile = File.createTempFile("test", ".gz");

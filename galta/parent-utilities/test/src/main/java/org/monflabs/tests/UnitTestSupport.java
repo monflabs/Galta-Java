@@ -60,6 +60,9 @@ public class UnitTestSupport {
 	 * <li><code>all</code>: every template checked is rewritten from the current result
 	 * </ul>
 	 * Example: <code>mvn test -Dmonflabs.tests.saveTemplates=missing</code>
+	 * <p>
+	 * Both modes make the checks pass whatever the result: they are refused (the check throws an
+	 * <code>IllegalStateException</code>) when the <code>CI</code> environment variable is set.
 	 */
 	public static final String SAVE_TEMPLATES_PROPERTY = "monflabs.tests.saveTemplates";
 
@@ -118,9 +121,24 @@ public class UnitTestSupport {
 	private Boolean saveMissingTemplates;
 	private String templateFailure;
 
-	private static String saveTemplatesMode() {
+	private String saveTemplatesMode() {
 		String mode = System.getProperty(SAVE_TEMPLATES_PROPERTY);
-		return mode!=null ? mode.trim().toLowerCase(java.util.Locale.ROOT) : "";
+		mode = mode!=null ? mode.trim().toLowerCase(java.util.Locale.ROOT) : "";
+		if(!mode.isEmpty() && !mode.equals("false") && isContinuousIntegration()) {
+			throw new IllegalStateException(StringFormat.format("-D{0}={1} is refused on a CI build (CI environment variable set): it would make every template check pass",
+					SAVE_TEMPLATES_PROPERTY, mode));
+		}
+		return mode;
+	}
+	
+	/**
+	 * Tell if the tests run on a continuous integration server, from the <code>CI</code>
+	 * environment variable (set by GitHub Actions, GitLab CI, Jenkins...).
+	 * @return true on a CI server
+	 */
+	protected boolean isContinuousIntegration() {
+		String ci = System.getenv("CI");
+		return ci!=null && !ci.isBlank() && !ci.equalsIgnoreCase("false");
 	}
 	
 	/**
@@ -344,9 +362,9 @@ public class UnitTestSupport {
 	public File resourceFileForClass(Class<?> c, String name, boolean mkdirs) {
 		if(c==null) c = unitTestClass;
 		File baseDir = getTestResultsDirectory();
-		String dir = c.getName().substring(0,c.getName().lastIndexOf('.'));
-		String s = dir.replace('.','/');
-		File classDir = new File(baseDir,s);
+		int dot = c.getName().lastIndexOf('.');
+		// A class in the default package has its file directly in the base directory
+		File classDir = dot>=0 ? new File(baseDir,c.getName().substring(0,dot).replace('.','/')) : baseDir;
 		if(mkdirs) {
 			classDir.mkdirs();
 		}
@@ -519,9 +537,28 @@ public class UnitTestSupport {
 	public static abstract class Result {
 		public abstract String asString();
 
+		/**
+		 * Normalize a text before the comparison: both the template and the result go through it.
+		 * The line breaks are normalized, a leading byte order mark and the trailing line breaks
+		 * (often added by editors to the template files) are removed.
+		 */
 		protected String normalizeTemplate(String text) {
-			return normalizeLineBreaks(text);
+			text = normalizeLineBreaks(stripBom(text));
+			int end = text.length();
+			while(end>0 && text.charAt(end-1)=='\n') {
+				end--;
+			}
+			return text.substring(0, end);
 		}
+	}
+	
+	/**
+	 * Remove a leading byte order mark.
+	 * @param text the text
+	 * @return the text without the BOM
+	 */
+	public static String stripBom(String text) {
+		return text!=null && text.startsWith("\uFEFF") ? text.substring(1) : text;
 	}
 	
 	public static class StringResult extends Result {
@@ -540,11 +577,9 @@ public class UnitTestSupport {
 		}
 		@Override
 		protected String normalizeTemplate(String text) {
-			text = super.normalizeTemplate(text);
-			while(text.indexOf(" \n")>=0) {
-				text = text.replace(" \n", "\n");
-			}	
-			return text;
+			// Remove the spaces ending the lines, then the common normalization
+			text = normalizeLineBreaks(stripBom(text)).replaceAll("(?m) +$", "");
+			return super.normalizeTemplate(text);
 		}
 	}
 
@@ -588,11 +623,12 @@ public class UnitTestSupport {
 				}
 				saveText(templateClass, templateName, s);
 			}
-			String readText = loadText(templateClass,templateName);
+			String readText = stripBom(loadText(templateClass,templateName));
 			String templateText = result.normalizeTemplate(readText);
 			String resultText = result.normalizeTemplate(s);
 			if(!_checkTemplate(resultText, templateText, templateName)) {
-				templateFailure = StringFormat.format("Result does not match template {0}", templateName);
+				templateFailure = StringFormat.format("Result does not match template {0} ({1}), {2}", templateName,
+						resourceFile(templateClass, templateName, false).getPath(), compactDiff(templateText, resultText));
 				return false;
 			}
 		}
@@ -671,6 +707,66 @@ public class UnitTestSupport {
 		
 		return true;
 	}
+	/**
+	 * A compact, line based, description of the differences between two texts, for the assertion
+	 * messages: the first differing line with two lines of context, then the differing lines of
+	 * both texts ("-" expected, "+" actual), up to a few lines each.
+	 * @param expected the expected text
+	 * @param actual the actual text
+	 * @return the description
+	 */
+	public static String compactDiff(String expected, String actual) {
+		final int maxLines = 8;
+		String[] e = expected.split("\n", -1);
+		String[] a = actual.split("\n", -1);
+		int first = 0;
+		while(first<e.length && first<a.length && e[first].equals(a[first])) {
+			first++;
+		}
+		// Skip the common tail
+		int ee = e.length-1, aa = a.length-1;
+		while(ee>=first && aa>=first && e[ee].equals(a[aa])) {
+			ee--; aa--;
+		}
+		// The column of the first difference, to show a window of long lines
+		int col = 0;
+		if(first<e.length && first<a.length) {
+			String l1 = e[first], l2 = a[first];
+			while(col<l1.length() && col<l2.length() && l1.charAt(col)==l2.charAt(col)) {
+				col++;
+			}
+		}
+		StringBuilder b = new StringBuilder();
+		b.append("first difference at line ").append(first+1);
+		if(col>0) {
+			b.append(", column ").append(col+1);
+		}
+		b.append(" (expected ").append(e.length).append(" lines, actual ").append(a.length).append(" lines):\n");
+		for(int i=Math.max(0, first-2); i<first; i++) {
+			b.append("  ").append(clipLine(e[i], 0)).append('\n');
+		}
+		appendDiffLines(b, "- ", e, first, ee, maxLines, col);
+		appendDiffLines(b, "+ ", a, first, aa, maxLines, col);
+		return b.toString();
+	}
+	private static void appendDiffLines(StringBuilder b, String prefix, String[] lines, int from, int to, int max, int col) {
+		for(int i=from; i<=to && i<from+max; i++) {
+			b.append(prefix).append(clipLine(lines[i], i==from ? col : 0)).append('\n');
+		}
+		if(to-from+1>max) {
+			b.append(prefix).append("... (").append(to-from+1-max).append(" more lines)\n");
+		}
+	}
+	private static String clipLine(String line, int col) {
+		final int width = 160;
+		String l = line.replace("\t", "\\t").replace("\r", "\\r");
+		if(l.length()<=width) {
+			return l;
+		}
+		int start = Math.max(0, Math.min(col-width/3, l.length()-width));
+		return (start>0 ? "..." : "") + l.substring(start, start+width) + (start+width<l.length() ? "..." : "");
+	}
+	
 	public static String normalizeLineBreaks(String s) {
 		// Normalize the lines breaks to make it compatible between the different platforms (Mac, Windows, ....)
 		// "\n\r" is two line breaks (LF, then a lone CR), not one
@@ -785,7 +881,7 @@ public class UnitTestSupport {
 
 	public void assertJsonEquals(Object expected, Object value) {
 		if(!checkJsonEquals(expected, value)) {
-			Assert.fail("Error in JSON document");
+			Assert.fail("Error in JSON document, "+compactDiff(stringifyDebug(expected), stringifyDebug(value)));
 		}
 	}
 	private boolean checkJsonEquals(Object expected, Object value) {
@@ -802,7 +898,7 @@ public class UnitTestSupport {
 
 	public void assertNormalizedTextEquals(String expected, String value) {
 		if(!checkNormalizedTextEquals(expected, value)) {
-			Assert.fail("Error in TEXT result");
+			Assert.fail("Error in TEXT result, "+compactDiff(normalizeLineBreaks(expected), normalizeLineBreaks(value)));
 		}
 	}
 	private boolean checkNormalizedTextEquals(String expected, String value) {

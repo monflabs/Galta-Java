@@ -24,9 +24,6 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.List;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
 import org.monflabs.tests.leaks.ResourceTracker;
 
 /**
@@ -39,7 +36,6 @@ public class FileSystemAPILeakTest extends BaseLeakTest {
     private File tempFile;
     
     @Override
-	@Before
     public void setUp() throws Exception {
         // Create temp file
         tempFile = File.createTempFile("files-api-test", ".txt");
@@ -54,7 +50,6 @@ public class FileSystemAPILeakTest extends BaseLeakTest {
     }
     
     @Override
-	@After
     public void tearDown() throws Exception {
         // We stop tracking first
         super.tearDown();
@@ -64,7 +59,6 @@ public class FileSystemAPILeakTest extends BaseLeakTest {
         }
     }
     
-    @Test
     public void testFilesNewInputStreamLeak() throws Exception {
         // Create leak using Files API
         InputStream is = Files.newInputStream(tempFile.toPath());
@@ -82,7 +76,6 @@ public class FileSystemAPILeakTest extends BaseLeakTest {
         is.close();
     }
     
-    @Test
     public void testFilesNewOutputStreamLeak() throws Exception {
         // Create leak using Files API
         OutputStream os = Files.newOutputStream(tempFile.toPath());
@@ -100,7 +93,6 @@ public class FileSystemAPILeakTest extends BaseLeakTest {
         os.close();
     }
     
-    @Test
     public void testFilesNewInputStreamNoLeak() throws Exception {
         // Properly close the stream
         try (InputStream is = Files.newInputStream(tempFile.toPath())) {
@@ -113,7 +105,6 @@ public class FileSystemAPILeakTest extends BaseLeakTest {
         assertEquals("No leak should be detected when properly closed", 0, leaks.size());
     }
     
-    @Test
     public void testFilesBufferedReaderLeak() throws Exception {
         // Create leak using Files.newBufferedReader
         BufferedReader reader = Files.newBufferedReader(tempFile.toPath());
@@ -131,7 +122,6 @@ public class FileSystemAPILeakTest extends BaseLeakTest {
         reader.close();
     }
     
-    @Test
     public void testFilesBufferedWriterLeak() throws Exception {
         // Create leak using Files.newBufferedWriter
         BufferedWriter writer = Files.newBufferedWriter(tempFile.toPath());
@@ -149,7 +139,6 @@ public class FileSystemAPILeakTest extends BaseLeakTest {
         writer.close();
     }
     
-    @Test
     public void testComparisonOldVsNewAPI() throws Exception {
         // Old API
         FileInputStream fis = new FileInputStream(tempFile);
