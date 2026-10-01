@@ -28,6 +28,17 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>playground-ui-swing</artifactId>
+			<exclusions>
+				<!-- Rhino is only used by the RSyntaxTextArea JavaScript language
+				     support (parser-based error marks), which the playground does
+				     not install: Rhino flags the GaltaJS extensions as errors. The
+				     JavaScript editors keep their syntax highlighting. Dropping it
+				     removes 822 classes (12.4 MB -> 10.5 MB) from jsplayground.jar. -->
+				<exclusion>
+					<groupId>org.mozilla</groupId>
+					<artifactId>rhino-all</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
