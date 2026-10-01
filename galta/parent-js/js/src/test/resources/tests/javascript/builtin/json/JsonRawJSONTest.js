@@ -73,3 +73,24 @@ function test_JSON_rawJSON() {
 }
 
 test_JSON_rawJSON();
+
+// Standard JSON only, like JSON.parse: the lenient syntax is a SyntaxError
+{
+    assertThrows(SyntaxError, () => JSON.rawJSON('0x10'));
+    assertThrows(SyntaxError, () => JSON.rawJSON('NaN'));
+    assertThrows(SyntaxError, () => JSON.rawJSON('Infinity'));
+    assertThrows(SyntaxError, () => JSON.rawJSON('1/*c*/'));
+    assertThrows(SyntaxError, () => JSON.rawJSON("'a'"));
+    assertThrows(SyntaxError, () => JSON.rawJSON('+1'));
+    assertThrows(SyntaxError, () => JSON.rawJSON('.5'));
+    assertThrows(SyntaxError, () => JSON.rawJSON('01'));
+    assertThrows(SyntaxError, () => JSON.rawJSON('"\\x41"'));
+    assertThrows(SyntaxError, () => JSON.rawJSON('\uFEFF1'));
+    assertThrows(SyntaxError, () => JSON.rawJSON('[]'));
+    assertThrows(SyntaxError, () => JSON.rawJSON('{}'));
+    // Valid primitives, and a number of any length
+    assertEquals('-1.5e+300', JSON.stringify(JSON.rawJSON('-1.5e+300')));
+    assertEquals('"\\u0041"', JSON.stringify(JSON.rawJSON('"\\u0041"')));
+    const long = '9'.repeat(2000);
+    assertEquals(long, JSON.stringify(JSON.rawJSON(long)));
+}

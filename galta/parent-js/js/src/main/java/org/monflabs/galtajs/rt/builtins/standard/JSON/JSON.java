@@ -92,8 +92,7 @@ public class JSON extends NativeObject {
             		if(arg0!=RuntimeUtil.UNDEFINED ) {
             			String json = RuntimeUtil.toString(getEnvironment(),arg0);
             			Object arg1 = param(args, 1, RuntimeUtil.UNDEFINED);
-            			JsonParser.StringParser p = new JsonParser.StringParser(getEnvironment().getJsonFactory());
-        				p.setStrict(true); // we could relax this...
+            			JsonParser.StringParser p = newStrictParser();
         				Callable reviverFct = arg1 instanceof Callable c && c.isCallable() ? c : null;
         				// context.source (json-parse-with-source proposal) needs each
         				// primitive literal's ORIGINAL source text, which only exists
@@ -125,7 +124,7 @@ public class JSON extends NativeObject {
         					if(e instanceof JSRuntimeException je) {
             					throw je;
         					}
-           					throw RuntimeUtil.syntaxError("Error while parsing JSON");
+           					throw RuntimeUtil.syntaxError("Error while parsing JSON: {0}", parseErrorMessage(e));
         				}
         				if(reviverFct==null) {
         					return unfiltered;
@@ -291,8 +290,13 @@ public class JSON extends NativeObject {
     					// itself must return undefined (not the empty string) here.
         				String result = w.stringify(arg0);
         				return result.isEmpty() ? RuntimeUtil.UNDEFINED : result;
+    				} catch(JsonStringifier.NestingTooDeepException ex) {
+    					// Like V8: "Maximum call stack size exceeded"
+    					throw RuntimeUtil.rangeError("Maximum call stack size exceeded: {0}", ex.getLocalizedMessage());
+    				} catch(StackOverflowError ex) {
+    					throw RuntimeUtil.rangeError("Maximum call stack size exceeded");
     				} catch(JsonException ex) {
-    					throw RuntimeUtil.typeError(ex.getLocalizedMessage());
+    					throw RuntimeUtil.typeError("{0}", ex.getLocalizedMessage());
     				} catch(IOException ex) {
     					throw RuntimeUtil.wrap(ex);
     				}
@@ -318,11 +322,15 @@ public class JSON extends NativeObject {
 		    				// here (test262 built-ins/JSON/rawJSON/illegal-empty-and-
 		    				// start-end-chars.js).
 		    				if(!StringUtil.isEmpty(s) && !isIllegalRawJSONEdgeChar(s.charAt(0)) && !isIllegalRawJSONEdgeChar(s.charAt(s.length()-1))) {
+			    				// The strict parser, as JSON.parse(): the lenient one accepts
+			    				// 0x10, NaN, comments, single quotes...
 			    				try {
-			    					Object o = getEnvironment().getJsonFactory().parse(s); // May throw a Syntax error
+			    					Object o = newStrictParser().parse(s); // May throw a Syntax error
 			    					if(RuntimeUtil.isPrimitiveType(o)) {
 			    	   					return new RawJSON(getEnvironment(),s);
 			    					}
+			    				} catch(JSRuntimeException ex) {
+			    					throw ex;
 			    				} catch(Exception ex) {}
 		    				}
         				}
@@ -334,6 +342,38 @@ public class JSON extends NativeObject {
 	    		    throw new IllegalStateException(); // Should never be here 
 	            }
 	        }
+	    }
+	    // The parser of JSON.parse() and JSON.rawJSON(): standard JSON only. A number literal
+	    // has no length limit (the spec has none) when the factory converts the numbers to
+	    // doubles, which takes a time linear with the length; a BigInteger or BigDecimal
+	    // conversion does not, so the parser's default limit is kept then.
+	    private JsonParser.StringParser newStrictParser() {
+	    	org.monflabs.json.JsonFactory f = getEnvironment().getJsonFactory();
+	    	JsonParser.StringParser p = new JsonParser.StringParser(f);
+	    	p.setStrict(true);
+	    	if(f.overflowInteger()!=org.monflabs.json.JsonFactory.OVERFLOW_INTEGER.BIGINT
+	    			&& f.defaultInteger()!=org.monflabs.json.JsonFactory.INTEGER.BIGINT
+	    			&& f.defaultDecimal()==org.monflabs.json.JsonFactory.DECIMAL.DOUBLE
+	    			&& f.overflowDecimal()==org.monflabs.json.JsonFactory.OVERFLOW_DECIMAL.DOUBLE) {
+	    		p.setMaxNumberLength(0);
+	    	}
+	    	return p;
+	    }
+	    // The first line of a parser error message (the next ones quote the source), without
+	    // the "JsonParser: " prefix
+	    private static String parseErrorMessage(Exception e) {
+	    	String msg = e.getMessage();
+	    	if(msg==null) {
+	    		return e.getClass().getSimpleName();
+	    	}
+	    	int nl = msg.indexOf('\n');
+	    	if(nl>=0) {
+	    		msg = msg.substring(0, nl);
+	    	}
+	    	if(msg.startsWith("JsonParser: ")) {
+	    		msg = msg.substring("JsonParser: ".length());
+	    	}
+	    	return msg;
 	    }
 	    // The 4 code units JSON.rawJSON forbids as the first/last character
 	    // of its argument (spec 25.5.7 step 2): TAB, LF, CR, SPACE.

@@ -123,3 +123,48 @@ test_JSON_stringify();
     });
     assertThrows(Error, () => JSON.stringify(null, abruptLength));
 }
+
+// QuoteJSONString: only the control characters, '"', '\\' and the lone surrogates are
+// escaped; every other character, non ASCII included, is written as is.
+{
+    assertEquals('"é"', JSON.stringify('é'));
+    assertEquals(3, JSON.stringify('é').length);
+    assertEquals('"日本語"', JSON.stringify('日本語'));
+    assertEquals(5, JSON.stringify('日本語').length);
+    // U+2028 and U+2029 are written raw (unlike JavaScript source, JSON allows them)
+    assertEquals('"\u2028\u2029"', JSON.stringify('\u2028\u2029'));
+    assertEquals(4, JSON.stringify('\u2028\u2029').length);
+    assertEquals('"\u007f"', JSON.stringify('\u007f'));
+    // A surrogate pair is written as is, a lone surrogate is escaped
+    assertEquals('"😀"', JSON.stringify('😀'));
+    assertEquals('"\\ud834"', JSON.stringify('\uD834'));
+    assertEquals('"\\udf06"', JSON.stringify('\uDF06'));
+    assertEquals('"\\ud834𝌆\\ud834"', JSON.stringify('\uD834𝌆\uD834'));
+    // Controls are escaped, lowercase hexadecimal
+    assertEquals('"\\u0001\\u001f\\b\\t\\n\\f\\r\\"\\\\"', JSON.stringify('\u0001\u001f\b\t\n\f\r"\\'));
+    // Keys too, and the round trip
+    assertEquals('{"clé":"été"}', JSON.stringify({ 'clé': 'été' }));
+    const s = 'aé日😀\u2028\u0001"\\';
+    assertEquals(s, JSON.parse(JSON.stringify(s)));
+}
+
+// A value nested too deeply is a RangeError (like V8's "Maximum call stack size exceeded"),
+// not a Java exception
+{
+    let deep = [];
+    for (let i = 0; i < 20000; i++) {
+        deep = [deep];
+    }
+    assertThrows(RangeError, () => JSON.stringify(deep));
+    let deepObject = {};
+    for (let i = 0; i < 20000; i++) {
+        deepObject = { a: deepObject };
+    }
+    assertThrows(RangeError, () => JSON.stringify(deepObject));
+    // A reasonable depth is fine
+    let ok = [];
+    for (let i = 0; i < 100; i++) {
+        ok = [ok];
+    }
+    assertEquals('['.repeat(101) + ']'.repeat(101), JSON.stringify(ok));
+}

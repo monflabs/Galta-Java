@@ -239,3 +239,53 @@ function test_JSON_parse() {
 }
 
 test_JSON_parse();
+
+// The SyntaxError message says what is wrong and where
+{
+    function messageOf(f) {
+        try {
+            f();
+        } catch (e) {
+            assertTrue(e instanceof SyntaxError);
+            return e.message;
+        }
+        throw new Error('No exception');
+    }
+    let m = messageOf(() => JSON.parse('{"a":}'));
+    assertTrue(m.indexOf("Unexpected character '}'") >= 0);
+    assertTrue(m.indexOf('at position 5') >= 0);
+    m = messageOf(() => JSON.parse('[1, 2'));
+    assertTrue(m.indexOf('Unexpected end of input at position 5') >= 0);
+    m = messageOf(() => JSON.parse('[1, 2, ]'));
+    assertTrue(m.indexOf('A trailing comma is not allowed in strict mode, at position 7') >= 0);
+    m = messageOf(() => JSON.parse('{a: 1}'));
+    assertTrue(m.indexOf('An unquoted key') >= 0);
+    // One line, without the source excerpt
+    assertEquals(-1, messageOf(() => JSON.parse('[\n1,\n]')).indexOf('\n'));
+}
+
+// Standard JSON only
+{
+    assertThrows(SyntaxError, () => JSON.parse('\uFEFF[1]'));    // a BOM is not whitespace
+    assertThrows(SyntaxError, () => JSON.parse(''));
+    assertThrows(SyntaxError, () => JSON.parse(' '));
+    assertThrows(SyntaxError, () => JSON.parse('0x10'));
+    assertThrows(SyntaxError, () => JSON.parse('NaN'));
+    assertThrows(SyntaxError, () => JSON.parse('1 /* c */'));
+    assertThrows(SyntaxError, () => JSON.parse("'a'"));
+}
+
+// Numbers: no length limit, exponents out of range are Infinity and 0
+{
+    assertEquals(Infinity, JSON.parse('1e3000000000'));
+    assertEquals(-Infinity, JSON.parse('-1e3000000000'));
+    assertEquals(0, JSON.parse('1e-3000000000'));
+    assertEquals(Infinity, JSON.parse('1'.repeat(5000)));
+    assertEquals(1.5, JSON.parse('1.5' + '0'.repeat(5000)));
+    assertEquals(1e300, JSON.parse('1' + '0'.repeat(300)));
+}
+
+// Nesting too deep is a SyntaxError, not a Java exception
+{
+    assertThrows(SyntaxError, () => JSON.parse('['.repeat(100000) + ']'.repeat(100000)));
+}
