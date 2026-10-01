@@ -17,6 +17,7 @@ package tests;
 
 import doc_examples.csv.CsvExamples;
 import junit.framework.TestSuite;
+import tests.impexp.CsvRobustnessTest;
 import tests.impexp.CsvRoundTripTest;
 import tests.impexp.CsvSourceTest;
 import tests.impexp.CsvTargetTest;
@@ -29,6 +30,7 @@ public class AllJsonImpExpCsvTests extends TestSuite {
 		suite.addTestSuite(CsvSourceTest.class);
 		suite.addTestSuite(CsvTargetTest.class);
 		suite.addTestSuite(CsvRoundTripTest.class);
+		suite.addTestSuite(CsvRobustnessTest.class);
 		suite.addTestSuite(CsvExamples.class);
 
 		return suite;

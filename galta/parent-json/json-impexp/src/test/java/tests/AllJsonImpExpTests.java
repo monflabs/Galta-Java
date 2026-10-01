@@ -20,6 +20,7 @@ import junit.framework.TestSuite;
 import tests.impexp.ContainerTargetTest;
 import tests.impexp.EngineControlTest;
 import tests.impexp.ImpExpRegressionTest;
+import tests.impexp.ImpExpRobustnessTest;
 import tests.impexp.EngineFailureTest;
 import tests.impexp.FileLayoutTest;
 import tests.impexp.FileNameHashTest;
@@ -49,6 +50,7 @@ public class AllJsonImpExpTests extends TestSuite {
 		suite.addTestSuite(EngineFailureTest.class);
 		suite.addTestSuite(EngineControlTest.class);
 		suite.addTestSuite(ImpExpRegressionTest.class);
+		suite.addTestSuite(ImpExpRobustnessTest.class);
 		suite.addTestSuite(ContainerTargetTest.class);
 		suite.addTestSuite(MemorySourceTest.class);
 		suite.addTestSuite(MemoryTargetTest.class);

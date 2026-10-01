@@ -18,7 +18,7 @@ package org.monflabs.json.impexp.container;
 // 1- List of records RECORDS
 //    [ 'a', 'b', 'c' ]
 // 2- List of records RECORDSWITHKEYS
-//    [ {col:'col1',id:'k1',value:'a'}, {col:'col1',id:'k2',value:'b'}, {col:'col2',id:'k1',value:'c'} ]
+//    [ {collection:'col1',id:'k1',value:'a'}, {collection:'col1',id:'k2',value:'b'}, {collection:'col2',id:'k1',value:'c'} ]
 // 3- List of records by collection RECORDSBYCOL
 //    { col1: ['a','b','c'], col2: ['d','e'] }
 // 4- List of records by key RECORDSBYKEY

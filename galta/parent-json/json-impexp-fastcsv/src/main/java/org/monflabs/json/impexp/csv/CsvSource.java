@@ -22,9 +22,13 @@ import java.time.Instant;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.NoSuchElementException;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonObject;
@@ -34,17 +38,26 @@ import org.monflabs.json.impexp.impl.JsonSourceImpl;
 import org.monflabs.json.impexp.replication.RangeFilter;
 import org.monflabs.json.impexp.util.StaticContent;
 import org.monflabs.util.ObjectBuilder;
-import org.monflabs.util.iterators.Iterators;
 
 import de.siegmar.fastcsv.reader.CloseableIterator;
+import de.siegmar.fastcsv.reader.CsvParseException;
 import de.siegmar.fastcsv.reader.CsvReader;
 import de.siegmar.fastcsv.reader.CsvRecord;
 
 //
 // Uses: https://github.com/osiegmar/FastCSV
 //
+/**
+ * CSV source.
+ * <p>
+ * Every stream gets its own reader from the reader factory, closed with the stream, so
+ * the source can be streamed several times, including concurrently.
+ * <p>
+ * Invalid content (like a quoted cell that is never closed) and cell conversion errors
+ * throw a {@link JsonException} with the line number (and the column) of the error.
+ */
 public class CsvSource extends JsonSourceImpl implements CsvBase {
-	
+
 	public static class Column {
 		private String name;
 		private Function<String,Object> cellReader;
@@ -59,14 +72,16 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 			return cellReader;
 		}
 	}
-	
+
 	public interface Row {
 		int size();
 		Object get(String name);
 	}
 	private class RowImpl implements Row {
-		private CsvRecord csvRow;
-		private RowImpl(CsvRecord csvRow) {
+		private final Map<String,ColumnMapper> colMappers;
+		private final CsvRecord csvRow;
+		private RowImpl(Map<String,ColumnMapper> colMappers, CsvRecord csvRow) {
+			this.colMappers = colMappers;
 			this.csvRow = csvRow;
 		}
 		@Override
@@ -87,20 +102,28 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 					return null;
 				}
 				if(value!=null && mapper.cellReader!=null) {
-					return mapper.cellReader.apply(value);
+					try {
+						return mapper.cellReader.apply(value);
+					} catch(RuntimeException ex) {
+						throw new JsonException(ex,"Error while reading the CSV cell at line {0}, column \"{1}\": {2}",
+								csvRow.getStartingLineNumber(), name, ex.getMessage()!=null ? ex.getMessage() : ex.toString());
+					}
 				}
 				return value;
 			}
 			return null;
 		}
 	}
-	
+
 	public static class Builder extends ObjectBuilder<CsvSource> {
 		private Map<String,Column> columns;
 		private boolean firstRowAsHeader=true;
 		private char fieldSeparator = ',';
 		private boolean estimateCount;
 		private boolean emptyAsNull;
+		private Boolean skipEmptyLines;
+		private boolean trimHeader = true;
+		private boolean allowMissingColumns;
 		private Supplier<Reader> readerFactory;
 		private Function<Row,String> collectionFunction;
 		private Function<Row,String> keyFunction;
@@ -114,6 +137,32 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 		 */
 		public Builder emptyAsNull(boolean emptyAsNull) {
 			this.emptyAsNull = emptyAsNull;
+			return this;
+		}
+		/**
+		 * Whether the empty lines are skipped. An empty line is a row with a single empty
+		 * cell: with a single column, it is an empty value, not a line to skip. By default
+		 * (when not set), the empty lines are skipped when there are several columns, and
+		 * read as rows when there is only one.
+		 */
+		public Builder skipEmptyLines(boolean skipEmptyLines) {
+			this.skipEmptyLines = skipEmptyLines;
+			return this;
+		}
+		/**
+		 * Whether the column names of the header row are trimmed. Default is true.
+		 */
+		public Builder trimHeader(boolean trimHeader) {
+			this.trimHeader = trimHeader;
+			return this;
+		}
+		/**
+		 * Whether a column defined with {@link #column(String, Function)} can be missing
+		 * from the header row (it is then absent from the documents). Default is false: a
+		 * missing column throws an exception.
+		 */
+		public Builder allowMissingColumns(boolean allowMissingColumns) {
+			this.allowMissingColumns = allowMissingColumns;
 			return this;
 		}
 		public Builder reader(Supplier<Reader> readerFactory) {
@@ -162,7 +211,7 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 	public static Builder newBuilder() {
 		return new Builder();
 	}
-	
+
 	private static final class ColumnMapper {
 		int index;
 		Function<String,Object> cellReader;
@@ -177,29 +226,32 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 	private char fieldSeparator;
 	private boolean estimateCount;
 	private boolean emptyAsNull;
+	private Boolean skipEmptyLines;
+	private boolean trimHeader;
+	private boolean allowMissingColumns;
 	private Supplier<Reader> readerFactory;
 	private Function<Row,String> collectionFunction;
 	private Function<Row,String> keyFunction;
 	private Function<Row,Instant> timestampFunction;
-	
-	private CsvReader<CsvRecord> csvReader;
-    private CloseableIterator<CsvRecord> csvIterator;
-	private Map<String,ColumnMapper> colMappers;
-	private Long estimatedCount;
-	
-	
+
+	private volatile Long estimatedCount;
+
+
 	protected CsvSource(Builder builder) {
 		this.columns = builder.columns;
 		this.firstRowAsHeader = builder.firstRowAsHeader;
 		this.fieldSeparator = builder.fieldSeparator;
 		this.estimateCount = builder.estimateCount;
 		this.emptyAsNull = builder.emptyAsNull;
+		this.skipEmptyLines = builder.skipEmptyLines;
+		this.trimHeader = builder.trimHeader;
+		this.allowMissingColumns = builder.allowMissingColumns;
 		this.readerFactory = builder.readerFactory;
 		this.collectionFunction = builder.collectionFunction;
 		this.keyFunction = builder.keyFunction;
 		this.timestampFunction = builder.timestampFunction;
 	}
-	
+
 	public Map<String,Column> getColumns() {
 		return columns;
 	}
@@ -227,22 +279,25 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 	public Function<Row, String> getKeyFunction() {
 		return keyFunction;
 	}
-	
-	@Override
-	public void init(RangeFilter rangeFilter) {
-		super.init(rangeFilter);
-		close();
-		this.csvReader = createCsvReader(readerFactory.get());
-		this.csvIterator = csvReader.iterator();
-		this.colMappers = new LinkedHashMap<>();
+
+	/**
+	 * Reads the header (or takes the defined columns) of a new stream.
+	 */
+	private Map<String,ColumnMapper> readColumns(CloseableIterator<CsvRecord> csvIterator) {
+		Map<String,ColumnMapper> colMappers = new LinkedHashMap<>();
 		Map<String,Column> columns = getColumns();
 		if(firstRowAsHeader) {
 			// An empty input has no header, and then no documents
 			CsvRecord firstRow = csvIterator.hasNext() ? csvIterator.next() : null;
 			if(firstRow!=null) {
 				int count = firstRow.getFieldCount();
+				// Ignore the empty columns at the end of the header (a spreadsheet can add
+				// trailing separators)
+				while(count>0 && headerName(firstRow, count-1).isEmpty()) {
+					count--;
+				}
 				for(int i=0; i<count; i++) {
-					String colName = firstRow.getField(i);
+					String colName = headerName(firstRow, i);
 					if(colMappers.containsKey(colName)) {
 						// The JSON object cannot hold 2 values for the same property: report it
 						// instead of silently losing a column
@@ -256,6 +311,13 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 						colMappers.put(colName, new ColumnMapper(i, col.getCellReader()));
 					}
 				}
+				if(columns!=null && !allowMissingColumns) {
+					for(String name: columns.keySet()) {
+						if(!colMappers.containsKey(name)) {
+							throw new JsonException(null,"Column \"{0}\" is missing from the CSV header",name);
+						}
+					}
+				}
 			}
 		} else {
 			if(columns!=null) {
@@ -264,17 +326,26 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 					colMappers.put(e.getKey(), new ColumnMapper(i++, e.getValue().getCellReader()));
 				}
 			} else {
-				throw new JsonException(null,"Columns are not defined in the sourec and/or the CSV file");
+				throw new JsonException(null,"Columns are not defined in the source and/or the CSV file");
 			}
 		}
+		return colMappers;
 	}
+	private String headerName(CsvRecord header, int index) {
+		String name = header.getField(index);
+		return trimHeader ? name.trim() : name;
+	}
+
 	protected CsvReader<CsvRecord> createCsvReader(Reader reader) {
 		return CsvReader.builder()
 	    	.fieldSeparator(fieldSeparator)
-	    	.skipEmptyLines(true)
+	    	// The empty lines are handled by the source, see Builder.skipEmptyLines()
+	    	.skipEmptyLines(false)
 	    	// Short and long rows are accepted: missing cells read as null
 	    	.allowExtraFields(true)
 	    	.allowMissingFields(true)
+	    	// A quote that is never closed would silently swallow the rest of the content
+	    	.allowUnclosedQuote(false)
 			.ofCsvRecord(skipByteOrderMark(reader));
 	}
 	/**
@@ -284,7 +355,7 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 		PushbackReader pr = new PushbackReader(reader,1);
 		try {
 			int c = pr.read();
-			if(c>=0 && c!='\uFEFF') {
+			if(c>=0 && c!='﻿') {
 				pr.unread(c);
 			}
 		} catch(IOException ex) {
@@ -293,27 +364,28 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 		return pr;
 	}
 
-	@Override
-	public void close() {
-		CsvReader<CsvRecord> r = csvReader;
-		csvReader = null;
-		csvIterator = null;
-		colMappers = null;
-		if(r!=null) {
-			try {
-				r.close();
-			} catch(IOException ex) {
-				throw new JsonException(ex,"Error while closing the CSV reader");
-			}
+	private static void closeReader(CsvReader<CsvRecord> r) {
+		try {
+			r.close();
+		} catch(IOException ex) {
+			throw new JsonException(ex,"Error while closing the CSV reader");
 		}
-		super.close();
 	}
-	
+
+	// An empty line is read as a row with a single, empty, cell
+	private static boolean isEmptyLine(CsvRecord r) {
+		return r.getFieldCount()==1 && r.getField(0).isEmpty();
+	}
+
+	private boolean skipEmptyLines(Map<String,ColumnMapper> mappers) {
+		return skipEmptyLines!=null ? skipEmptyLines : mappers.size()!=1;
+	}
+
 	/**
-	 * Number of data rows (the header row and the empty rows are not counted), or -1
-	 * if the count was not requested with {@link Builder#estimateCount(boolean)}.
-	 * The content is fully parsed once to count the rows, so quoted cells spanning
-	 * several lines are properly handled.
+	 * Number of data rows (the header row and the skipped empty rows are not counted), or
+	 * -1 if the count was not requested with {@link Builder#estimateCount(boolean)}. The
+	 * content is fully parsed once to count the rows, so quoted cells spanning several
+	 * lines are properly handled.
 	 */
 	@Override
 	public long estimatedCount() {
@@ -321,12 +393,14 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 			if(estimatedCount==null) {
 				long count = -1;
 				try(CsvReader<CsvRecord> r = createCsvReader(readerFactory.get())) {
+					CloseableIterator<CsvRecord> it = r.iterator();
+					boolean skip = skipEmptyLines(readColumns(it));
 					count = 0;
-					for(CloseableIterator<CsvRecord> it=r.iterator(); it.hasNext(); it.next()) {
-						count++;
-					}
-					if(firstRowAsHeader && count>0) {
-						count--;
+					while(it.hasNext()) {
+						CsvRecord rec = it.next();
+						if(!skip || !isEmptyLine(rec)) {
+							count++;
+						}
 					}
 				} catch(Exception ex) {
 					count = -1;
@@ -337,21 +411,66 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 		}
 		return -1;
 	}
-	
+
 	@Override
-	protected Iterator<JsonContent> createJsonContentIterator() {
-		AtomicLong indexCounter = new AtomicLong();
-		return Iterators.map(csvIterator, (csvRow) -> {
-			long index = indexCounter.getAndIncrement();
-			RowImpl row = new RowImpl(csvRow);
-			String collection = getCollection(index, row);
-			String key = getKey(index, row);
-			JsonObject json = composeJson(row);
-			Instant timestamp = getTimestamp(index, row);
-			return new StaticContent(JsonKey.of(collection, key), json, timestamp);
-		});
+	protected Stream<JsonContent> createJsonContentStream(RangeFilter filter) {
+		CsvReader<CsvRecord> csvReader = createCsvReader(readerFactory.get());
+		try {
+			CloseableIterator<CsvRecord> csvIterator = csvReader.iterator();
+			Map<String,ColumnMapper> colMappers = wrapParseErrors(() -> readColumns(csvIterator));
+			boolean skip = skipEmptyLines(colMappers);
+			Iterator<JsonContent> it = new Iterator<JsonContent>() {
+				long index;
+				CsvRecord next;
+				@Override
+				public boolean hasNext() {
+					while(next==null) {
+						if(!wrapParseErrors(csvIterator::hasNext)) {
+							return false;
+						}
+						CsvRecord r = wrapParseErrors(csvIterator::next);
+						if(!skip || !isEmptyLine(r)) {
+							next = r;
+						}
+					}
+					return true;
+				}
+				@Override
+				public JsonContent next() {
+					if(!hasNext()) {
+						throw new NoSuchElementException();
+					}
+					CsvRecord csvRow = next;
+					next = null;
+					return toContent(index++, new RowImpl(colMappers, csvRow));
+				}
+			};
+			Spliterator<JsonContent> spit = Spliterators.spliteratorUnknownSize(it, Spliterator.NONNULL);
+			return StreamSupport.stream(spit, false).onClose(() -> closeReader(csvReader));
+		} catch(RuntimeException | Error e) {
+			try {
+				closeReader(csvReader);
+			} catch(Exception ce) {
+				e.addSuppressed(ce);
+			}
+			throw e;
+		}
 	}
-	
+	private static <T> T wrapParseErrors(Supplier<T> s) {
+		try {
+			return s.get();
+		} catch(CsvParseException ex) {
+			throw new JsonException(ex,"Invalid CSV content: {0}",ex.getMessage());
+		}
+	}
+	private JsonContent toContent(long index, RowImpl row) {
+		String collection = getCollection(index, row);
+		String key = getKey(index, row);
+		JsonObject json = composeJson(row);
+		Instant timestamp = getTimestamp(index, row);
+		return new StaticContent(JsonKey.of(collection, key), json, timestamp);
+	}
+
 	protected String getCollection(long index, Row row) {
 		if(collectionFunction!=null) {
 			return collectionFunction.apply(row);
@@ -372,7 +491,7 @@ public class CsvSource extends JsonSourceImpl implements CsvBase {
 	}
 	protected JsonObject composeJson(Row row) {
 		JsonObject o = JsonObject.create();
-		for(String col: colMappers.keySet()) {
+		for(String col: ((RowImpl)row).colMappers.keySet()) {
 			o.put(col, row.get(col));
 		}
 		return o;

@@ -32,6 +32,7 @@ import org.monflabs.json.jsonschema.SchemaNode;
 import org.monflabs.util.iterators.Iterators;
 
 import de.siegmar.fastcsv.writer.CsvWriter;
+import de.siegmar.fastcsv.writer.QuoteStrategy;
 
 /**
  * CSV target.
@@ -65,7 +66,19 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 		private Supplier<Writer> writerFactory;
 		private boolean closeWriter = true;
 		
+		private boolean escapeFormulas;
 		private Builder() {}
+		/**
+		 * Whether the cells that a spreadsheet would read as a formula (starting with
+		 * '=', '+', '-', '@', a tab or a carriage return) are prefixed with a quote ('),
+		 * to prevent CSV (formula) injection when the file is opened in a spreadsheet.
+		 * The prefix is part of the cell value: it is not removed when the file is read
+		 * back. Default is false.
+		 */
+		public Builder escapeFormulas(boolean escapeFormulas) {
+			this.escapeFormulas = escapeFormulas;
+			return this;
+		}
 		/**
 		 * Whether the target closes the writer returned by the writer factory when the
 		 * import ends. Default is true, as the factory is called for every import. Set it
@@ -126,6 +139,7 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 	private char fieldSeparator;
 	private Supplier<Writer> writerFactory;
 	private boolean closeWriter;
+	private boolean escapeFormulas;
 	
 	private boolean columnsInferred;
 	
@@ -139,6 +153,7 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 		this.fieldSeparator = builder.fieldSeparator;
 		this.writerFactory = builder.writerFactory;
 		this.closeWriter = builder.closeWriter;
+		this.escapeFormulas = builder.escapeFormulas;
 	}
 	
 	public Map<String,Column> getColumns() {
@@ -218,7 +233,11 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 	public synchronized void saveJsonContent(JsonContent content) {
 		// Does not support delete
 		if(content.getType()==TYPE.RECORD) {
-			JsonObject o = (JsonObject)content.getJson();
+			Object json = content.getJson();
+			JsonObject o = json instanceof JsonObject jo ? jo : null;
+			if(o==null && (columns==null || columns.values().stream().anyMatch((c) -> c.cellWriter==null))) {
+				throw new JsonException(null,"Record {0} is not a JSON object, it cannot be written as a CSV row",content.getKey());
+			}
 			
 			if(columns==null) {
 				columns = new LinkedHashMap<>();
@@ -245,20 +264,45 @@ public class CsvTarget extends JsonTargetImpl implements CsvBase {
 				Iterators.map(columns.entrySet().iterator(), (e) -> {
 					Column column = e.getValue();
 					// A cell writer is always invoked, so it can compute columns missing from the JSON
-					if(column.cellWriter!=null) {
-						return column.cellWriter.apply(content); 
-					} else {
-						return JsonUtil.toStringValue(o.get(e.getKey())); 
-					}
+					String v = column.cellWriter!=null ? column.cellWriter.apply(content) : JsonUtil.toStringValue(o.get(e.getKey()));
+					return escapeFormulas ? escapeFormula(v) : v;
 				})
 			);
 		}
 	}
 	
+	private static String escapeFormula(String v) {
+		if(v!=null && !v.isEmpty()) {
+			switch(v.charAt(0)) {
+				case '=', '+', '-', '@', '\t', '\r' -> {
+					return "'"+v;
+				}
+				default -> {}
+			}
+		}
+		return v;
+	}
+
 	protected CsvWriter createCsvWriter(Writer writer) {
 		return CsvWriter.builder()
 			.fieldSeparator(fieldSeparator)
+			// With a single column, an empty (or null) cell would be written as an empty
+			// line, that readers skip: it is quoted instead
+			.quoteStrategy(new QuoteStrategy() {
+				@Override
+				public boolean quoteEmpty(int lineNo, int fieldIdx) {
+					return isSingleColumn();
+				}
+				@Override
+				public boolean quoteNull(int lineNo, int fieldIdx) {
+					return isSingleColumn();
+				}
+			})
 			.build(writer);
+	}
+	private boolean isSingleColumn() {
+		Map<String,Column> c = columns;
+		return c!=null && c.size()==1;
 	}
 
 }

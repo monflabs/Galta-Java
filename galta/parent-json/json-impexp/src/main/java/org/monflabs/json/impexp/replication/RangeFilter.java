@@ -17,8 +17,10 @@ package org.monflabs.json.impexp.replication;
 
 import java.time.Instant;
 
+import org.monflabs.json.impexp.JsonContent;
+
 /**
- * Replication source.
+ * A range of dates, both ends included. A null end is not bounded.
  */
 public class RangeFilter {
 	
@@ -36,5 +38,40 @@ public class RangeFilter {
 
 	public Instant getUntil() {
 		return until;
+	}
+
+	/**
+	 * Whether a date is in the range. A null date (unknown) is always accepted.
+	 */
+	public boolean accept(Instant t) {
+		if(t==null) {
+			return true;
+		}
+		if(since!=null && t.compareTo(since)<0) {
+			return false;
+		}
+		if(until!=null && t.compareTo(until)>0) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Whether the timestamp of a content is in the range, see {@link #accept(Instant)}.
+	 */
+	public boolean accept(JsonContent content) {
+		return accept(content.getTimestamp());
+	}
+	
+	/**
+	 * Whether the range is bounded (has a start or an end).
+	 */
+	public boolean isBounded() {
+		return since!=null || until!=null;
+	}
+
+	@Override
+	public String toString() {
+		return "[" + since + ", " + until + "]";
 	}
 }

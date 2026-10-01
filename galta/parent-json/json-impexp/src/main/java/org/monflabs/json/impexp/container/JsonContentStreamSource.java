@@ -51,8 +51,6 @@ public class JsonContentStreamSource extends JsonSourceImpl {
 	private Supplier<Stream<JsonContent>> streamFactory;
 	private int estimatedCount;
 	
-	private Stream<JsonContent> stream;
-	
 	protected JsonContentStreamSource(Builder builder) {
 		this.streamFactory = builder.streamFactory;
 		this.estimatedCount = builder.estimatedCount;
@@ -63,31 +61,13 @@ public class JsonContentStreamSource extends JsonSourceImpl {
 		return estimatedCount;
 	}
 
+	/**
+	 * Every stream gets its own stream from the factory, closed with the stream (even
+	 * when it is not consumed).
+	 */
 	@Override
-	public void init(RangeFilter filter) {
-		super.init(filter);
-		
-		stream = streamFactory.get();
+	protected Stream<JsonContent> createJsonContentStream(RangeFilter filter) {
+		Stream<JsonContent> stream = streamFactory.get();
+		return stream!=null ? stream : Stream.empty();
 	}
-
-	@Override
-	public void close() {
-		// Like StreamSource: the stream from the factory is closed with the source, even
-		// when it was never consumed
-		Stream<JsonContent> st = stream;
-		stream = null;
-		if(st!=null) {
-			st.close();
-		}
-	}
-
-	@Override
-	protected Stream<JsonContent> createJsonContentStream() {
-		if(stream==null) {
-			return Stream.empty();
-		}
-		stream.onClose(this::close);
-		return stream;
-	}
-
 }

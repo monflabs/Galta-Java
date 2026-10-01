@@ -213,6 +213,7 @@ public class FileLayoutTest extends ProjectTestCase {
 			assertEquals(t, table.lastReplication("s", "t"));
 		} finally {
 			Files.deleteIfExists(table.getFile());
+			Files.deleteIfExists(table.getFile().resolveSibling(name+".lock"));
 		}
 	}
 }

@@ -277,8 +277,8 @@ public class ImpExpRegressionTest extends ProjectTestCase {
 		table.setReplication("s","u",ts);
 		assertEquals(ts.toInstant(), table.lastReplication("s","t"));
 		try(Stream<Path> files = Files.list(dir)) {
-			// No temporary file left behind
-			assertEquals(List.of(file), files.toList());
+			// No temporary file left behind (the .lock companion file is kept)
+			assertEquals(List.of(file), files.filter((f) -> !f.getFileName().toString().endsWith(".lock")).toList());
 		}
 	}
 

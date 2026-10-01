@@ -160,9 +160,8 @@ public class CsvSourceTest extends ProjectTestCase {
 		CsvSource source2 = CsvSource.newBuilder()
 						.reader(() -> reader2)
 						.build();
-		source2.init(null);
-		assertFalse(reader2.closed);
-		source2.close();
+		// A stream that is never consumed closes its reader too
+		source2.stream(null).close();
 		assertTrue(reader2.closed);
 	}
 	// A duplicate header column fails stream() after the reader was opened: it must be closed

@@ -17,9 +17,12 @@ package org.monflabs.json.impexp.file;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 import org.monflabs.json.JsonException;
 import org.monflabs.json.impexp.JsonContent;
@@ -88,19 +91,41 @@ public class FileSource extends JsonSourceImpl implements FileBase {
 			estimatedCount = -1;
 			if(isEstimateCount()) {
 				try {
-					estimatedCount = countInFolder(getRoot());
+					estimatedCount = countInFolder(getRoot(), newVisited(getRoot()));
 				} catch(Exception e) {}
 			}
 		}
 		return estimatedCount;
 	}
-	private int countInFolder(File folder) throws JsonException, IOException {
+	/**
+	 * The set of the (real paths of the) folders already visited, starting with the root.
+	 * A folder reached again through a symbolic link is skipped, so a link loop cannot
+	 * make the iteration infinite, and a document is never produced twice.
+	 */
+	private static Set<Path> newVisited(File root) {
+		Set<Path> visited = new HashSet<>();
+		enter(root, visited);
+		return visited;
+	}
+	private static boolean enter(File folder, Set<Path> visited) {
+		Path p;
+		try {
+			p = folder.toPath().toRealPath();
+		} catch(IOException ex) {
+			// A dangling link, or a folder that cannot be read
+			return false;
+		}
+		return visited.add(p);
+	}
+	private int countInFolder(File folder, Set<Path> visited) throws JsonException, IOException {
 		int count = 0;
 		File[] files = listFiles(folder);
 		for(int i=0; i<files.length; i++) {
 			File file = files[i];
 			if(file.isDirectory()) {
-				count += countInFolder(file);
+				if(enter(file, visited)) {
+					count += countInFolder(file, visited);
+				}
 			} else if(file.isFile() && file.getPath().endsWith(".json")) {
 				count++;
 			}
@@ -136,7 +161,7 @@ public class FileSource extends JsonSourceImpl implements FileBase {
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	@Override
 	public Iterator<JsonContent> createJsonContentIterator() {
-		return (Iterator)Iterators.flatten( new FileIterator(getRoot(), 0, null), null);
+		return (Iterator)Iterators.flatten( new FileIterator(getRoot(), 0, null, newVisited(getRoot())), null);
 	}
 	
 	private class FileIterator implements Iterator<Object> {
@@ -148,7 +173,10 @@ public class FileSource extends JsonSourceImpl implements FileBase {
 		private boolean hasNextValue;
 		private Object next;
 		
-		FileIterator(File folder, int index, String collection) {
+		private Set<Path> visited;
+		
+		FileIterator(File folder, int index, String collection, Set<Path> visited) {
+			this.visited = visited;
 			this.index = index;
 			this.collection = collection;
 			this.files = listFiles(folder);
@@ -159,6 +187,9 @@ public class FileSource extends JsonSourceImpl implements FileBase {
 			while(iteratorIndex<files.length) {
 				File file = files[iteratorIndex++];
 				if(file.isDirectory()) {
+					if(!enter(file, visited)) {
+						continue;
+					}
 					String col = collection;
 					if(!isIgnoreCollection() && index==0) {
 						String c = FileNameUtil.decodeCollectionFolder(file.getName());
@@ -166,7 +197,7 @@ public class FileSource extends JsonSourceImpl implements FileBase {
 							col = c;
 						}
 					}
-					next = new FileIterator(file, index+1, col);
+					next = new FileIterator(file, index+1, col, visited);
 					return true;
 				} else if(file.isFile()) {
 					String docKey = file.getName();

@@ -26,6 +26,14 @@ public interface JsonSource extends JsonAccessor {
 	
 	public long estimatedCount();
 	
+	/**
+	 * The estimated number of contents a stream with a range filter produces, or -1 if
+	 * unknown. By default, the count of the whole source.
+	 */
+	public default long estimatedCount(RangeFilter filter) {
+		return estimatedCount();
+	}
+	
 	public default Stream<JsonContent> stream() {
 		return stream(null);
 	}

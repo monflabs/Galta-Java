@@ -17,6 +17,7 @@ package org.monflabs.json.impexp.replication;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.JsonUtil;
@@ -46,12 +47,21 @@ public class ReplicationResult extends ImportResult {
 		return StringFormat.format("Processed={0} (inserted={1}, deleted={2}, conflicts={3}, ignored={4})", getProcessed(), getInserted(), getDeleted(), getConflicts(), getIgnored());
 	}
 	
+	/**
+	 * The result as JSON, with the dates in UTC.
+	 */
 	public JsonObject toJson() {
 		return toJson(null);
 	}
+	/**
+	 * The result as JSON.
+	 * <p>
+	 * The inserted count is reported as "inserted", and also as "created" (its former name).
+	 * @param zoneId the time zone of the dates, UTC when null
+	 */
 	public JsonObject toJson(ZoneId zoneId) {
 		if(zoneId==null) {
-			zoneId = ZoneId.systemDefault(); // Or GTM?
+			zoneId = ZoneOffset.UTC;
 		}
 		RangeFilter rangeFilter = getRangeFilter();
 		OffsetDateTime since = rangeFilter!=null && rangeFilter.getSince()!=null ? OffsetDateTime.ofInstant(rangeFilter.getSince(), zoneId) : null;
@@ -59,9 +69,11 @@ public class ReplicationResult extends ImportResult {
 		return JsonObject.of(
 				"duration", getDuration(), 
 				"rangeFilter", JsonObject.of("since", since!=null ? JsonUtil.toString(since) : null, "until", until!=null ? JsonUtil.toString(until) : null),
+				"inserted", getInserted(),
 				"created", getInserted(),
 				"deleted", getDeleted(),
-				"conflicts", getConflicts()
+				"conflicts", getConflicts(),
+				"ignored", getIgnored()
 			);
 	}
 	

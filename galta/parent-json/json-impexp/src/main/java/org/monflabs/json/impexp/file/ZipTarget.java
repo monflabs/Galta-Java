@@ -16,14 +16,19 @@
 package org.monflabs.json.impexp.file;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -77,8 +82,12 @@ public class ZipTarget extends JsonTargetImpl implements FileBase {
 	private File root;
 	private int subdirLevels;
 	private boolean ignoreCollection;
+	// The zip is written to a temporary file, moved to the root when the import succeeds
+	private Path tempFile;
 	private OutputStream os;
 	private ZipOutputStream zipOs;
+	// The entries written by the current import
+	private final Set<String> entries = new HashSet<>();
 
 	protected ZipTarget(Builder builder) {
 		super(builder);
@@ -86,7 +95,7 @@ public class ZipTarget extends JsonTargetImpl implements FileBase {
 		this.ignoreCollection = builder.ignoreCollection;
 		this.subdirLevels = builder.subdirLevels;
 	}
-	
+
 	public File getRoot() {
 		return root;
 	}
@@ -99,38 +108,104 @@ public class ZipTarget extends JsonTargetImpl implements FileBase {
 		return ignoreCollection;
 	}
 
+	/**
+	 * Starts writing the zip file. The content is written to a temporary file next to the
+	 * root, which replaces the root only when the import succeeds: a failed (or cancelled)
+	 * import leaves the previous zip file, if any, untouched.
+	 */
 	@Override
 	public void init() {
 		File root = getRoot();
+		entries.clear();
 		try {
-			os =  new FastBufferedOutputStream(new FileOutputStream(root));
+			if(root.isDirectory()) {
+				throw new JsonException(null, "{0} is a directory, not a zip file", root.getPath());
+			}
+			Path target = root.toPath().toAbsolutePath();
+			Path parent = target.getParent();
+			if(parent!=null) {
+				Files.createDirectories(parent);
+			}
+			tempFile = Files.createTempFile(parent, "."+target.getFileName().toString()+".", ".tmp");
+			os =  new FastBufferedOutputStream(Files.newOutputStream(tempFile));
 			this.zipOs = new ZipOutputStream(os);
+		} catch (JsonException e) {
+			throw e;
 		} catch (Exception e) {
+			discard();
 			throw new JsonException(e, "Error while opening ZipFile {0}", root.getPath());
 		}
 	}
 
+	/**
+	 * Finishes the zip file and moves it to the root.
+	 */
 	@Override
 	public void close() {
 		// Must be safe when init() failed, and when called more than once
+		Path tmp = tempFile;
 		try {
-//			ZipEntry e = new ZipEntry("manifest.json");
-//			zipOs.putNextEntry(e);
-//				JsonObject o = JsonObject.create();
-//				o.put("date", ZonedDateTime.now());
-//				JsonFactory.get().stringify(o);
-//			zipOs.closeEntry();
+			closeStreams();
+			if(tmp!=null) {
+				tempFile = null;
+				moveAtomically(tmp, getRoot().toPath().toAbsolutePath());
+			}
+		} catch(IOException ex) {
+			throw new JsonException(ex,"Error while closing the zip file {0}", getRoot().getPath());
+		} finally {
+			deleteQuietly(tmp);
+		}
+	}
+
+	/**
+	 * Discards the zip being written: the root is not changed.
+	 */
+	@Override
+	protected void closeOnFailure() {
+		discard();
+	}
+
+	private void discard() {
+		Path tmp = tempFile;
+		tempFile = null;
+		try {
+			closeStreams();
+		} catch(IOException ex) {
+			// The file is discarded anyway
+		} finally {
+			deleteQuietly(tmp);
+		}
+	}
+
+	private void closeStreams() throws IOException {
+		try {
 			if(zipOs!=null) {
 				ZipOutputStream z = zipOs;
 				zipOs = null;
 				z.finish();
 			}
-		} catch(IOException ex) {
-			throw new JsonException(ex,"Error while closing the zip file");
 		} finally {
 			OutputStream o = os;
 			os = null;
 			IOStreamUtil.close(o);
+		}
+	}
+
+	static void moveAtomically(Path from, Path to) throws IOException {
+		try {
+			Files.move(from, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		} catch(AtomicMoveNotSupportedException ex) {
+			Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+		}
+	}
+
+	private static void deleteQuietly(Path p) {
+		if(p!=null) {
+			try {
+				Files.deleteIfExists(p);
+			} catch(IOException ex) {
+				// Best effort
+			}
 		}
 	}
 
@@ -151,9 +226,13 @@ public class ZipTarget extends JsonTargetImpl implements FileBase {
 					entryName = FileNameUtil.encodeCollectionFolder(collection) + '/' + entryName;
 				}
 			}
+			if(!entries.add(entryName)) {
+				throw new JsonException(null,"Duplicate document {0}: the zip entry {1} was already written by this import (a document cannot be written twice to a zip file, and the ids must be unique when the collections are ignored)", content.getKey(), entryName);
+			}
 			try {
 				ZipEntry e = new ZipEntry(entryName);
-				// Keep the content timestamp, which the zip sources read back
+				// Keep the content timestamp, which the zip sources read back (the zip format
+				// stores it with a precision of 1 second, or 2 seconds for the MS-DOS time)
 				Instant ts = content.getTimestamp();
 				if(ts!=null) {
 					e.setLastModifiedTime(FileTime.from(ts));

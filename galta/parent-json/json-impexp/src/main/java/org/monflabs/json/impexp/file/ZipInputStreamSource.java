@@ -17,27 +17,26 @@ package org.monflabs.json.impexp.file;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import org.monflabs.json.JsonException;
-import org.monflabs.json.JsonFactory;
 import org.monflabs.json.impexp.JsonContent;
-import org.monflabs.json.impexp.JsonKey;
-import org.monflabs.json.impexp.impl.JsonSourceImpl;
-import org.monflabs.json.impexp.util.FileNameUtil;
-import org.monflabs.json.impexp.util.StaticContent;
+import org.monflabs.json.impexp.replication.RangeFilter;
 import org.monflabs.util.IOStreamUtil;
 import org.monflabs.util.ObjectBuilder;
-import org.monflabs.util.io.ZipUtil;
 
-public class ZipInputStreamSource extends JsonSourceImpl implements FileBase {
+/**
+ * Reads the documents of a zip stream, as written by {@link ZipTarget}.
+ * <p>
+ * Every stream gets its own input stream from the supplier, closed with the stream.
+ */
+public class ZipInputStreamSource extends AbstractZipSource {
 	
 	public static class Builder extends ObjectBuilder<ZipInputStreamSource> {
 		private Supplier<InputStream> supplier;
@@ -69,32 +68,11 @@ public class ZipInputStreamSource extends JsonSourceImpl implements FileBase {
 
 	
 	private Supplier<InputStream> supplier;
-	private boolean ignoreCollection;
-	private boolean estimateCount;
-	private long estimatedCount = -1;
-	
-	private ZipInputStream zis;
+	private volatile long estimatedCount = -1;
 	
 	protected ZipInputStreamSource(Builder builder) {
+		super(builder.ignoreCollection, builder.estimateCount);
 		this.supplier = builder.supplier;
-		this.ignoreCollection = builder.ignoreCollection;
-		this.estimateCount = builder.estimateCount;
-	}
-
-	public boolean isIgnoreCollection() {
-		return ignoreCollection;
-	}
-
-	public boolean isEstimateCount() {
-		return estimateCount;
-	}
-	
-	@Override
-	public void close() {
-		if(zis!=null) {
-			IOStreamUtil.close(zis);
-			zis = null;
-		}
 	}
 	
 	@Override
@@ -113,11 +91,7 @@ public class ZipInputStreamSource extends JsonSourceImpl implements FileBase {
 			long count = 0;
 			ZipEntry ze = null;
 			while((ze = zis.getNextEntry()) != null) {
-				if(ZipUtil.shouldIgnore(ze)) {
-					continue;
-				}
-				String path = ze.getName();
-				if(path.endsWith(".json")) {
+				if(isDocument(ze)) {
 					count++;
 				}
 			}
@@ -126,94 +100,32 @@ public class ZipInputStreamSource extends JsonSourceImpl implements FileBase {
 	}
 
 	@Override
-	public Iterator<JsonContent> createJsonContentIterator() {
-		if(zis!=null) {
-			IOStreamUtil.close(zis);
-			zis = null;
-		}
-		zis = new ZipInputStream(supplier.get());
-		return new ZipIterator(zis);
-	}
-
-	private class ZipIterator implements Iterator<JsonContent> {
-		private ZipInputStream zis;
-		
-		private boolean hasNextValue;
-		private JsonContent next;
-		
-		ZipIterator(ZipInputStream zis) {
-			this.zis = zis;
-		}
-		
-		private boolean moveToNext() {
-			while(true) {
-				ZipEntry ze = null;
-				try {
-					ze = zis.getNextEntry();
+	protected Stream<JsonContent> createJsonContentStream(RangeFilter filter) {
+		ZipInputStream zis = new ZipInputStream(supplier.get());
+		DocumentIterator it = new DocumentIterator() {
+			@Override
+			protected JsonContent readNext() {
+				while(true) {
+					ZipEntry ze = null;
+					try {
+						ze = zis.getNextEntry();
+					} catch(IOException ex) {
+						throw new JsonException(ex, "Error while iterating the zip stream");
+					}
 					if(ze==null) {
-						next = null;
-						return false;
+						return null;
 					}
-				} catch(IOException ex) {
-					throw new JsonException(ex);
-				}
-				if(ZipUtil.shouldIgnore(ze)) {
-					continue;
-				}
-				if(!ze.isDirectory()) {  // Must be a file
-					String path = ze.getName();
-					String docKey = getFileName(path);
-					if(docKey.endsWith(".json")) {
-						// Extract the collection name
-						String collection = null;
-						if(!isIgnoreCollection()) {
-							collection = FileNameUtil.collectionFromZipPath(path);
-						}
+					if(isDocument(ze)) {
 						try {
-							docKey = FileNameUtil.decodeFilename(docKey.substring(0,docKey.length()-".json".length()));
-							// Not sure if this can be executed in parallel
-							// Let's be conservative for now
-							Object json = JsonFactory.get().parse(new InputStreamReader(zis,StandardCharsets.UTF_8));
-							next = new StaticContent(JsonKey.of(collection, docKey), json, zipTime(ze));
-							return true;
+							return readDocument(ze, zis);
 						} catch (Exception e) {
-							throw new JsonException(e, "Error while iterating ZipFile, entry {0}", path);
+							throw new JsonException(e, "Error while iterating ZipFile, entry {0}", ze.getName());
 						}
 					}
 				}
 			}
-		}
-
-		@Override
-		public boolean hasNext() {
-			if (!hasNextValue) {
-				hasNextValue = moveToNext();
-			}
-			return hasNextValue;
-		}
-
-		@Override
-		public JsonContent next() {
-			if (!hasNext()) {
-				throw new NoSuchElementException();
-			}
-			hasNextValue = false;
-			return next;
-		}
-	}
-
-	private static String getFileName(String path) {
-		int idx = path.lastIndexOf('/');
-		if(idx>=0) {
-			return path.substring(idx+1);
-		}
-		return path;
-	}
-
-
-	// ZipEntry.getTime() is -1 when the entry has no timestamp
-	private static Instant zipTime(ZipEntry ze) {
-		long t = ze.getTime();
-		return t>=0 ? Instant.ofEpochMilli(t) : null;
+		};
+		Spliterator<JsonContent> spit = Spliterators.spliteratorUnknownSize(it, Spliterator.NONNULL); 
+		return StreamSupport.stream(spit, false).onClose(() -> IOStreamUtil.close(zis));
 	}
 }

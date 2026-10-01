@@ -187,10 +187,24 @@ public abstract class JsonTargetImpl implements JsonTarget {
 	}
 
     
+	/**
+	 * Imports the contents of a source.
+	 * <p>
+	 * A target runs one import (or replication) at a time: concurrent calls wait for the
+	 * running one to finish, and an import started from the running one (from a callback,
+	 * in the same thread) throws an exception.
+	 */
 	@Override
-	public ImportResult importFrom(JsonSource source, RangeFilter filter) {
+	public synchronized ImportResult importFrom(JsonSource source, RangeFilter filter) {
+		checkNotRunning();
 		ImportEngine engine = getImportEngine(source,filter);
 		return engine.importData();
+	}
+	
+	private void checkNotRunning() {
+		if(runningEngine!=null) {
+			throw new JsonException(null,"Target {0} is already running an import or a replication, it cannot run another one at the same time", getClass().getName());
+		}
 	}
 	
 	/**
@@ -212,7 +226,13 @@ public abstract class JsonTargetImpl implements JsonTarget {
 		return false;
 	}
 	
+	/**
+	 * Replicates the changes of a source since the last replication.
+	 * <p>
+	 * Like {@link #importFrom(JsonSource, RangeFilter)}, a target runs one replication at a time.
+	 */
 	public synchronized ReplicationResult replicate(ReplicationSource source, ConflictResolver resolver) {
+		checkNotRunning();
 		if(replicationTable==null) {
 			throw new JsonException(null,"Replication table should not be null");
 		}
@@ -237,6 +257,14 @@ public abstract class JsonTargetImpl implements JsonTarget {
 	}
 	@Override
 	public void close() {
+	}
+	/**
+	 * Closes the target when an import or a replication fails (or is cancelled). By
+	 * default, this calls {@link #close()}: a target that writes its output atomically
+	 * discards it instead.
+	 */
+	protected void closeOnFailure() {
+		close();
 	}
 
     
@@ -286,15 +314,33 @@ public abstract class JsonTargetImpl implements JsonTarget {
 		protected boolean transactionOpen;
 		
 		protected void initEngine() {
+			initEngine(null, null);
+		}
+		/**
+		 * Initializes the engine.
+		 * @param source the source, used to estimate the number of contents when the target
+		 * has no estimated count supplier
+		 */
+		protected void initEngine(JsonSource source, RangeFilter filter) {
 			closed = false;
 			cancel = false;
 			runningEngine = this;
 			init();
-			estimatedCount = estimatedCountSupplier!=null ? estimatedCountSupplier.getAsLong() : -1;
+			estimatedCount = estimatedCountSupplier!=null ? estimatedCountSupplier.getAsLong() : estimatedCount(source, filter);
 			startTS = lastTS = System.currentTimeMillis();
 			transactionCount = 0;
 			transactionOpen = false;
 			notify(JsonTargetImpl.Event.START, 0, 0, estimatedCount, 0);				
+		}
+		private long estimatedCount(JsonSource source, RangeFilter filter) {
+			if(source!=null) {
+				try {
+					return source.estimatedCount(filter);
+				} catch(Exception e) {
+					// Just an estimate
+				}
+			}
+			return -1;
 		}
 		protected void closeEngine(ImportResult result) {
 			closed = true;
@@ -327,7 +373,7 @@ public abstract class JsonTargetImpl implements JsonTarget {
 			if(!closed) {
 				closed = true;
 				try {
-					close();
+					closeOnFailure();
 				} catch(Exception ce) {
 					ex.addSuppressed(ce);
 				}
@@ -367,7 +413,14 @@ public abstract class JsonTargetImpl implements JsonTarget {
 			try (Stream<JsonContent> content=stream) {
 				// Sequential: the engine state (counts, transaction) is not thread safe
 				content.sequential().forEach(c -> {
-					processor.accept(c);
+					try {
+						processor.accept(c);
+					} catch(CancelException e) {
+						throw e;
+					} catch(RuntimeException e) {
+						// Report the content that failed
+						throw new JsonException(e, "Error while importing {0}: {1}", c.getKey(), e.getMessage()!=null ? e.getMessage() : e.toString());
+					}
 					saveTemporaryTransaction();
 				});
 			}
@@ -448,7 +501,7 @@ public abstract class JsonTargetImpl implements JsonTarget {
 
 		protected ImportResult importData() {
 			try {
-				initEngine();
+				initEngine(source, filter);
 				beginEngineTransaction();
 				
 				ImportResult result = new ImportResult();
@@ -486,7 +539,7 @@ public abstract class JsonTargetImpl implements JsonTarget {
 			Instant lastReplication = replicationTable.lastReplication(source.getReplicationId(), targetId);
 			RangeFilter rangeFilter = new RangeFilter(lastReplication, replicationTable.now());
 			try {
-				initEngine();
+				initEngine(source instanceof JsonSource js ? js : null, rangeFilter);
 				beginEngineTransaction();
 				
 				ReplicationResult result = new ReplicationResult();

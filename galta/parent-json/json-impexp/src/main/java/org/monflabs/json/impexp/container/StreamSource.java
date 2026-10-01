@@ -80,8 +80,6 @@ public class StreamSource extends JsonSourceImpl {
 	private Function<Object,Object> valueFunction;
 	private Function<Object,Instant> timestampFunction;
 	
-	private Stream<Object> stream;
-	
 	protected StreamSource(Builder builder) {
 		this.streamFactory = builder.streamFactory;
 		this.estimatedCount = builder.estimatedCount;
@@ -92,44 +90,29 @@ public class StreamSource extends JsonSourceImpl {
 	}
 
 	@Override
-	public void init(RangeFilter filter) {
-		super.init(filter);
-		
-		stream = streamFactory.get();
-	}
-
-	@Override
-	public void close() {
-		// Safe when init() was not called, when the factory returned no stream,
-		// and when called more than once
-		Stream<Object> st = stream;
-		stream = null;
-		if(st!=null) {
-			st.close();
-		}
-	}
-	
-	@Override
 	public long estimatedCount() {
 		return estimatedCount;
 	}
 
+	/**
+	 * Every stream gets its own stream from the factory, closed with the stream (even
+	 * when it is not consumed).
+	 */
 	@Override
-	protected Stream<JsonContent> createJsonContentStream() {
+	protected Stream<JsonContent> createJsonContentStream(RangeFilter filter) {
+		Stream<Object> stream = streamFactory.get();
 		if(stream==null) {
 			return null;
 		}
 		AtomicLong indexCounter = new AtomicLong(); 
-		Stream<JsonContent> s = stream.map( (o) -> {
+		return stream.map( (o) -> {
 			long index = indexCounter.getAndIncrement();
 			String col = getCollection(index, o);
 			String key = getKey(index, o);
 			Object value = getValue(index, o);
 			Instant timestamp = getTimestamp(index, o);
-			return new StaticContent(JsonKey.of(col, key), value, timestamp);
+			return (JsonContent)new StaticContent(JsonKey.of(col, key), value, timestamp);
 		});
-		return s;
-
 	}
 
 	protected String getCollection(long index, Object o) {

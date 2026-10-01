@@ -128,14 +128,13 @@ public class ContainerTargetTest extends ProjectTestCase {
 		assertEquals(JsonObject.parse("{\"c\":{\"k1\":{\"v\":1}}}"), target.getContainer());
 		assertEquals(1, closed.get());
 
-		// Initialised but never streamed: close() closes the factory stream
+		// Streamed but never consumed: closing the stream closes the factory stream
 		AtomicInteger closed2 = new AtomicInteger();
 		JsonContentStreamSource src2 = JsonContentStreamSource.newBuilder()
 				.streamFactory( () -> Stream.<JsonContent>empty().onClose(closed2::incrementAndGet) )
 				.build();
 		assertEquals(-1, src2.estimatedCount());
-		src2.init(null);
-		src2.close();
+		src2.stream(null).close();
 		assertEquals(1, closed2.get());
 	}
 

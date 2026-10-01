@@ -18,27 +18,28 @@ package org.monflabs.json.impexp.file;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.Enumeration;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
+import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import org.monflabs.json.JsonException;
-import org.monflabs.json.JsonFactory;
 import org.monflabs.json.impexp.JsonContent;
-import org.monflabs.json.impexp.JsonKey;
-import org.monflabs.json.impexp.impl.JsonSourceImpl;
 import org.monflabs.json.impexp.replication.RangeFilter;
-import org.monflabs.json.impexp.util.FileNameUtil;
-import org.monflabs.json.impexp.util.StaticContent;
 import org.monflabs.util.IOStreamUtil;
 import org.monflabs.util.ObjectBuilder;
+import org.monflabs.util.io.ZipUtil;
 
-public class ZipFileSource extends JsonSourceImpl implements FileBase {
+/**
+ * Reads the documents of a zip file, as written by {@link ZipTarget}.
+ * <p>
+ * Every stream opens its own {@link ZipFile}, closed with the stream, so the source can
+ * be streamed concurrently.
+ */
+public class ZipFileSource extends AbstractZipSource {
 	
 	public static class Builder extends ObjectBuilder<ZipFileSource> {
 		private File root;
@@ -70,27 +71,15 @@ public class ZipFileSource extends JsonSourceImpl implements FileBase {
 
 	
 	private File root;
-	private boolean ignoreCollection;
-	private boolean estimateCount;
-	private Integer estimatedCount;
-	private ZipFile zipFile;
+	private volatile Integer estimatedCount;
 	
 	protected ZipFileSource(Builder builder) {
+		super(builder.ignoreCollection, builder.estimateCount);
 		this.root = builder.root;
-		this.ignoreCollection = builder.ignoreCollection;
-		this.estimateCount = builder.estimateCount;
 	}
 	
 	public File getRoot() {
 		return root;
-	}
-
-	public boolean isIgnoreCollection() {
-		return ignoreCollection;
-	}
-
-	public boolean isEstimateCount() {
-		return estimateCount;
 	}
 	
 	@Override
@@ -104,51 +93,25 @@ public class ZipFileSource extends JsonSourceImpl implements FileBase {
 		if(!root.isFile()) {
 			throw new JsonException(null,"File {0} is not a file",root.getPath());
 		}
-		try {
-			zipFile = new ZipFile(root);
-		} catch (Exception e) {
-			throw new JsonException(e, "Error while opening ZipFile {0}", root.getPath());
-		}
-	}
-
-	@Override
-	public void close() {
-		if(zipFile!=null) {
-			IOStreamUtil.close(zipFile);
-			zipFile = null;
-		}
 	}
 	
 	@Override
 	public long estimatedCount() {
 		if(estimatedCount==null) {
-			estimatedCount = -1;
+			int count = -1;
 			if(isEstimateCount()) {
-				try {
-					estimatedCount = countDocuments();
+				try (ZipFile zf = new ZipFile(getRoot())) {
+					count = countDocuments(zf);
 				} catch(Exception e) {}
 			}
+			estimatedCount = count;
 		}
 		return estimatedCount;
-	}
-	private int countDocuments() throws JsonException, IOException {
-		// The count can be requested before init() opened the zip file
-		if(zipFile!=null) {
-			return countDocuments(zipFile);
-		}
-		try (ZipFile zf = new ZipFile(getRoot())) {
-			return countDocuments(zf);
-		}
 	}
 	private static int countDocuments(ZipFile zipFile) {
 		int count = 0;
 		for(Enumeration<? extends ZipEntry> en=zipFile.entries(); en.hasMoreElements(); ) {
-			ZipEntry ze = en.nextElement();
-			if(shouldIgnore(ze)) {
-				continue;
-			}
-			String path = ze.getName();
-			if(path.endsWith(".json")) {
+			if(isDocument(en.nextElement())) {
 				count++;
 			}
 		}
@@ -156,94 +119,35 @@ public class ZipFileSource extends JsonSourceImpl implements FileBase {
 	}
 	
 	@Override
-	public Iterator<JsonContent> createJsonContentIterator() {
-		return new ZipIterator(zipFile.entries());
-	}
-
-	private class ZipIterator implements Iterator<JsonContent> {
-		private Enumeration<? extends ZipEntry> en;
-		
-		private boolean hasNextValue;
-		private JsonContent next;
-		
-		ZipIterator(Enumeration<? extends ZipEntry> en) {
-			this.en = en;
+	protected Stream<JsonContent> createJsonContentStream(RangeFilter filter) {
+		ZipFile zipFile;
+		try {
+			zipFile = new ZipFile(getRoot());
+		} catch (Exception e) {
+			throw new JsonException(e, "Error while opening ZipFile {0}", getRoot().getPath());
 		}
-		
-		private boolean moveToNext() {
-			while(en.hasMoreElements()) {
-				ZipEntry ze = en.nextElement();
-				if(shouldIgnore(ze)) {
-					continue;
-				}
-				if(!ze.isDirectory()) {  // Must be a file
-					String path = ze.getName();
-					String docKey = getFileName(path);
-					if(docKey.endsWith(".json")) {
-						// Extract the collection name
-						String collection = null;
-						if(!isIgnoreCollection()) {
-							collection = FileNameUtil.collectionFromZipPath(path);
-						}
-						try {
-							docKey = FileNameUtil.decodeFilename(docKey.substring(0,docKey.length()-".json".length()));
-							// Not sure if this can be executed in parallel
-							// Let's be conservative for now
-							Object json;
-							try (InputStream is = zipFile.getInputStream(ze)) {
-								json = JsonFactory.get().parse(new InputStreamReader(is,StandardCharsets.UTF_8));
-							}
-							next = new StaticContent(JsonKey.of(collection, docKey), json, zipTime(ze));
-							return true;
+		Enumeration<? extends ZipEntry> en = zipFile.entries();
+		DocumentIterator it = new DocumentIterator() {
+			@Override
+			protected JsonContent readNext() {
+				while(en.hasMoreElements()) {
+					ZipEntry ze = en.nextElement();
+					if(isDocument(ze)) {
+						try (InputStream is = zipFile.getInputStream(ze)) {
+							return readDocument(ze, is);
 						} catch (Exception e) {
-							throw new JsonException(e, "Error while iterating ZipFile {0}, entry {1}", getRoot().getPath(), path);
+							throw new JsonException(e, "Error while iterating ZipFile {0}, entry {1}", getRoot().getPath(), ze.getName());
 						}
 					}
 				}
+				return null;
 			}
-			next = null;
-			return false;
-		}
-
-		@Override
-		public boolean hasNext() {
-			if (!hasNextValue) {
-				hasNextValue = moveToNext();
-			}
-			return hasNextValue;
-		}
-
-		@Override
-		public JsonContent next() {
-			if (!hasNext()) {
-				throw new NoSuchElementException();
-			}
-			hasNextValue = false;
-			return next;
-		}
+		};
+		Spliterator<JsonContent> spit = Spliterators.spliteratorUnknownSize(it, Spliterator.NONNULL); 
+		return StreamSupport.stream(spit, false).onClose(() -> IOStreamUtil.close(zipFile));
 	}
 
-	private static String getFileName(String path) {
-		int idx = path.lastIndexOf('/');
-		if(idx>=0) {
-			return path.substring(idx+1);
-		}
-		return path;
-	}
-	
 	public static boolean shouldIgnore(ZipEntry ze) {
-		String path = ze.getName();
-		// https://stackoverflow.com/questions/10924236/mac-zip-compress-without-macosx-folder
-		if(path.startsWith("__MACOSX/")) {
-			return true;
-		}
-		return false;
-	}
-
-
-	// ZipEntry.getTime() is -1 when the entry has no timestamp
-	private static Instant zipTime(ZipEntry ze) {
-		long t = ze.getTime();
-		return t>=0 ? Instant.ofEpochMilli(t) : null;
+		return ZipUtil.shouldIgnore(ze);
 	}
 }

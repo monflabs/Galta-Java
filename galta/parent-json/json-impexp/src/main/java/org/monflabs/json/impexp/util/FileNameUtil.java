@@ -15,9 +15,11 @@
  */
 package org.monflabs.json.impexp.util;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import org.monflabs.json.JsonException;
 import org.monflabs.json.impexp.file.FileBase;
@@ -57,9 +59,35 @@ public class FileNameUtil {
 		}
 	}
 
+	// The maximum length of a file name, in bytes, on most file systems
+	private static final int MAX_FILENAME_BYTES = 255;
+
+	/**
+	 * Checks that an (encoded) file name is not longer than what most file systems accept
+	 * (255 bytes).
+	 * @throws JsonException if the name is too long
+	 */
+	public static void checkFileNameLength(String name) {
+		// A char is at most 3 bytes in UTF-8: only measure the long names
+		if(name.length()*3>MAX_FILENAME_BYTES && name.getBytes(StandardCharsets.UTF_8).length>MAX_FILENAME_BYTES) {
+			throw new JsonException(null,"File name {0}... is too long ({1} bytes, the maximum is {2}): the document id (or collection) cannot be stored as a file",
+					name.substring(0,Math.min(name.length(),40)), name.getBytes(StandardCharsets.UTF_8).length, MAX_FILENAME_BYTES);
+		}
+	}
+
+	// The device names reserved by Windows, even when followed by an extension
+	private static final Set<String> WINDOWS_RESERVED = Set.of(
+			"CON","PRN","AUX","NUL",
+			"COM1","COM2","COM3","COM4","COM5","COM6","COM7","COM8","COM9",
+			"LPT1","LPT2","LPT3","LPT4","LPT5","LPT6","LPT7","LPT8","LPT9");
+
 	/**
 	 * Encodes a document id or a collection name so it can be used as a single file
 	 * name segment.
+	 * <p>
+	 * The names that Windows does not accept are encoded as well: a reserved device name
+	 * (like CON or NUL, whatever the case and the extension) gets its first character
+	 * escaped, and a trailing dot or space is escaped.
 	 * <p>
 	 * Path separators and the characters that are invalid on common file systems are
 	 * escaped as %XX, as well as '@', which marks a collection folder: an id such as
@@ -104,7 +132,27 @@ public class FileNameUtil {
 				}
 			}
 		}
-		return b!=null ? b.toString() : name;
+		String encoded = b!=null ? b.toString() : name;
+		return encodeForWindows(encoded);
+	}
+
+	private static String encodeForWindows(String name) {
+		if(name.isEmpty()) {
+			return name;
+		}
+		int dot = name.indexOf('.');
+		String base = dot>=0 ? name.substring(0,dot) : name;
+		if(WINDOWS_RESERVED.contains(base.toUpperCase(Locale.ROOT))) {
+			name = escape(name.charAt(0)) + name.substring(1);
+		}
+		char last = name.charAt(name.length()-1);
+		if(last=='.' || last==' ') {
+			name = name.substring(0,name.length()-1) + escape(last);
+		}
+		return name;
+	}
+	private static String escape(char c) {
+		return "%" + HEX_CHARS[(c & 0xFF) >> 4] + HEX_CHARS[c & 0x0F];
 	}
 
 	/**
