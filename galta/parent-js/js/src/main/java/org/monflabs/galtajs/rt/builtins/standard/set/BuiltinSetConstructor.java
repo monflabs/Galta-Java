@@ -65,7 +65,7 @@ public class BuiltinSetConstructor extends BaseStandardConstructor {
 					}
 				} else {
 					Object add = env.getAccessor(set).getProperty(set, "add", null);
-					if(add instanceof Callable cb) {
+					if(add instanceof Callable cb && cb.isCallable()) {
 						Iterator<Object> it = RuntimeUtil.valueIterator(env,p);
 						try {
 							while(it.hasNext()) {

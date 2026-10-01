@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.console;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import java.util.Date;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -268,7 +269,7 @@ public class ConsoleToString {
 			}
 			b.decIndent();
 		} else {
-			if(jo instanceof Callable) {
+			if(BuiltinUtil.isCallable(jo)) {
 				b.append("\u0192 ");
 			}
 			if(StringUtil.isNotEmpty(type)) {

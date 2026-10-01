@@ -122,19 +122,16 @@ public abstract class BaseNativeMethod extends BaseCallableObject {
 	protected Callable paramCallable(Object[] arguments, int pos) {
 		if(pos<arguments.length) {
 			Object o = arguments[pos];
-			if(o instanceof Callable callable) {
+			if(o instanceof Callable callable && callable.isCallable()) {
 				return callable;
 			}
 			throw invalidArguments(arguments,pos, "Object is not a function");
 		}
 		throw invalidArguments(arguments,pos, "Function is not available");
 	}
+	// paramCallable never returns null: a missing or non-callable argument throws
 	protected Callable paramCallableNotNull(Object[] arguments, int pos) {
-		Callable o = paramCallable(arguments, pos);
-		if(o!=null) {
-			return o;
-		}
-		throw invalidArguments(arguments,pos, "Function is cannot be null");
+		return paramCallable(arguments, pos);
 	}
 	protected Callable paramCallable(Object[] arguments, int pos, Callable defaultValue) {
 		if(pos<arguments.length) {
@@ -148,7 +145,7 @@ public abstract class BaseNativeMethod extends BaseCallableObject {
 			// and not callable" - and must still throw, same as any other
 			// non-callable value (e.g. `arr.sort(null)`).
 			if(o!=RuntimeUtil.UNDEFINED) {
-				if(o instanceof Callable callable) {
+				if(o instanceof Callable callable && callable.isCallable()) {
 					return callable;
 				}
 				throw invalidArguments(arguments,pos, "Object is not a function");

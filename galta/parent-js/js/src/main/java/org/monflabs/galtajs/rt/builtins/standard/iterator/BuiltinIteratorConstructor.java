@@ -134,7 +134,7 @@ public class BuiltinIteratorConstructor extends BaseStandardConstructor {
 		if(method==RuntimeUtil.NOT_AVAILABLE || RuntimeUtil.isNullOrUndefined(method)) {
 			return obj;
 		}
-		if(!(method instanceof Callable c)) {
+		if(!(method instanceof Callable c && c.isCallable())) {
 			throw RuntimeUtil.typeError("Symbol.iterator is not a function");
 		}
 		Object it = c.call(obj, RuntimeUtil.EMPTY_PARAMS);

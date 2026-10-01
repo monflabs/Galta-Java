@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.function;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.JSArray;
 import org.monflabs.galtajs.rt.RuntimeUtil;
@@ -135,7 +136,7 @@ public class BuiltinFunctionPrototype extends BuiltinFunction {
 		protected Object invoke(final Object obj, final Object[] args) {
 	    	switch(methodId){
         		case apply -> {
-        	    	if(!(obj instanceof Callable)) {
+        	    	if(!BuiltinUtil.isCallable(obj)) {
         	    		throw RuntimeUtil.typeError("Object {0} is not a Callable", obj!=null ? obj.getClass() : "null");
         	    	}
         			final Callable _this = (Callable)obj;
@@ -166,13 +167,13 @@ public class BuiltinFunctionPrototype extends BuiltinFunction {
     				if(obj instanceof BuiltinFunction boundedFunction) {
     					return new BuiltinFunctionBind(getEnvironment(),boundedFunction,boundedThis,boundedArgs);
     				}
-    				if(obj instanceof Callable boundedCallable) {
+    				if(obj instanceof Callable boundedCallable && boundedCallable.isCallable()) {
        					return new BuiltinFunctionBind(getEnvironment(),boundedCallable,boundedThis,boundedArgs);
     				}
     	    		throw RuntimeUtil.typeError("Object {0} is not a Callable", obj!=null ? obj.getClass() : "null");
         		}
         		case call -> {
-        	    	if(!(obj instanceof Callable)) {
+        	    	if(!BuiltinUtil.isCallable(obj)) {
         	    		throw RuntimeUtil.typeError("Object {0} is not a Callable", obj!=null ? obj.getClass() : "null");
         	    	}
         			final Callable _this = (Callable)obj;
@@ -247,7 +248,7 @@ public class BuiltinFunctionPrototype extends BuiltinFunction {
 	        			if(RuntimeUtil.isObject(getEnvironment(),funcPrototype)) {
 	        				// Any 'Callable' is a Function!
 	        				if(funcPrototype==BuiltinFunctionPrototype.get(getEnvironment())) {
-	        					return v instanceof Callable;
+	        					return BuiltinUtil.isCallable(v);
 	        				}
 	        				while(RuntimeUtil.isNotNullOrUndefined(v)) {
 			        			JSAccessor acc = getEnvironment().getAccessor(v);

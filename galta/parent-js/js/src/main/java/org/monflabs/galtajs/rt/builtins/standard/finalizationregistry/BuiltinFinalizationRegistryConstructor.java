@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.finalizationregistry;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.Callable;
@@ -40,7 +41,7 @@ public class BuiltinFinalizationRegistryConstructor extends BaseStandardConstruc
 	@Override
 	public Object constructObject(Object[] parameters, Constructor topConstructor) {
 		Object cleanupCallback = param(parameters, 0, RuntimeUtil.UNDEFINED);
-		if(!(cleanupCallback instanceof Callable)) {
+		if(!BuiltinUtil.isCallable(cleanupCallback)) {
 			throw RuntimeUtil.typeError("FinalizationRegistry: cleanupCallback must be a function");
 		}
 		return applyNewTargetPrototype(new BuiltinFinalizationRegistry(getEnvironment(),cleanupCallback), topConstructor);

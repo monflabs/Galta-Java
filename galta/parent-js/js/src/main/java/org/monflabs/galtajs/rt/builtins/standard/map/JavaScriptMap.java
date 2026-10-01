@@ -18,6 +18,7 @@ package org.monflabs.galtajs.rt.builtins.standard.map;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.CustomLinkedMap;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.primitives.symbol.Symbol;
@@ -28,11 +29,17 @@ import org.monflabs.galtajs.rt.builtins.primitives.symbol.Symbol;
  */
 public class JavaScriptMap extends CustomLinkedMap<Object> {
 
+	private final JSEnvironment env;
 	private boolean shouldSoftDelete;
 	private boolean mixedBigNumbers;
 
-	public JavaScriptMap(boolean mixedBigNumbers) {
+	public JavaScriptMap(JSEnvironment env, boolean mixedBigNumbers) {
+		this.env = env;
 		this.mixedBigNumbers = mixedBigNumbers;
+	}
+
+	public JSEnvironment getEnvironment() {
+		return env;
 	}
 
 	@Override
@@ -48,19 +55,30 @@ public class JavaScriptMap extends CustomLinkedMap<Object> {
 		return mixedBigNumbers;
 	}
 
+	// A boxed primitive (new Number(1), Object('a'), ...) is a Java Integer/
+	// String/... registered in the environment's side tables: it is an object,
+	// so it is an identity key, distinct from the primitive with the same value.
+	// The check is a null test while nothing was ever boxed in the environment.
+	private boolean isBoxed(Object o) {
+		return RuntimeUtil.isBoxedPrimitive(env, o);
+	}
+
+	/**
+	 * Spec: a -0 key (a primitive, not a boxed Number) is stored as +0.
+	 */
+	public Object canonicalKey(Object key) {
+		if((key instanceof Double || key instanceof Float) && !isBoxed(key)) {
+			return RuntimeUtil.canonicalizeKeyedCollectionKey(key);
+		}
+		return key;
+	}
+
 	@Override
 	protected int _hash(Object o) {
 		if(o==null || o==RuntimeUtil.UNDEFINED) {
 			return 0;
 		}
-		// Below are different entries:
-		//   a.set(1,'AA');
-		//   a.set(new Number(1),'BB');
-		//   a.set(new Number(1.0),'CC');
-		// TODO:
-		// We currently have a bug - we need the property map here for the proper behavior
-		//if(RuntimeUtil.isPrimitiveValue(null, o)) {
-		if(RuntimeUtil.isPrimitiveType(o)) {
+		if(RuntimeUtil.isPrimitiveType(o) && !isBoxed(o)) {
 			// Treat all primitive numbers as equals
 			if(o instanceof Number n) {
 				if(mixedBigNumbers || !(n instanceof BigInteger || n instanceof BigDecimal) ) {
@@ -80,44 +98,32 @@ public class JavaScriptMap extends CustomLinkedMap<Object> {
 	}
 	@Override
 	protected boolean equalsKey(Object o1, Object o2) {
-		if(o1==o2) {
-			return true;
-		}
-		if(o1 instanceof CharSequence || o1 instanceof Boolean || o1 instanceof Symbol) {
-			return o1.equals(o2);
-		}
-		if(o2 instanceof CharSequence || o2 instanceof Boolean || o2 instanceof Symbol) {
-			return o2.equals(o1);
-		}
-		if(o1 instanceof Number n1 && o2 instanceof Number n2) {
-			// SameValueZero: a BigInt never equals a Number (0n and 0 are two keys),
-			// unless the environment mixes big numbers with numbers
-			if(!mixedBigNumbers && isBig(n1)!=isBig(n2)) {
-				return false;
-			}
-			return RuntimeUtil.eqNumber(n1,n2,true);
-		}
-		return false;
+		return sameValueZero(o1, o2);
 	}
 	@Override
 	protected boolean equalsValue(Object o1, Object o2) {
+		return sameValueZero(o1, o2);
+	}
+	private boolean sameValueZero(Object o1, Object o2) {
 		if(o1==o2) {
 			return true;
 		}
+		boolean eq;
 		if(o1 instanceof CharSequence || o1 instanceof Boolean || o1 instanceof Symbol) {
-			return o1.equals(o2);
-		}
-		if(o2 instanceof CharSequence || o2 instanceof Boolean || o2 instanceof Symbol) {
-			return o2.equals(o1);
-		}
-		if(o1 instanceof Number n1 && o2 instanceof Number n2) {
+			eq = o1.equals(o2);
+		} else if(o2 instanceof CharSequence || o2 instanceof Boolean || o2 instanceof Symbol) {
+			eq = o2.equals(o1);
+		} else if(o1 instanceof Number n1 && o2 instanceof Number n2) {
 			// SameValueZero: a BigInt never equals a Number (0n and 0 are two keys),
 			// unless the environment mixes big numbers with numbers
 			if(!mixedBigNumbers && isBig(n1)!=isBig(n2)) {
 				return false;
 			}
-			return RuntimeUtil.eqNumber(n1,n2,true);
+			eq = RuntimeUtil.eqNumber(n1,n2,true);
+		} else {
+			return false;
 		}
-		return false;
+		// Two distinct objects are never equal, even when they box the same value
+		return eq && !isBoxed(o1) && !isBoxed(o2);
 	}
 }

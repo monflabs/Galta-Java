@@ -174,7 +174,7 @@ public class BuiltinAsyncDisposableStackPrototype extends BasePrototype {
 	    			}
 	    			Object value = param(args,0,RuntimeUtil.UNDEFINED);
 	    			Object onDispose = param(args,1,RuntimeUtil.UNDEFINED);
-	    			if(!(onDispose instanceof Callable cb)) {
+	    			if(!(onDispose instanceof Callable cb && cb.isCallable())) {
 	    				throw RuntimeUtil.typeError("onDispose is not a function");
 	    			}
 	    			Callable closure = (_this,_args) -> cb.call(RuntimeUtil.UNDEFINED,value);
@@ -186,7 +186,7 @@ public class BuiltinAsyncDisposableStackPrototype extends BasePrototype {
 	    				throw RuntimeUtil.referenceError("Cannot defer onto a disposed AsyncDisposableStack");
 	    			}
 	    			Object onDispose = param(args,0,RuntimeUtil.UNDEFINED);
-	    			if(!(onDispose instanceof Callable cb)) {
+	    			if(!(onDispose instanceof Callable cb && cb.isCallable())) {
 	    				throw RuntimeUtil.typeError("onDispose is not a function");
 	    			}
 	    			stack.getResources().add(new DisposableResource(RuntimeUtil.UNDEFINED,cb,true));

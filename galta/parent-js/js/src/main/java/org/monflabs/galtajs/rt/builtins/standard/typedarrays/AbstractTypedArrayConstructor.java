@@ -181,7 +181,7 @@ public class AbstractTypedArrayConstructor extends BaseConstructor {
 	static TypedArray from(JSEnvironment env, Constructor c, Constructor newTarget, Object arrayLike, Object function, Object thisArg) {
 		Callable mapfn = null;
 		if(function!=RuntimeUtil.UNDEFINED) {
-			if(!(function instanceof Callable callable)) {
+			if(!(function instanceof Callable callable && callable.isCallable())) {
 				throw RuntimeUtil.typeError("Function is not a Callable");
 			}
 			mapfn = callable;

@@ -91,7 +91,7 @@ public class WrapForValidIteratorPrototype extends BasePrototype {
 	    			if(RuntimeUtil.isNullOrUndefined(returnMethod)) {
 	    				return JSObject.of(env,"value",RuntimeUtil.UNDEFINED,"done",true);
 	    			}
-	    			if(!(returnMethod instanceof Callable c)) {
+	    			if(!(returnMethod instanceof Callable c && c.isCallable())) {
 	    				throw RuntimeUtil.typeError("return is not a function");
 	    			}
 	    			return c.call(wrapped,RuntimeUtil.EMPTY_PARAMS);

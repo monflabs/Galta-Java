@@ -206,7 +206,7 @@ public class BuiltinSetPrototype extends BasePrototype {
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);  
     				_this.forEach( (k) -> {
-    					function.call(thisArg,new Object[] {k,k,_this});
+    					function.call(thisArg, k, k, _this);
     				});
 	    			return RuntimeUtil.UNDEFINED;
 	    		}

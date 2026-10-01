@@ -36,7 +36,7 @@ import org.monflabs.util.StringUtil;
  */
 public class RegExpEngineJdk implements RegExpEngine {
 	
-	private static BiFunction<JSEnvironment,RegExp,RegExpEngine> factory =
+	private static final BiFunction<JSEnvironment,RegExp,RegExpEngine> factory =
 			(env,regexp) -> new RegExpEngineJdk(env, regexp);
 	public static BiFunction<JSEnvironment,RegExp,RegExpEngine> factory() {
 		return factory;
@@ -569,7 +569,7 @@ public class RegExpEngineJdk implements RegExpEngine {
         Callable cb = null;
         String newSubStr = ""; // to please null pointer check
         boolean substr_groups = false;
-		if (replace instanceof Callable cb0) {
+		if (replace instanceof Callable cb0 && cb0.isCallable()) {
 			cb = cb0;
 		} else {
 			newSubStr = RuntimeUtil.toString(getEnvironment(),replace);
@@ -701,7 +701,7 @@ public class RegExpEngineJdk implements RegExpEngine {
         Callable cb = null;
         String newSubStr = ""; // to please null pointer check
         boolean substr_groups = false;
-		if (replace instanceof Callable cb0) {
+		if (replace instanceof Callable cb0 && cb0.isCallable()) {
 			cb = cb0;
 		} else {
 			newSubStr = RuntimeUtil.toString(getEnvironment(),replace);

@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.reflect;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import java.util.Iterator;
 
 import org.monflabs.galtajs.JSEnvironment;
@@ -90,7 +91,7 @@ public class Reflect extends NativeObject {
 	        
             	case apply -> {
             		Object _target = param(args, 0 );
-            		if(!(_target instanceof Callable)) {
+            		if(!BuiltinUtil.isCallable(_target)) {
 						throw RuntimeUtil.typeError("Target must be a callable. {0}", RuntimeUtil.objectTypeName(getEnvironment(), _target));
 					} 
             		Object _thisArgument = param(args, 1);

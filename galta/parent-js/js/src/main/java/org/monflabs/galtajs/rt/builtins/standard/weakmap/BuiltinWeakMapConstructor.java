@@ -67,7 +67,7 @@ public class BuiltinWeakMapConstructor extends BaseStandardConstructor {
 					}
 				} else {
 					Object set = getEnvironment().getAccessor(map).getProperty(map, "set", null);
-					if(set instanceof Callable cb) {
+					if(set instanceof Callable cb && cb.isCallable()) {
 						Iterator<Object> it = RuntimeUtil.valueIterator(getEnvironment(),p);
 						try {
 							while(it.hasNext()) {

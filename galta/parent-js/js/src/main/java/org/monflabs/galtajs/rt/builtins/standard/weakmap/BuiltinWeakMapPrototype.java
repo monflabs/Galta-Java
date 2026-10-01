@@ -130,7 +130,7 @@ public class BuiltinWeakMapPrototype extends BasePrototype {
 	    				throw RuntimeUtil.typeError("Invalid key used in WeakMap");
 	    			}
 	    			Object v = param(args,1,null);
-	    			if(v instanceof Callable cb) {
+	    			if(v instanceof Callable cb && cb.isCallable()) {
 	    				return _this.getOrInsertComputed(k,() -> cb.call(RuntimeUtil.UNDEFINED,k));
 	    			} else {
 	    				throw RuntimeUtil.typeError("Argument is not a callable");

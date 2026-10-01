@@ -31,7 +31,7 @@ import org.monflabs.galtajs.rt.builtins.primitives.object.BuiltinObjectPrototype
 public class Error extends BaseError {
 
 	// Extended property for Errors when a Java Throwable is attached
-	public static String JAVA_EXCEPTION = "__java_exception__";
+	public static final String JAVA_EXCEPTION = "__java_exception__";
 	
 	public static final class PrototypeImpl extends BasePrototype {
 		

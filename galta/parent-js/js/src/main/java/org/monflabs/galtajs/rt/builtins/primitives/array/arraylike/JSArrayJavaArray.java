@@ -23,6 +23,7 @@ import org.eclipse.jdt.annotation.NonNull;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.JSArray;
 import org.monflabs.galtajs.rt.RuntimeUtil;
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.monflabs.util.StringFormat;
 
 public class JSArrayJavaArray extends JSBaseArray {
@@ -97,7 +98,8 @@ public class JSArrayJavaArray extends JSBaseArray {
 			boxed[i] = Array.get(array,i);
 		}
 		if(c!=null) {
-			Arrays.sort(boxed, c);
+			// Never validates the comparator, unlike Arrays.sort
+			BuiltinUtil.mergeSort(boxed, c);
 		} else {
 			Arrays.sort(boxed);
 		}

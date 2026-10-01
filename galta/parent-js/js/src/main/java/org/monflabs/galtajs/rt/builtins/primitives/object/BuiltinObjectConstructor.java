@@ -376,7 +376,6 @@ public class BuiltinObjectConstructor extends BasePrimitiveConstructor {
 					JSObject result = JSObject.createWithPrototype(getEnvironment(), null);
 					Object thisArg = param(args, 0, null);                    
 					Callable function = paramCallableNotNull(args, 1);
-					Object[] cbArgs = new Object[2];
 					int index = 0;
 					Iterator<Object> it=RuntimeUtil.valueIterator(getEnvironment(),thisArg);
             		if(it==null) {
@@ -384,9 +383,8 @@ public class BuiltinObjectConstructor extends BasePrimitiveConstructor {
             		}
 					while(it.hasNext()) {
 						Object v = it.next();
-					  	cbArgs[0]=v;
-					  	cbArgs[1]=index++;
-					  	String r = RuntimeUtil.toString(getEnvironment(),function.call(thisArg, cbArgs));
+					  	// Call(callbackfn, undefined, « value, k »)
+					  	String r = RuntimeUtil.toString(getEnvironment(),function.call(RuntimeUtil.UNDEFINED, v, index++));
 					  	Object group = result.getProperty(r);
 					  	if(group==null || group==RuntimeUtil.UNDEFINED) {
 					  		group = JSArray.create(getEnvironment());

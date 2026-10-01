@@ -22,6 +22,7 @@ import org.eclipse.jdt.annotation.NonNull;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.JSArray;
 import org.monflabs.galtajs.rt.RuntimeUtil;
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.monflabs.util.StringFormat;
 
 public class JSArrayList extends JSBaseArray {
@@ -115,6 +116,11 @@ public class JSArrayList extends JSBaseArray {
 	}
 	@Override
 	public void arraySort(Comparator<? super Object> c, DESC_CHECK check) {
-		list.sort(c);
+		// Never validates the comparator, unlike List.sort
+		Object[] a = list.toArray();
+		BuiltinUtil.mergeSort(a, c);
+		for(int i=0; i<a.length; i++) {
+			list.set(i, a[i]);
+		}
 	}
 }

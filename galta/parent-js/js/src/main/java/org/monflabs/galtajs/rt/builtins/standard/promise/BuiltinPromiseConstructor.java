@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.promise;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -78,7 +79,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 			throw RuntimeUtil.typeError("Promise constructor requires a callable as its first argument");
 		}
 
-		if (!(parameters[0] instanceof Callable)) {
+		if (!BuiltinUtil.isCallable(parameters[0])) {
 			throw RuntimeUtil.typeError("Promise constructor requires a callable as its first argument");
 		}
 
@@ -195,7 +196,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				    Callable promiseResolve;
 				    try {
 				        promiseResolve = getPromiseResolve(getEnvironment(), thisConstructor);
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 				        return cap.getPromise();
 				    }
@@ -206,7 +207,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				    Iterator<Object> it;
 				    try {
 				        it = RuntimeUtil.valueIterator(getEnvironment(), arr);
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        // Per spec: if getting iterator fails, reject the promise (don't throw)
 				        cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 				        return cap.getPromise();
@@ -233,7 +234,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				                    break;
 				                }
 				                nextValue = it.next();
-				            } catch (Throwable ex) {
+				            } catch (Exception ex) {
 				                iterDone = true;
 				                throw ex;
 				            }
@@ -273,7 +274,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				            thenOnPromiseLike(getEnvironment(), p, resolveElementFn, cap.getReject());
 				        }
 				        iterDone = true;
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        // Iterator.next()/resolve()/then() threw synchronously - per
 				        // spec, IteratorClose the iterator (best-effort) before rejecting.
 				        if (!iterDone) {
@@ -293,7 +294,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				        if (remaining.decrementAndGet() == 0) {
 				            cap.getResolve().call(null, values);
 				        }
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 				    }
 
@@ -308,7 +309,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				    Callable promiseResolve;
 				    try {
 				        promiseResolve = getPromiseResolve(getEnvironment(), thisConstructor);
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 				        return cap.getPromise();
 				    }
@@ -318,7 +319,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				    Iterator<Object> it;
 				    try {
 				        it = RuntimeUtil.valueIterator(getEnvironment(), arr);
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        // Per spec: if getting iterator fails, reject the promise (don't throw)
 				        cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 				        return cap.getPromise();
@@ -341,7 +342,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 									break;
 								}
 								item = it.next();
-							} catch (Throwable ex) {
+							} catch (Exception ex) {
 								iterDone = true;
 								throw ex;
 							}
@@ -389,7 +390,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 							thenOnPromiseLike(getEnvironment(), p, resolveElementFn, rejectElementFn);
 						}
 						iterDone = true;
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						// Iterator.next()/resolve()/then() threw synchronously → reject
 						// per spec, IteratorClose (best-effort) first.
 						if (!iterDone) {
@@ -403,7 +404,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 						if (remaining.decrementAndGet() == 0) {
 							cap.getResolve().call(null, out);
 						}
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 					}
 					return cap.getPromise();
@@ -422,7 +423,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 					Callable promiseResolve;
 					try {
 						promiseResolve = getPromiseResolve(getEnvironment(), thisConstructor);
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 						return cap.getPromise();
 					}
@@ -468,7 +469,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 							};
 							thenOnPromiseLike(getEnvironment(), p, resolveElementFn, cap.getReject());
 						}
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 						return cap.getPromise();
 					}
@@ -476,7 +477,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 						if (remaining.decrementAndGet() == 0) {
 							cap.getResolve().call(null, out);
 						}
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 					}
 					return cap.getPromise();
@@ -492,7 +493,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 					Callable promiseResolve;
 					try {
 						promiseResolve = getPromiseResolve(getEnvironment(), thisConstructor);
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 						return cap.getPromise();
 					}
@@ -552,7 +553,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 							};
 							thenOnPromiseLike(getEnvironment(), p, resolveElementFn, rejectElementFn);
 						}
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 						return cap.getPromise();
 					}
@@ -560,7 +561,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 						if (remaining.decrementAndGet() == 0) {
 							cap.getResolve().call(null, out);
 						}
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 					}
 					return cap.getPromise();
@@ -574,7 +575,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				    Callable promiseResolve;
 				    try {
 				        promiseResolve = getPromiseResolve(getEnvironment(), thisConstructor);
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 				        return cap.getPromise();
 				    }
@@ -584,7 +585,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				    Iterator<Object> it;
 				    try {
 				        it = RuntimeUtil.valueIterator(getEnvironment(), arr);
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        // Per spec: if getting iterator fails, reject the promise (don't throw)
 				        cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 				        return cap.getPromise();
@@ -611,7 +612,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 									break;
 								}
 								item = it.next();
-							} catch (Throwable ex) {
+							} catch (Exception ex) {
 								iterDone = true;
 								throw ex;
 							}
@@ -643,7 +644,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 							thenOnPromiseLike(getEnvironment(), p, cap.getResolve(), rejectElementFn);
 						}
 						iterDone = true;
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						// Iterator.next()/resolve()/then() threw synchronously → reject
 						// per spec, IteratorClose (best-effort) first.
 						if (!iterDone) {
@@ -657,7 +658,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 						if (remaining.decrementAndGet() == 0) {
 							cap.getReject().call(null, new AggregateError(getEnvironment(),errors));
 						}
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 					}
 					return cap.getPromise();
@@ -671,7 +672,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				    Callable promiseResolve;
 				    try {
 				        promiseResolve = getPromiseResolve(getEnvironment(), thisConstructor);
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 				        return cap.getPromise();
 				    }
@@ -681,7 +682,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				    Iterator<Object> it;
 				    try {
 				        it = RuntimeUtil.valueIterator(getEnvironment(), arr);
-				    } catch (Throwable ex) {
+				    } catch (Exception ex) {
 				        // Per spec: if getting iterator fails, reject the promise (don't throw)
 				        cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 				        return cap.getPromise();
@@ -699,7 +700,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 									break;
 								}
 								item = it.next();
-							} catch (Throwable ex) {
+							} catch (Exception ex) {
 								iterDone = true;
 								throw ex;
 							}
@@ -710,7 +711,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 							thenOnPromiseLike(getEnvironment(), p, cap.getResolve(), cap.getReject());
 						}
 						iterDone = true;
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						// Iterator.next()/resolve()/then() threw synchronously → reject
 						// per spec, IteratorClose (best-effort) first.
 						if (!iterDone) {
@@ -731,7 +732,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 				}
 				case _try -> {
 					Object fn = param(args, 0, RuntimeUtil.UNDEFINED);
-					if (!(fn instanceof Callable c)) {
+					if (!(fn instanceof Callable c && c.isCallable())) {
 						throw RuntimeUtil.typeError("Promise.try callback is not a function");
 					}
 					Object[] restArgs = args.length > 1 ? java.util.Arrays.copyOfRange(args, 1, args.length) : RuntimeUtil.EMPTY_PARAMS;
@@ -746,7 +747,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 					try {
 						Object result = c.call(RuntimeUtil.UNDEFINED, restArgs);
 						return resolve(getEnvironment(), thisConstructor, result);
-					} catch (Throwable ex) {
+					} catch (Exception ex) {
 						PromiseCapability cap = BuiltinPromise.newPromiseCapability(getEnvironment(), thisConstructor);
 						cap.getReject().call(null, JSRuntimeException.exceptionObject(ex));
 						return cap.getPromise();
@@ -778,7 +779,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 	// once-{multiple-calls,no-calls}.js.
 	private static Callable getPromiseResolve(JSEnvironment env, Constructor constructor) {
 		Object resolveFn = env.getAccessor(constructor).getProperty(constructor, "resolve", RuntimeUtil.UNDEFINED);
-		if (!(resolveFn instanceof Callable c)) {
+		if (!(resolveFn instanceof Callable c && c.isCallable())) {
 			throw RuntimeUtil.typeError("Promise resolve is not a function");
 		}
 		return c;
@@ -795,7 +796,7 @@ public class BuiltinPromiseConstructor extends BaseStandardConstructor {
 	// "then" that never actually gets invoked would spin forever).
 	private static void thenOnPromiseLike(JSEnvironment env, Object promiseLike, Callable onFulfilled, Callable onRejected) {
 		Object thenFn = env.getAccessor(promiseLike).getProperty(promiseLike, "then", RuntimeUtil.UNDEFINED);
-		if (!(thenFn instanceof Callable c)) {
+		if (!(thenFn instanceof Callable c && c.isCallable())) {
 			throw RuntimeUtil.typeError("then is not a function");
 		}
 		c.call(promiseLike, new Object[]{onFulfilled, onRejected});

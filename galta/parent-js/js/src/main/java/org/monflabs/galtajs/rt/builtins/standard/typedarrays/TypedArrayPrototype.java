@@ -29,6 +29,7 @@ import org.monflabs.galtajs.jsonfactory.JSArray;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.BaseMethod;
 import org.monflabs.galtajs.rt.builtins.BasePrototype;
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.monflabs.galtajs.rt.builtins.Callable;
 import org.monflabs.galtajs.rt.builtins.JSAccessor;
 import org.monflabs.galtajs.rt.builtins.PropertyDescriptor;
@@ -383,12 +384,8 @@ public class TypedArrayPrototype extends BasePrototype {
 	    		case every -> {
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);  
-                    Object[] cbArgs = new Object[3];
                     boolean result = _this.jsForEachWhile( (i,v) -> {
-                    	cbArgs[0]=v;
-                    	cbArgs[1]=i;
-                    	cbArgs[2]=_this;
-                        Object r = function.call(thisArg, cbArgs);
+                        Object r = function.call(thisArg, v, i, _this);
                         if(!RuntimeUtil.toBoolean(getEnvironment(),r)) {
                         	return false;
                         }
@@ -437,7 +434,6 @@ public class TypedArrayPrototype extends BasePrototype {
                     int len = (int)_this.getLength();
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-                    Object[] cbArgs = new Object[3];
                     // Per spec, the passing elements are collected first and
                     // TypedArraySpeciesCreate is invoked exactly ONCE, with
                     // the final count - not pre-allocated at `len` and
@@ -446,12 +442,10 @@ public class TypedArrayPrototype extends BasePrototype {
                     // whether every element passed).
                     List<Object> kept = new ArrayList<>(len);
 					for (int i = 0; i < len; i++) {
-						cbArgs[0] = _this.getOrUndefined(i);
-                    	cbArgs[1]=i;
-                    	cbArgs[2]=_this;
-                        Object r = function.call(thisArg, cbArgs);
+                        Object v = _this.getOrUndefined(i);
+                        Object r = function.call(thisArg, v, i, _this);
                         if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
-                        	kept.add(cbArgs[0]);
+                        	kept.add(v);
                         }
 					}
 	    			TypedArray result = AbstractTypedArrayConstructor.typedArraySpeciesCreate(getEnvironment(), _this, kept.size());
@@ -464,12 +458,8 @@ public class TypedArrayPrototype extends BasePrototype {
 	        		AtomicReference<Object> result = new AtomicReference<>(RuntimeUtil.UNDEFINED);
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);  
-                    Object[] cbArgs = new Object[3];
                     _this.jsForEachWhile( (i,v) -> {
-                    	cbArgs[0]=v;
-                    	cbArgs[1]=i;
-                    	cbArgs[2]=_this;
-                        Object r = function.call(thisArg, cbArgs);
+                        Object r = function.call(thisArg, v, i, _this);
                         if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
                         	result.set(v);
                         	return false;
@@ -482,12 +472,8 @@ public class TypedArrayPrototype extends BasePrototype {
 	        		AtomicLong result = new AtomicLong(-1);
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);  
-                    Object[] cbArgs = new Object[3];
                     _this.jsForEachWhile( (i,v) -> {
-                    	cbArgs[0]=v;
-                    	cbArgs[1]=i;
-                    	cbArgs[2]=_this;
-                        Object r = function.call(thisArg, cbArgs);
+                        Object r = function.call(thisArg, v, i, _this);
                         if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
                         	result.set(i);
                         	return false;
@@ -500,12 +486,8 @@ public class TypedArrayPrototype extends BasePrototype {
 	        		AtomicReference<Object> result = new AtomicReference<>(RuntimeUtil.UNDEFINED);
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);  
-                    Object[] cbArgs = new Object[3];
                     _this.jsForEachWhileReverse( (i,v) -> {
-                    	cbArgs[0]=v;
-                    	cbArgs[1]=i;
-                    	cbArgs[2]=_this;
-                        Object r = function.call(thisArg, cbArgs);
+                        Object r = function.call(thisArg, v, i, _this);
                         if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
                         	result.set(v);
                         	return false;
@@ -518,12 +500,8 @@ public class TypedArrayPrototype extends BasePrototype {
 	        		AtomicLong result = new AtomicLong(-1);
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);  
-                    Object[] cbArgs = new Object[3];
                     _this.jsForEachWhileReverse( (i,v) -> {
-                    	cbArgs[0]=v;
-                    	cbArgs[1]=i;
-                    	cbArgs[2]=_this;
-                        Object r = function.call(thisArg, cbArgs);
+                        Object r = function.call(thisArg, v, i, _this);
                         if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
                         	result.set(i);
                         	return false;
@@ -535,12 +513,8 @@ public class TypedArrayPrototype extends BasePrototype {
 	    		case forEach -> {
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);  
-                    Object[] cbArgs = new Object[3];
                     _this.jsForEach( (i,v) -> {
-                    	cbArgs[0]=v;
-                    	cbArgs[1]=i;
-                    	cbArgs[2]=_this;
-                        function.call(thisArg, cbArgs);
+                        function.call(thisArg, v, i, _this);
                     });
                     
                     return RuntimeUtil.UNDEFINED;
@@ -698,12 +672,8 @@ public class TypedArrayPrototype extends BasePrototype {
 	        		TypedArray result = AbstractTypedArrayConstructor.typedArraySpeciesCreate(getEnvironment(), _this, len);
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-                    Object[] cbArgs = new Object[3];
                     _this.jsForEachWhile( (i,v) -> {
-                    	cbArgs[0]=v;
-                    	cbArgs[1]=i;
-                    	cbArgs[2]=_this;
-                        Object r = function.call(thisArg, cbArgs);
+                        Object r = function.call(thisArg, v, i, _this);
                         result.set((int)i,RuntimeUtil.toTypedArrayElement(getEnvironment(),result,r));
                     	return true;
                     }, 0, len );
@@ -716,7 +686,6 @@ public class TypedArrayPrototype extends BasePrototype {
                     	throw RuntimeUtil.typeError("Empty value");
                     }
                     Object initialValue = hasInitialValue ? param(args, 1) : _this.get(0);                    
-                    Object[] cbArgs = new Object[4];
                     AtomicReference<Object> p = new AtomicReference<>(initialValue);
 	        		AtomicBoolean first = new AtomicBoolean(true);
                     _this.jsForEachWhile( (i,v) -> {
@@ -724,11 +693,7 @@ public class TypedArrayPrototype extends BasePrototype {
                     		first.set(false);
                     		return true;
                     	}
-                    	cbArgs[0]=p.get();
-                    	cbArgs[1]=v;
-                    	cbArgs[2]=i;
-                    	cbArgs[3]=_this;
-                        p.set(function.call(null, cbArgs));
+                        p.set(function.call(RuntimeUtil.UNDEFINED, p.get(), v, i, _this));
                     	return true;
                     }, 0 );
 	    			return p.get();
@@ -740,7 +705,6 @@ public class TypedArrayPrototype extends BasePrototype {
                     	throw RuntimeUtil.typeError("Empty value");
                     }
                     Object initialValue = hasInitialValue ? param(args, 1) : _this.get(_this.getLength()-1);                    
-                    Object[] cbArgs = new Object[4];
                     AtomicReference<Object> p = new AtomicReference<>(initialValue);
 	        		AtomicBoolean first = new AtomicBoolean(true);
                     _this.jsForEachWhileReverse( (i,v) -> {
@@ -748,11 +712,7 @@ public class TypedArrayPrototype extends BasePrototype {
                     		first.set(false);
                     		return true;
                     	}
-                    	cbArgs[0]=p.get();
-                    	cbArgs[1]=v;
-                    	cbArgs[2]=i;
-                    	cbArgs[3]=_this;
-                        p.set(function.call(null, cbArgs));
+                        p.set(function.call(RuntimeUtil.UNDEFINED, p.get(), v, i, _this));
                     	return true;
                     }, _this.getLength());
 	    			return p.get();
@@ -801,12 +761,20 @@ public class TypedArrayPrototype extends BasePrototype {
 	    				// src and target may be overlapping views of the SAME
 	    				// buffer, so writing into target could otherwise
 	    				// overwrite part of src before it's been fully read.
-	    				Number[] values = new Number[(int)srcLength];
-	    				for(int i=0; i<srcLength; i++) {
-	    					values[i] = src.get(i);
-	    				}
-	    				for(int i=0; i<srcLength; i++) {
-	    					_this.setIfValid(targetOffset+i, values[i]);
+	    				if(src.getConstructor()==_this.getConstructor() && srcLength>0) {
+	    					// Same element type: a byte copy (System.arraycopy
+	    					// handles overlapping views of the same buffer)
+	    					int bpe = _this.getConstructor().getBytesPerElement();
+	    					System.arraycopy(src.getArrayBuffer().getBytes(), (int)src.getByteOffset(),
+	    							_this.getArrayBuffer().getBytes(), (int)(_this.getByteOffset()+targetOffset*bpe), (int)(srcLength*bpe));
+	    				} else {
+	    					Number[] values = new Number[(int)srcLength];
+	    					for(int i=0; i<srcLength; i++) {
+	    						values[i] = src.get(i);
+	    					}
+	    					for(int i=0; i<srcLength; i++) {
+	    						_this.setIfValid(targetOffset+i, values[i]);
+	    					}
 	    				}
 	    			} else {
 	    				// SetTypedArrayFromArrayLike: unlike the typed-array
@@ -853,12 +821,8 @@ public class TypedArrayPrototype extends BasePrototype {
 	    		case some -> {
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-                    Object[] cbArgs = new Object[3];
                     boolean result = !_this.jsForEachWhile( (i,v) -> {
-                    	cbArgs[0]=v;
-                    	cbArgs[1]=i;
-                    	cbArgs[2]=_this;
-                        Object r = function.call(thisArg, cbArgs);
+                        Object r = function.call(thisArg, v, i, _this);
                         return !RuntimeUtil.toBoolean(getEnvironment(),r);
                     }, 0 );
                 	return result;
@@ -1009,6 +973,21 @@ public class TypedArrayPrototype extends BasePrototype {
 				throw RuntimeUtil.typeError("TypedArray buffer is detached");
 			}
 			long copyEnd = Math.min(end, _this.getLength());
+			if(copyEnd<=begin) {
+				return ta;
+			}
+			// Same element type: the bytes are copied as is (spec step 14.b),
+			// unless the target overlaps the source further in the same buffer,
+			// where an ascending copy must observe its own writes
+			if(ta.getConstructor()==_this.getConstructor() && !ta.isOutOfBounds()) {
+				int bpe = _this.getConstructor().getBytesPerElement();
+				long srcByte = _this.getByteOffset() + begin*bpe;
+				long dstByte = ta.getByteOffset();
+				if(ta.getArrayBuffer()!=_this.getArrayBuffer() || dstByte<=srcByte) {
+					System.arraycopy(_this.getArrayBuffer().getBytes(), (int)srcByte, ta.getArrayBuffer().getBytes(), (int)dstByte, (int)((copyEnd-begin)*bpe));
+					return ta;
+				}
+			}
 			for (long i = 0; i < copyEnd - begin; i++) {
 				ta.set(i, _this.get(begin + i));
 			}
@@ -1028,11 +1007,24 @@ public class TypedArrayPrototype extends BasePrototype {
 	    }
 	    
 	    private void sort(TypedArray _this, Callable function) {
-	    	// Java Array sort is stable
-	    	// It forces a 2x copy but only box the numbers once
-	    	// We can come with a specific implementation that directly deal with the primitives, if necessary
-	    	// Not only it will avoid copies, but it will directly compare the right types.
+	    	// Stable merge sort that never validates the comparator: an
+	    	// inconsistent comparefn gives an implementation-defined order,
+	    	// never an exception (Arrays.sort's TimSort can throw).
 	        int length = (int)_this.getLength();
+	        if(function==null && !_this.isBigIntTypedArray()) {
+	        	// Default numeric order on primitives: Arrays.sort(double[])
+	        	// already sorts -0 before +0 and NaN last, as the spec requires.
+	        	// No user code runs, so the buffer cannot change meanwhile.
+	        	double[] values = new double[length];
+	        	for (int i = 0; i < length; i++) {
+	        		values[i] = _this.get(i).doubleValue();
+	        	}
+	        	Arrays.sort(values);
+	        	for (int i = 0; i < length; i++) {
+	        		_this.set(i, values[i]);
+	        	}
+	        	return;
+	        }
 	        Number[] elements = new Number[length];
 	        for (int i = 0; i < length; i++) {
 	            elements[i] = _this.get(i);
@@ -1040,7 +1032,7 @@ public class TypedArrayPrototype extends BasePrototype {
 	        
         	Comparator<Object> cp = RuntimeUtil.comparatorNumbers(getEnvironment(), function);
 
-            Arrays.sort(elements,cp);
+            BuiltinUtil.mergeSort(elements,cp);
 
             // A custom comparefn can detach the buffer as a side effect
             // (mid-sort) - the write-back must tolerate that silently

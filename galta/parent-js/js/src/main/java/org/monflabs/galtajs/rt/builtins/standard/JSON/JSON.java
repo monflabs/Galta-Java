@@ -93,7 +93,7 @@ public class JSON extends NativeObject {
             			Object arg1 = param(args, 1, RuntimeUtil.UNDEFINED);
             			JsonParser.StringParser p = new JsonParser.StringParser(getEnvironment().getJsonFactory());
         				p.setStrict(true); // we could relax this...
-        				Callable reviverFct = arg1 instanceof Callable c ? c : null;
+        				Callable reviverFct = arg1 instanceof Callable c && c.isCallable() ? c : null;
         				// context.source (json-parse-with-source proposal) needs each
         				// primitive literal's ORIGINAL source text, which only exists
         				// during this single pass over the character stream - a
@@ -487,7 +487,7 @@ public class JSON extends NativeObject {
 	    	if(value instanceof java.math.BigInteger || (RuntimeUtil.hasPropertyMap(getEnvironment(),value) && !(value instanceof Symbol))) {
 	    		JSAccessor wrapperAcc = getEnvironment().getAccessor(value);
 	    		Object toJson = wrapperAcc.getProperty(value,"toJSON",RuntimeUtil.NOT_AVAILABLE);
-	    		if(toJson instanceof Callable toJsonFct) {
+	    		if(toJson instanceof Callable toJsonFct && toJsonFct.isCallable()) {
 	    			return toJsonFct.call(value,new Object[] {key});
 	    		}
 	    		return value;
@@ -502,7 +502,7 @@ public class JSON extends NativeObject {
 	    	}
 	    	JSAccessor acc = getEnvironment().getAccessor(value);
 	    	Object fct = acc.getProperty(value,"toJSON",RuntimeUtil.NOT_AVAILABLE);
-	    	if(fct instanceof Callable toJson) {
+	    	if(fct instanceof Callable toJson && toJson.isCallable()) {
 	    		return toJson.call(value,new Object[] {key});
 	    	}
 	    	return value;
@@ -517,7 +517,7 @@ public class JSON extends NativeObject {
 	    	if(value instanceof java.math.BigInteger || (RuntimeUtil.hasPropertyMap(getEnvironment(),value) && !(value instanceof Symbol))) {
 	    		JSAccessor wrapperAcc = getEnvironment().getAccessor(value);
 	    		Object toJson = wrapperAcc.getProperty(value,"toJSON",RuntimeUtil.NOT_AVAILABLE);
-	    		if(toJson instanceof Callable toJsonFct) {
+	    		if(toJson instanceof Callable toJsonFct && toJsonFct.isCallable()) {
 	    			return standardSerializer(cont, key, toJsonFct.call(value,new Object[] {key}), proxyCache);
 	    		}
 	    		if(value instanceof java.math.BigInteger) {
@@ -572,7 +572,7 @@ public class JSON extends NativeObject {
 	    	JSAccessor acc = getEnvironment().getAccessor(value);
 	    	Object fct = acc.getProperty(value,"toJSON",RuntimeUtil.NOT_AVAILABLE);
 	    	if(fct!=RuntimeUtil.NOT_AVAILABLE) {
-		    	if(fct instanceof Callable toJson) {
+		    	if(fct instanceof Callable toJson && toJson.isCallable()) {
 		    		// The toJSON result is itself a JS value straight from user code
 		    		// (could be undefined, another object with its own toJSON, a
 		    		// function, NaN, ...) - it must be re-run through this same

@@ -51,7 +51,7 @@ public class BuiltinIteratorWrapper extends NativeObject implements Iterator<Obj
 		this.env = env;
 		this.wrapped = wrapped;
 		Object m = RuntimeUtil.getProperty(env, wrapped, "next");
-		this.nextMethod = m instanceof Callable c ? c : null;
+		this.nextMethod = m instanceof Callable c && c.isCallable() ? c : null;
 	}
 
 	public Object getWrapped() {

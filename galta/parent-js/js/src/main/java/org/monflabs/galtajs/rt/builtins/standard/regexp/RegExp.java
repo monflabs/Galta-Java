@@ -126,31 +126,29 @@ public class RegExp extends NativeObject {
 		return escapeRegExpSource(source);
 	}
 
+	// EscapeRegExpPattern: "/" and a raw LineTerminator are escaped so that
+	// "/" + source + "/" + flags parses back as a RegularExpressionLiteral.
 	private String escapeRegExpSource(String source) {
 		StringBuilder sb = new StringBuilder();
-		for(int i = 0; i < source.length(); i++) {
+		int len = source.length();
+		for(int i = 0; i < len; i++) {
 			char c = source.charAt(i);
-			if(c == '/') {
-				// Escape forward slashes
+			if(c == '\\' && i + 1 < len) {
+				// An escape sequence is kept as is, which also covers an already
+				// escaped "/" or LineTerminator. Consuming both characters keeps
+				// the parity right: in "\\/" the backslash is escaped, not the "/".
+				sb.append(c).append(source.charAt(i + 1));
+				i++;
+			} else if(c == '/') {
 				sb.append("\\/");
-			} else if(c == '\\' && i + 1 < source.length() && source.charAt(i + 1) == '/') {
-				// Already escaped forward slash, keep it
-				sb.append("\\/");
-				i++; // Skip next character
 			} else if(c == '\n') {
 				sb.append("\\n");
 			} else if(c == '\r') {
 				sb.append("\\r");
-			} else if(c == ' ') {
+			} else if(c == '\u2028') {
 				sb.append("\\u2028");
-			} else if(c == ' ') {
+			} else if(c == '\u2029') {
 				sb.append("\\u2029");
-			} else if(c == '\\' && i + 1 < source.length() && isLineTerminator(source.charAt(i + 1))) {
-				// Already escaped LineTerminator (e.g. a genuine "\<LF>"
-				// two-char escape sequence in the pattern) - keep it as is,
-				// same "don't double-escape" rule as the "/" case above.
-				sb.append(c).append(source.charAt(i + 1));
-				i++;
 			} else {
 				sb.append(c);
 			}
@@ -158,15 +156,6 @@ public class RegExp extends NativeObject {
 		return sb.toString();
 	}
 
-	// Per EscapeRegExpPattern, a raw LineTerminator occurring in the pattern
-	// must be escaped in the "source" string returned to script - a raw one
-	// can't otherwise round-trip through "/" + source + "/" + flags (the
-	// exact form RegExp.prototype.toString()/eval'd re-parsing relies on),
-	// since a RegularExpressionLiteral's body may not contain one literally.
-	private static boolean isLineTerminator(char c) {
-		return c == '\n' || c == '\r' || c == ' ' || c == ' ';
-	}
-	
 	public String getSource() {
 		return source;
 	}

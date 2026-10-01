@@ -212,9 +212,6 @@ public class StandardLibrary extends GlobalLibrary {
 					var = getLocalVariableEntry(varName);
 				}
 				if(var!=null) {
-					//if(var.getType()!=VAR_TYPE.VAR || var.getType()!=VAR_TYPE.AUTO) {
-					//	throw new IllegalStateException(); // TODO for now!
-					//}
 					var.setValue(value);
 					return var;
 				}

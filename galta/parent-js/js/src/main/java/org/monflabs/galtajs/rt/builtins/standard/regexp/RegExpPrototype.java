@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.regexp;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -197,6 +198,13 @@ public class RegExpPrototype extends BasePrototype {
 	    				throw RuntimeUtil.typeError("Method RegExp.prototype.test called on incompatible receiver");
 	    			}
 	    			String s = RuntimeUtil.toString(getEnvironment(), param(args, 0, RuntimeUtil.UNDEFINED));
+	    			// Fast path: a RegExp with the built-in exec only needs to know
+	    			// whether it matches - the engine's test() updates lastIndex and
+	    			// the legacy statics exactly like exec(), without building the
+	    			// result array. Get(R,"exec") is still read once, as RegExpExec does.
+	    			if(obj instanceof RegExp re && getEnvironment().getAccessor(obj).getProperty(obj,"exec",RuntimeUtil.UNDEFINED)==builtinExec) {
+	    				return re.test(JSRuntimeContext.get(), s);
+	    			}
 	    			return regExpExec(obj,s)!=null;
 	    		}
 	    		case search: {
@@ -417,7 +425,7 @@ public class RegExpPrototype extends BasePrototype {
 	    			String s = RuntimeUtil.toString(getEnvironment(), param(args, 0, RuntimeUtil.UNDEFINED));
 	    			int lengthS = s.length();
 	    			Object replaceValueArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	    			boolean functionalReplace = replaceValueArg instanceof Callable;
+	    			boolean functionalReplace = BuiltinUtil.isCallable(replaceValueArg);
 	    			Callable replaceFn = functionalReplace ? (Callable)replaceValueArg : null;
 	    			String replaceTemplate = functionalReplace ? null : RuntimeUtil.toString(getEnvironment(), replaceValueArg);
 
@@ -586,7 +594,7 @@ public class RegExpPrototype extends BasePrototype {
 	    private Object regExpExec(Object r, String s) {
 	    	JSAccessor acc = getEnvironment().getAccessor(r);
 	    	Object exec = acc.getProperty(r,"exec",RuntimeUtil.UNDEFINED);
-	    	if(exec instanceof Callable cb) {
+	    	if(exec instanceof Callable cb && cb.isCallable()) {
 	    		Object result = cb.call(r, new Object[]{s});
 	    		if(result!=null && !RuntimeUtil.isObject(getEnvironment(),result)) {
 	    			throw RuntimeUtil.typeError("RegExp exec method returned something other than an object or null");

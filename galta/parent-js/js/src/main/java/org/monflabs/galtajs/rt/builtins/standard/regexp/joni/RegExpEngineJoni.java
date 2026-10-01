@@ -4732,7 +4732,7 @@ public class RegExpEngineJoni implements RegExpEngine {
 		Callable cb = null;
 		String newSubStr = "";
 		boolean substrGroups = false;
-		if (replace instanceof Callable cb0) {
+		if (replace instanceof Callable cb0 && cb0.isCallable()) {
 			cb = cb0;
 		} else {
 			newSubStr = RuntimeUtil.toString(env, replace);

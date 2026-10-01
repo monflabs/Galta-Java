@@ -15,13 +15,13 @@
  */
 package org.monflabs.galtajs.rt.builtins.primitives.array.arraylike;
 
-import java.util.Arrays;
 import java.util.Comparator;
 
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.JSObject;
 import org.monflabs.galtajs.jsonfactory.internal.JSArrayInternal;
 import org.monflabs.galtajs.jsonfactory.internal.JSObjectInternal;
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.monflabs.galtajs.rt.builtins.PropertyDescriptor;
 import org.monflabs.galtajs.rt.builtins.primitives.array.BuiltinArrayPrototype;
 
@@ -68,7 +68,7 @@ public abstract class JSBaseArray implements JSArrayInternal {
 	@Override
 	public void arraySort(Comparator<? super Object> c, DESC_CHECK check) {
         Object[] a = this.toArray();
-        Arrays.sort(a,c);
+        BuiltinUtil.mergeSort(a,c);
         for(int i=0; i<a.length; i++) {
         	setOwnProperty(i,a[i]);
         }

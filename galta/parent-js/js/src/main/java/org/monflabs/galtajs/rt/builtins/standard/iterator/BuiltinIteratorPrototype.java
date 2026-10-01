@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.iterator;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -291,7 +292,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 	    		}
 	    		case every-> {
 	    			Object arg0 = param(args, 0, RuntimeUtil.UNDEFINED);
-	    			if(!(arg0 instanceof Callable c)) {
+	    			if(!(arg0 instanceof Callable c && c.isCallable())) {
 	    				throw closeAndFail(env, obj, "every() parameter should be a callable");
 	    			}
     				Iterator<Object> _this = getIteratorDirect(env, obj);
@@ -320,7 +321,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 	    		}
 	    		case filter-> {
 	    			Object arg0 = param(args, 0, RuntimeUtil.UNDEFINED);
-	    			if(!(arg0 instanceof Callable c)) {
+	    			if(!(arg0 instanceof Callable c && c.isCallable())) {
 	    				throw closeAndFail(env, obj, "filter() parameter should be a callable");
 	    			}
     				Iterator<Object> _this = getIteratorDirect(env, obj);
@@ -331,7 +332,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 	    		}
 	    		case find-> {
 	    			Object arg0 = param(args, 0, RuntimeUtil.UNDEFINED);
-	    			if(!(arg0 instanceof Callable c)) {
+	    			if(!(arg0 instanceof Callable c && c.isCallable())) {
 	    				throw closeAndFail(env, obj, "find() parameter should be a callable");
 	    			}
     				Iterator<Object> _this = getIteratorDirect(env, obj);
@@ -358,7 +359,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 	    		}
 	    		case flatMap-> {
 	    			Object arg0 = param(args, 0, RuntimeUtil.UNDEFINED);
-	    			if(!(arg0 instanceof Callable c)) {
+	    			if(!(arg0 instanceof Callable c && c.isCallable())) {
 	    				throw closeAndFail(env, obj, "flatMap() parameter should be a callable");
 	    			}
     				Iterator<Object> _this = getIteratorDirect(env, obj);
@@ -370,7 +371,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 	    		}
 	    		case forEach-> {
 	    			Object arg0 = param(args, 0, RuntimeUtil.UNDEFINED);
-	    			if(!(arg0 instanceof Callable c)) {
+	    			if(!(arg0 instanceof Callable c && c.isCallable())) {
 	    				throw closeAndFail(env, obj, "forEach() parameter should be a callable");
 	    			}
     				Iterator<Object> _this = getIteratorDirect(env, obj);
@@ -519,7 +520,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 	    		}
 	    		case map-> {
 	    			Object arg0 = param(args, 0, RuntimeUtil.UNDEFINED);
-	    			if(!(arg0 instanceof Callable c)) {
+	    			if(!(arg0 instanceof Callable c && c.isCallable())) {
 	    				throw closeAndFail(env, obj, "map() parameter should be a callable");
 	    			}
     				Iterator<Object> _this = getIteratorDirect(env, obj);
@@ -529,7 +530,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 	    		}
 	    		case reduce-> {
 	    			Object arg0 = param(args, 0, RuntimeUtil.UNDEFINED);
-	    			if(!(arg0 instanceof Callable c)) {
+	    			if(!(arg0 instanceof Callable c && c.isCallable())) {
 	    				throw closeAndFail(env, obj, "reduce() parameter should be a callable");
 	    			}
     				Iterator<Object> _this = getIteratorDirect(env, obj);
@@ -562,7 +563,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 	    		}
 	    		case some-> {
 	    			Object arg0 = param(args, 0, RuntimeUtil.UNDEFINED);
-	    			if(!(arg0 instanceof Callable c)) {
+	    			if(!(arg0 instanceof Callable c && c.isCallable())) {
 	    				throw closeAndFail(env, obj, "some() parameter should be a callable");
 	    			}
     				Iterator<Object> _this = getIteratorDirect(env, obj);
@@ -655,7 +656,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 	    		case dispose-> {
 	    			Object returnMethod = RuntimeUtil.getProperty(env, obj, "return");
 	    			if(returnMethod!=null && returnMethod!=RuntimeUtil.UNDEFINED) {
-	    				if(!(returnMethod instanceof Callable)) {
+	    				if(!BuiltinUtil.isCallable(returnMethod)) {
 	    					throw RuntimeUtil.typeError("return is not a function");
 	    				}
 	    				RuntimeUtil.call(env, returnMethod, obj, RuntimeUtil.EMPTY_PARAMS);
@@ -690,7 +691,7 @@ public class BuiltinIteratorPrototype extends BasePrototype {
 		if(itFactory==RuntimeUtil.NOT_AVAILABLE || itFactory==null || itFactory==RuntimeUtil.UNDEFINED) {
 			return new JavaIterator(env, mapped);
 		}
-		if(!(itFactory instanceof Callable cl)) {
+		if(!(itFactory instanceof Callable cl && cl.isCallable())) {
 			throw RuntimeUtil.typeError("[Symbol.iterator] is not a function");
 		}
 		Object i = cl.call(mapped, RuntimeUtil.EMPTY_PARAMS);

@@ -40,7 +40,7 @@ public class BuiltinMap implements Map<Object,Object>, SetLike, PropertiesHolder
 	private JSObjectInternal properties;
 
 	public BuiltinMap(JSEnvironment env){
-		this.map = new JavaScriptMap(env.supportMixedBigNumber());
+		this.map = new JavaScriptMap(env, env.supportMixedBigNumber());
 	}
 
 	private BuiltinMap(JavaScriptMap map) {
@@ -98,13 +98,15 @@ public class BuiltinMap implements Map<Object,Object>, SetLike, PropertiesHolder
 
 	@Override
 	public Object put(Object key, Object value) {
-		// Spec: a -0 key is stored as +0
-		return map.put(RuntimeUtil.canonicalizeKeyedCollectionKey(key), value);
+		// Spec: a -0 key is stored as +0 (in every method that can insert a key)
+		return map.put(map.canonicalKey(key), value);
 	}
 
 	@Override
 	public void putAll(Map<? extends Object, ? extends Object> m) {
-		map.putAll(m);
+		for(Map.Entry<? extends Object, ? extends Object> e: m.entrySet()) {
+			put(e.getKey(), e.getValue());
+		}
 	}
 
 	@Override
@@ -154,7 +156,7 @@ public class BuiltinMap implements Map<Object,Object>, SetLike, PropertiesHolder
 
 	@Override
 	public Object putIfAbsent(Object key, Object value) {
-		return map.putIfAbsent(key, value);
+		return map.putIfAbsent(map.canonicalKey(key), value);
 	}
 
 	@Override
@@ -174,24 +176,24 @@ public class BuiltinMap implements Map<Object,Object>, SetLike, PropertiesHolder
 
 	@Override
 	public Object computeIfAbsent(Object key, Function<? super Object, ? extends Object> mappingFunction) {
-		return map.computeIfAbsent(key, mappingFunction);
+		return map.computeIfAbsent(map.canonicalKey(key), mappingFunction);
 	}
 
 	@Override
 	public Object computeIfPresent(Object key,
 			BiFunction<? super Object, ? super Object, ? extends Object> remappingFunction) {
-		return map.computeIfPresent(key, remappingFunction);
+		return map.computeIfPresent(map.canonicalKey(key), remappingFunction);
 	}
 
 	@Override
 	public Object compute(Object key, BiFunction<? super Object, ? super Object, ? extends Object> remappingFunction) {
-		return map.compute(key, remappingFunction);
+		return map.compute(map.canonicalKey(key), remappingFunction);
 	}
 
 	@Override
 	public Object merge(Object key, Object value,
 			BiFunction<? super Object, ? super Object, ? extends Object> remappingFunction) {
-		return map.merge(key, value, remappingFunction);
+		return map.merge(map.canonicalKey(key), value, remappingFunction);
 	}
 
 	//

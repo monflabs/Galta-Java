@@ -66,13 +66,13 @@ public class JSSetJSObject extends JSBaseSet {
 		this.size = intSize>JSArray.MAX_ARRAY_SIZE ? JSArray.MAX_ARRAY_SIZE : (long)intSize;
 
 		Object hasMethod = accessor.getProperty(object,"has",RuntimeUtil.NOT_AVAILABLE);
-		if(hasMethod instanceof Callable hm) {
+		if(hasMethod instanceof Callable hm && hm.isCallable()) {
 			this.hm = hm;
 		} else {
 			throw RuntimeUtil.typeError("Missing 'has' function");
 		}
 		Object keysMethod = accessor.getProperty(object,"keys",RuntimeUtil.NOT_AVAILABLE);
-		if(keysMethod instanceof Callable km) {
+		if(keysMethod instanceof Callable km && km.isCallable()) {
 			this.km = km;
 		} else {
 			throw RuntimeUtil.typeError("Missing 'keys' function");

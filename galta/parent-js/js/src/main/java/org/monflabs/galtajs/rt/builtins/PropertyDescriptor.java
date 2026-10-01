@@ -27,7 +27,7 @@ import org.monflabs.galtajs.rt.builtins.primitives.symbol.Symbol;
  */
 public class PropertyDescriptor implements Cloneable {
 	
-	private static PropertyDescriptor[] DESCRIPTORS = new PropertyDescriptor[] {
+	private static final PropertyDescriptor[] DESCRIPTORS = new PropertyDescriptor[] {
 		new PropertyDescriptor(false,false,false), 
 		new PropertyDescriptor(true,false,false),
 		new PropertyDescriptor(false,true,false),

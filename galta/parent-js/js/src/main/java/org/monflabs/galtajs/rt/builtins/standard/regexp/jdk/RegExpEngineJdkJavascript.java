@@ -29,7 +29,7 @@ import org.monflabs.galtajs.rt.builtins.standard.regexp.RegExpEngine;
  */
 public class RegExpEngineJdkJavascript extends RegExpEngineJdk {
 	
-	private static BiFunction<JSEnvironment,RegExp,RegExpEngine> factory =
+	private static final BiFunction<JSEnvironment,RegExp,RegExpEngine> factory =
 			(env,regexp) -> new RegExpEngineJdkJavascript(env, regexp);
 	public static BiFunction<JSEnvironment,RegExp,RegExpEngine> factory() {
 		return factory;

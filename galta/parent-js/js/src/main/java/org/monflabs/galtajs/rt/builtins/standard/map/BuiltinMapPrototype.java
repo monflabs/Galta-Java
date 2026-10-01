@@ -69,8 +69,9 @@ public class BuiltinMapPrototype extends BasePrototype {
 	// treat -0 and +0 as the same key via SameValueZero, but the CALLER-
 	// VISIBLE key - what's passed to the callback, and the -0-vs-+0 identity
 	// of a newly inserted key - must itself be the canonical +0).
-	private static Object canonicalKey(Object key) {
-		return RuntimeUtil.canonicalizeKeyedCollectionKey(key);
+	// A boxed new Number(-0) is an object key, left as is.
+	private static Object canonicalKey(JSEnvironment env, Object key) {
+		return RuntimeUtil.isBoxedNumber(env, key) ? key : RuntimeUtil.canonicalizeKeyedCollectionKey(key);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -155,7 +156,7 @@ public class BuiltinMapPrototype extends BasePrototype {
                     Callable function = paramCallableNotNull(args, 0);
                     Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);  
     				_this.forEach( (k,v) -> {
-    					function.call(thisArg,new Object[] {v,k,_this});
+    					function.call(thisArg, v, k, _this);
     				});
 	    			return RuntimeUtil.UNDEFINED;
 	    		}
@@ -164,7 +165,7 @@ public class BuiltinMapPrototype extends BasePrototype {
 	    			return _this.getOrDefault(k,RuntimeUtil.UNDEFINED);
 	    		}
 	    		case getOrInsert-> {
-	    			Object k = canonicalKey(param(args,0,RuntimeUtil.UNDEFINED));
+	    			Object k = canonicalKey(getEnvironment(), param(args,0,RuntimeUtil.UNDEFINED));
 	    			if(_this.containsKey(k)) {
 	    				return _this.get(k);
 	    			}
@@ -177,10 +178,10 @@ public class BuiltinMapPrototype extends BasePrototype {
 	    			// even if the key is already present (and the callback would
 	    			// therefore never actually be invoked).
 	    			Object cbArg = param(args,1,null);
-	    			if(!(cbArg instanceof Callable cb)) {
+	    			if(!(cbArg instanceof Callable cb && cb.isCallable())) {
 	    				throw RuntimeUtil.typeError("Argument is not a callable");
 	    			}
-	    			Object k = canonicalKey(param(args,0,RuntimeUtil.UNDEFINED));
+	    			Object k = canonicalKey(getEnvironment(), param(args,0,RuntimeUtil.UNDEFINED));
 	    			if(_this.containsKey(k)) {
 	    				return _this.get(k);
 	    			}
@@ -189,7 +190,7 @@ public class BuiltinMapPrototype extends BasePrototype {
 	    			// itself - is left untouched); if it succeeds, its result
 	    			// unconditionally overwrites any mutation the callback made
 	    			// for `k` while running.
-	    			Object v = cb.call(RuntimeUtil.UNDEFINED, new Object[] {k});
+	    			Object v = cb.call(RuntimeUtil.UNDEFINED, k);
 	    			_this.put(k,v);
 	    			return v;
 	    		}

@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.proxy;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.eclipse.jdt.annotation.NonNull;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.CustomLinkedMap;
@@ -192,7 +193,7 @@ public class BuiltinProxy implements AccessorFactory, Callable, Constructor, Pri
 		if(RuntimeUtil.isNotNullOrUndefined(handler)) {
 			Object fct = RuntimeUtil.getProperty(getEnvironment(), handler, name, RuntimeUtil.NOT_AVAILABLE);
 			if(fct!=RuntimeUtil.NOT_AVAILABLE && !RuntimeUtil.isNullOrUndefined(fct)) {
-				if (fct instanceof Callable) {
+				if (BuiltinUtil.isCallable(fct)) {
 					return (Callable)fct;
 				}
 				throw RuntimeUtil.typeError("'{0}' is not a function, '{1}'", name, RuntimeUtil.objectTypeName(getEnvironment(), fct));

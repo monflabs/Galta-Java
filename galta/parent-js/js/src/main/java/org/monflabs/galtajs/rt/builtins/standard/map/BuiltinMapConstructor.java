@@ -76,7 +76,7 @@ public class BuiltinMapConstructor extends BaseStandardConstructor {
 					}
 				} else {
 					Object set = env.getAccessor(map).getProperty(map, "set", null);
-					if(set instanceof Callable cb) {
+					if(set instanceof Callable cb && cb.isCallable()) {
 						Iterator<Object> it = RuntimeUtil.valueIterator(env,p);
 						try {
 							while(it.hasNext()) {
@@ -134,7 +134,7 @@ public class BuiltinMapConstructor extends BaseStandardConstructor {
 	        		JSEnvironment env = getEnvironment();
 					Object it = param(args,0,RuntimeUtil.UNDEFINED);
 	    			Object callback = param(args,1,RuntimeUtil.UNDEFINED);
-	    			if(!(callback instanceof Callable cb)) {
+	    			if(!(callback instanceof Callable cb && cb.isCallable())) {
 	    				throw RuntimeUtil.typeError("Callback is not callable");
 	    			}
 	        		BuiltinMap res = new BuiltinMap(env);
@@ -142,7 +142,7 @@ public class BuiltinMapConstructor extends BaseStandardConstructor {
 						Iterator<Object> it2 = RuntimeUtil.valueIterator(env,it);
 						for(int idx=0; it2.hasNext(); idx++) {
 							Object v = it2.next();
-							Object grp = cb.call(RuntimeUtil.UNDEFINED,new Object[]{v,idx});
+							Object grp = cb.call(RuntimeUtil.UNDEFINED, v, idx);
 							JSArray a = (JSArray)res.get(grp);
 							if(a==null) {
 								a = JSArray.create(getEnvironment());

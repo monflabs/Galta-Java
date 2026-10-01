@@ -25,7 +25,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 
-import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.util.StringUtil;
 import org.monflabs.util.datetime.ISO8601;
@@ -59,7 +58,6 @@ public class DateUtil {
 	
 	private static GregorianCalendar staticCalendar = newProlepticGregorianCalendar(TimeZone.getDefault());
     private static GregorianCalendar utcCalendar = newProlepticGregorianCalendar(TimeZone.getTimeZone("UTC"));
-    //private static GregorianCalendar gmtCalendar = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
 
     // ECMAScript Date math assumes a pure proleptic Gregorian calendar for
     // ALL time values (see spec "Overview of Date Objects and Definitions
@@ -292,9 +290,6 @@ public class DateUtil {
 		return day*MS_PER_DAY + time;
 	}
 	
-//	public LocalDateTime toLocalDateTime() {
-//		return LocalDateTime.ofInstant(Instant.ofEpochMilli((long)utcTime),ZoneId.systemDefault());
-//	}
 
 	public static boolean isValid(Date _this) {
 		double utcTime = dateToDouble(_this);
@@ -302,10 +297,6 @@ public class DateUtil {
 	}
 	
 
-//    public static Date parseISOString(String str) {
-//    	ZonedDateTime ld = JsonUtil.parseZonedDateTime(str);
-//    	return new Date(ld.toInstant().toEpochMilli());
-//    }
 
 
     public static double UTC(double year){
@@ -367,199 +358,108 @@ public class DateUtil {
         return getFullYear(_this)-1900;
     }
 
-    public static double getFullYear(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
+    // The getters decompose the time value with the spec arithmetic (fields(),
+    // LocalTime()) - the same one the setters use - with no shared Calendar to
+    // lock.
+    private static double localField(Date _this, int field) {
+		double t = dateToDouble(_this);
+        if(Double.isNaN(t)) {
             return Double.NaN;
         }
-        synchronized(staticCalendar) {
-            staticCalendar.setTimeInMillis((long)utcTime);
-            return eraAwareYear(staticCalendar);
+        return fields(localTime(t))[field];
+    }
+    private static double utcField(Date _this, int field) {
+		double t = dateToDouble(_this);
+        if(Double.isNaN(t)) {
+            return Double.NaN;
         }
+        return fields(t)[field];
+    }
+    // WeekDay(t) = (Day(t) + 4) modulo 7
+    private static double weekDay(double t) {
+    	double d = (Math.floor(t/MS_PER_DAY) + 4) % 7;
+    	return d<0 ? d+7 : d;
+    }
+
+    public static double getFullYear(Date _this){
+        return localField(_this, F_YEAR);
     }
 
     public static double getUTCFullYear(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(utcCalendar) {
-            utcCalendar.setTimeInMillis((long)utcTime);
-            return eraAwareYear(utcCalendar);
-        }
+        return utcField(_this, F_YEAR);
     }
 
     public static double getMonth(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(staticCalendar) {
-            staticCalendar.setTimeInMillis((long)utcTime);
-            return staticCalendar.get(Calendar.MONTH);
-        }
+        return localField(_this, F_MONTH);
     }
 
     public static double getUTCMonth(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(utcCalendar) {
-            utcCalendar.setTimeInMillis((long)utcTime);
-            return utcCalendar.get(Calendar.MONTH);
-        }
+        return utcField(_this, F_MONTH);
     }
 
     public static double getDate(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(staticCalendar) {
-            staticCalendar.setTimeInMillis((long)utcTime);
-            return staticCalendar.get(Calendar.DAY_OF_MONTH);
-        }
+        return localField(_this, F_DATE);
     }
 
     public static double getUTCDate(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(utcCalendar) {
-            utcCalendar.setTimeInMillis((long)utcTime);
-            return utcCalendar.get(Calendar.DAY_OF_MONTH);
-        }
+        return utcField(_this, F_DATE);
     }
 
     public static double getDay(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
+		double t = dateToDouble(_this);
+        if(Double.isNaN(t)) {
             return Double.NaN;
         }
-        synchronized(staticCalendar) {
-            staticCalendar.setTimeInMillis((long)utcTime);
-            return staticCalendar.get(Calendar.DAY_OF_WEEK)-1;
-        }
+        return weekDay(localTime(t));
     }
 
     public static double getUTCDay(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
+		double t = dateToDouble(_this);
+        if(Double.isNaN(t)) {
             return Double.NaN;
         }
-        synchronized(utcCalendar) {
-            utcCalendar.setTimeInMillis((long)utcTime);
-            return utcCalendar.get(Calendar.DAY_OF_WEEK)-1;
-        }
+        return weekDay(t);
     }
 
     public static double getHours(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(staticCalendar) {
-            staticCalendar.setTimeInMillis((long)utcTime);
-            return staticCalendar.get(Calendar.HOUR_OF_DAY);
-        }
+        return localField(_this, F_HOUR);
     }
 
     public static double getUTCHours(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(utcCalendar) {
-            utcCalendar.setTimeInMillis((long)utcTime);
-            return utcCalendar.get(Calendar.HOUR_OF_DAY);
-        }
+        return utcField(_this, F_HOUR);
     }
 
     public static double getMinutes(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(staticCalendar) {
-            staticCalendar.setTimeInMillis((long)utcTime);
-            return staticCalendar.get(Calendar.MINUTE);
-        }
+        return localField(_this, F_MIN);
     }
 
     public static double getUTCMinutes(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(utcCalendar) {
-            utcCalendar.setTimeInMillis((long)utcTime);
-            return utcCalendar.get(Calendar.MINUTE);
-        }
+        return utcField(_this, F_MIN);
     }
 
     public static double getSeconds(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(staticCalendar) {
-            staticCalendar.setTimeInMillis((long)utcTime);
-            return staticCalendar.get(Calendar.SECOND);
-        }
+        return localField(_this, F_SEC);
     }
 
     public static double getUTCSeconds(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(utcCalendar) {
-            utcCalendar.setTimeInMillis((long)utcTime);
-            return utcCalendar.get(Calendar.SECOND);
-        }
+        return utcField(_this, F_SEC);
     }
 
     public static double getMilliseconds(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(staticCalendar) {
-            staticCalendar.setTimeInMillis((long)utcTime);
-            return staticCalendar.get(Calendar.MILLISECOND);
-        }
+        return localField(_this, F_MS);
     }
 
     public static double getUTCMilliseconds(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return Double.NaN;
-        }
-        synchronized(utcCalendar) {
-            utcCalendar.setTimeInMillis((long)utcTime);
-            return utcCalendar.get(Calendar.MILLISECOND);
-        }
+        return utcField(_this, F_MS);
     }
 
+    // (t - LocalTime(t)) / msPerMinute, with the offset in effect at t
     public static double getTimezoneOffset(Date _this){
-		double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
+		double t = dateToDouble(_this);
+        if(Double.isNaN(t)) {
             return Double.NaN;
         }
-        synchronized(staticCalendar) {
-            staticCalendar.setTimeInMillis((long)utcTime);
-            TimeZone tz = staticCalendar.getTimeZone();
-            int offset;
-            if (tz.inDaylightTime(new java.util.Date((long)utcTime))) {
-                offset = tz.getRawOffset() + tz.getDSTSavings();
-            } else {
-                offset = tz.getRawOffset();
-            }
-            int minutes =  -(offset / 1000 / 60);
-            return minutes;
-        }
+        return -localTimeZone().getOffset((long)t) / 60000.0;
     }
 
     public static double setTime(Date _this, double time){
@@ -902,25 +802,6 @@ public class DateUtil {
         synchronized(utcCalendar) {
         	utcCalendar.setTimeInMillis((long)utcTime);
             return ISO8601.formatISO8601(utcCalendar);
-        }
-    }
-
-    public static Date adjust(JSEnvironment env, Date _this, int years, int months, int days, int hours, int minutes, int seconds, int ms, boolean localTime ) {
-		final double utcTime = dateToDouble(_this);
-        if(Double.isNaN(utcTime)) {
-            return new Date(doubleToLong(Double.NaN));
-        }
-        GregorianCalendar cal = localTime ? staticCalendar : utcCalendar;
-        synchronized(cal) {
-            cal.setTimeInMillis((long)utcTime);
-            cal.add(GregorianCalendar.YEAR, years);
-            cal.add(GregorianCalendar.MONTH, months);
-            cal.add(GregorianCalendar.DAY_OF_MONTH, days);
-            cal.add(GregorianCalendar.HOUR, hours);
-            cal.add(GregorianCalendar.MINUTE, minutes);
-            cal.add(GregorianCalendar.SECOND, seconds);
-            Date result = new Date(cal.getTimeInMillis());
-            return result;
         }
     }
 }

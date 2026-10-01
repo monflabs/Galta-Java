@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.primitives.array;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import java.util.Iterator;
 
 import org.eclipse.jdt.annotation.NonNull;
@@ -180,8 +181,7 @@ public class BuiltinArrayConstructor extends BasePrimitiveConstructor {
 		                    	for( int i=0; it.hasNext(); i++ ) {
 		                    		Object v = it.next();
 		                    		if(function!=null) {
-		    	                        Object[] cbArgs = new Object[] {v,i};
-		                                v = function.call(thisArg, cbArgs);
+		                                v = function.call(thisArg, v, i);
 		                    		}
 		                    		resultAcc.setOwnProperty(resultObj,i,v,PropertyDescriptor.DESC_PROP_ARRAYINDEX,DESC_CHECK.STRICT,resultObj);
 		                    	}
@@ -206,8 +206,7 @@ public class BuiltinArrayConstructor extends BasePrimitiveConstructor {
 	                    		Object finalThis = thisArg;
 	                    		a.arrayForEach( (i,v) -> {
 		                    		if(function!=null) {
-		    	                        Object[] cbArgs = new Object[] {v,i};
-		                                v = function.call(finalThis, cbArgs);
+		                                v = function.call(finalThis, v, i);
 		                    		}
 		                    		resultAcc.setOwnProperty(resultObj,i,v,PropertyDescriptor.DESC_PROP_ARRAYINDEX,DESC_CHECK.STRICT,resultObj);
 	                    		} , true, RuntimeUtil.UNDEFINED);
@@ -252,7 +251,7 @@ public class BuiltinArrayConstructor extends BasePrimitiveConstructor {
 	        			JSAccessor itemsAcc = env.getAccessor(items);
 	        			Object asyncIterFn = itemsAcc.getProperty(items, Symbol.ASYNC_ITERATOR, RuntimeUtil.NOT_AVAILABLE);
 	        			if(asyncIterFn!=RuntimeUtil.NOT_AVAILABLE && !RuntimeUtil.isNullOrUndefined(asyncIterFn)) {
-	        				if(!(asyncIterFn instanceof Callable)) {
+	        				if(!BuiltinUtil.isCallable(asyncIterFn)) {
 	        					throw RuntimeUtil.typeError("Array.fromAsync: @@asyncIterator is not a function");
 	        				}
 	        				// ArrayCreate(0) for the iterable/async-iterable
@@ -537,7 +536,7 @@ public class BuiltinArrayConstructor extends BasePrimitiveConstructor {
 		private void fromAsyncNextAsync(JSEnvironment env, Object asyncIterator, Object resultObj, Callable mapfn, Object thisArg, long index, BuiltinPromise resultPromise) {
 			JSAccessor resultAcc = env.getAccessor(resultObj);
 			Object nextFn = env.getAccessor(asyncIterator).getProperty(asyncIterator, "next", RuntimeUtil.NOT_AVAILABLE);
-			if(!(nextFn instanceof Callable)) {
+			if(!BuiltinUtil.isCallable(nextFn)) {
 				resultPromise.reject(new TypeError(env, "Array.fromAsync: iterator.next is not a function"));
 				return;
 			}

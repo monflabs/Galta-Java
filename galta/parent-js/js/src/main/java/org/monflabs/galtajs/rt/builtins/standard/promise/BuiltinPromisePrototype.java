@@ -104,7 +104,7 @@ public class BuiltinPromisePrototype extends BasePrototype {
 	    		}
 	    		Object onRejected = args.length>=1 ? args[0] : RuntimeUtil.UNDEFINED;
 	    		Object thenFn = env.getAccessor(obj).getProperty(obj, "then", RuntimeUtil.UNDEFINED);
-	    		if(!(thenFn instanceof Callable c)) {
+	    		if(!(thenFn instanceof Callable c && c.isCallable())) {
 	    			throw RuntimeUtil.typeError("then is not a function");
 	    		}
 	    		return c.call(obj, new Object[]{RuntimeUtil.UNDEFINED, onRejected});
@@ -136,11 +136,11 @@ public class BuiltinPromisePrototype extends BasePrototype {
 	    	switch(methodId){
 	    		case _then-> {
 	    	        Callable onFulfilled = null;
-	    	        if (args.length >= 1 && args[0] instanceof Callable cb) {
+	    	        if (args.length >= 1 && args[0] instanceof Callable cb && cb.isCallable()) {
 	    	            onFulfilled = cb;
 	    	        }
 	    	        Callable onRejected = null;
-	    	        if (args.length >= 2 && args[1] instanceof Callable cb) {
+	    	        if (args.length >= 2 && args[1] instanceof Callable cb && cb.isCallable()) {
 	    	            onRejected = cb;
 	    	        }
 	    	        return _this.then_(onFulfilled,onRejected);

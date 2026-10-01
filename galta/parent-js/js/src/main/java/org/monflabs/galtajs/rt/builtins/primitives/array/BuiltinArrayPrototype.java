@@ -16,20 +16,25 @@
 package org.monflabs.galtajs.rt.builtins.primitives.array;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.JSArray;
+import org.monflabs.galtajs.jsonfactory.JSArrayImpl;
 import org.monflabs.galtajs.jsonfactory.JSObject;
 import org.monflabs.galtajs.jsonfactory.JSObjectImpl;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.BaseMethod;
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.monflabs.galtajs.rt.builtins.Callable;
 import org.monflabs.galtajs.rt.builtins.JSAccessor;
 import org.monflabs.galtajs.rt.builtins.PropertyDescriptor;
@@ -239,6 +244,46 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	}
 	
 	// helpers
+	// In-place Array.prototype.sort on a JSArrayImpl: same algorithm as
+	// JSArrayImpl.arraySort(c,check,receiver) (HasProperty+Get collection and
+	// Set write-back through the receiver, holes moved to the end), but with
+	// a merge sort that never validates the comparator - List.sort's TimSort
+	// throws "Comparison method violates its general contract!" on an
+	// inconsistent comparator, where the spec only makes the order
+	// implementation-defined.
+	private static void sortInPlace(JSArrayImpl array, Comparator<Object> c, Object receiver) {
+		if(array.isFrozen()) {
+			return;
+		}
+		JSEnvironment env = array.getEnvironment();
+		long len = array.arrayLength();
+		List<Object> items = new ArrayList<>();
+		for(long i=0; i<len; i++) {
+			if(RuntimeUtil.hasProperty(env, receiver, i)) {
+				items.add(RuntimeUtil.getProperty(env, receiver, i, RuntimeUtil.UNDEFINED));
+			}
+		}
+		Object[] sorted = items.toArray();
+		BuiltinUtil.mergeSort(sorted, c);
+		for(int i=0; i<sorted.length; i++) {
+			RuntimeUtil.setProperty(env, receiver, (long)i, sorted[i], JSObject.DESC_CHECK.STRICT);
+		}
+		for(long i=sorted.length; i<len; i++) {
+			array.arrayDelete(i, JSObject.DESC_CHECK.NONE);
+		}
+	}
+
+	// Arrays being joined (join/toLocaleString) on the current thread, by
+	// identity: a cyclic array would otherwise recurse until StackOverflowError.
+	private static final ThreadLocal<Set<Object>> JOINING = ThreadLocal.withInitial(() -> Collections.newSetFromMap(new IdentityHashMap<>()));
+
+	private static boolean enterJoin(Object array) {
+		return JOINING.get().add(array);
+	}
+	private static void exitJoin(Object array) {
+		JOINING.get().remove(array);
+	}
+
 	private static long actualIndex(JSArray list, long index) {
 		return actualIndex(list.arrayLength(), index);
 	}
@@ -535,12 +580,8 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
                     long len = _this.arrayLength();
 	                    Callable function = paramCallableNotNull(args, 0);
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 	                    boolean result = _this.arrayForEachWhile( (i,v) -> {
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        Object r = function.call(thisArg, cbArgs);
+	                        Object r = function.call(thisArg, v, i, thisObj);
 	                        if(!RuntimeUtil.toBoolean(getEnvironment(),r)) {
 	                        	return false;
 	                        }
@@ -570,8 +611,9 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
                     return thisObj; // Initial object, not _this (temporary array)
 	        	}
 	        	case filter -> {
-	        		JSArray result = RuntimeUtil.arraySpeciesCreate(getEnvironment(), thisObj, 0);
-	        		if(_this!=null) {
+	        		if(_this==null) {
+	        			return RuntimeUtil.arraySpeciesCreate(getEnvironment(), thisObj, 0);
+	        		}
                     // Spec: LengthOfArrayLike(O) is read BEFORE the
                     // IsCallable(callbackfn) check - a length getter's
                     // side effect must be observable even when the call
@@ -579,8 +621,9 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
                     // via e.g. every/15.4.4.16-4-8.js). Read once and reuse.
                     long len = _this.arrayLength();
 	                    Callable function = paramCallableNotNull(args, 0);
+	                    // ArraySpeciesCreate comes after the IsCallable check
+	                    JSArray result = RuntimeUtil.arraySpeciesCreate(getEnvironment(), thisObj, 0);
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 	                    // Spec tracks `to` as an INDEPENDENT counter starting
 	                    // at 0, not `result`'s own current length - a custom
 	                    // species constructor's result can already have a
@@ -596,10 +639,7 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                    // existing property).
 	                    AtomicLong to = new AtomicLong(0);
 	                    _this.arrayForEach( (i,v) -> {
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        Object r = function.call(thisArg, cbArgs);
+	                        Object r = function.call(thisArg, v, i, thisObj);
 	                        if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
 	                        	// CreateDataPropertyOrThrow - always throws on a
 	                        	// non-extensible species-created target
@@ -607,8 +647,7 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                        	result.setOwnProperty(to.getAndIncrement(), v, PropertyDescriptor.DESC_PROP_ARRAYINDEX, JSObject.DESC_CHECK.STRICT);
 	                        }
 	                    }, false, RuntimeUtil.UNDEFINED, len);
-	        		}
-	    			return result;
+	                    return result;
 	        	}
 	        	case find -> {
 	        		if(_this!=null) {
@@ -626,12 +665,8 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                    // observe `this === undefined` (confirmed via
 	                    // find/predicate-call-this-strict.js).
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 	                    _this.arrayForEachWhile( (i,v) -> {
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        Object r = function.call(thisArg, cbArgs);
+	                        Object r = function.call(thisArg, v, i, thisObj);
 	                        if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
 	                        	result.set(v);
 	                        	return false;
@@ -653,12 +688,8 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
                     long len = _this.arrayLength();
 	                    Callable function = paramCallableNotNull(args, 0);
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 	                    _this.arrayForEachWhile( (i,v) -> {
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        Object r = function.call(thisArg, cbArgs);
+	                        Object r = function.call(thisArg, v, i, thisObj);
 	                        if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
 	                        	result.set(i);
 	                        	return false;
@@ -680,12 +711,8 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
                     long len = _this.arrayLength();
 	                    Callable function = paramCallableNotNull(args, 0);
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 	                    _this.arrayForEachWhileReverse( (i,v) -> {
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        Object r = function.call(thisArg, cbArgs);
+	                        Object r = function.call(thisArg, v, i, thisObj);
 	                        if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
 	                        	result.set(v);
 	                        	return false;
@@ -707,12 +734,8 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
                     long len = _this.arrayLength();
 	                    Callable function = paramCallableNotNull(args, 0);
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 	                    _this.arrayForEachWhileReverse( (i,v) -> {
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        Object r = function.call(thisArg, cbArgs);
+	                        Object r = function.call(thisArg, v, i, thisObj);
 	                        if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
 	                        	result.set(i);
 	                        	return false;
@@ -754,7 +777,6 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                    Callable function = paramCallableNotNull(args, 0);
 	                    JSArray result = RuntimeUtil.arraySpeciesCreate(getEnvironment(), thisObj, 0);
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 	                    // Same explicit-counter requirement as flat() above -
 	                    // `result`'s own length may already be non-zero.
 	                    AtomicLong targetIndex = new AtomicLong(0);
@@ -770,10 +792,7 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                    		continue;
 	                    	}
 	                    	Object v = RuntimeUtil.getProperty(env, thisObj, i, RuntimeUtil.UNDEFINED);
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        Object r = function.call(thisArg, cbArgs);
+	                        Object r = function.call(thisArg, v, i, thisObj);
 	                    	// Spec's IsArray (7.2.2), not a plain `instanceof
 	                    	// JSArray` - a Proxy wrapping an array must still be
 	                    	// flattened one level, recursing through its own
@@ -801,12 +820,8 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
                     long len = _this.arrayLength();
 	                    Callable function = paramCallableNotNull(args, 0);
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 	                    _this.arrayForEach( (i,v) -> {
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        function.call(thisArg, cbArgs);
+	                        function.call(thisArg, v, i, thisObj);
 	                    }, false, RuntimeUtil.UNDEFINED, len);
 	        		}
                     return RuntimeUtil.UNDEFINED;
@@ -927,24 +942,33 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                    // iterating over the length read BEFORE the
 	                    // separator was coerced (confirmed via
 	                    // join/coerced-separator-grow.js/-shrink.js).
-	                    long len = _this.arrayLength();
-	                    String sep = paramString(args,0, ",");
-	                    StringBuilder b = new StringBuilder();
-	                    AtomicBoolean first = new AtomicBoolean(true);
-	                    _this.arrayForEach( (i,v) -> {
-	                    	if(first.get()) {
-	                    		first.set(false);
-	                    	} else {
-	                    		b.append(sep);
-	                    	}
-	                    	// v is already the resolved value for index i - re-fetching
-	                    	// via getProperty() would call an index getter a second time,
-	                    	// an observable double-invocation, not just wasted dispatch.
-	                		if(RuntimeUtil.isNotNullOrUndefined(v)) {
-	                    		b.append(RuntimeUtil.toString(getEnvironment(),v));
-	                    	}
-	                    }, true, RuntimeUtil.UNDEFINED, len);
-	                    return b.toString();
+	                    // A cyclic array joins as "" where it refers to itself
+	                    // (like V8: [1,a].join() is "1,")
+	                    if(!enterJoin(thisObj)) {
+	                    	return "";
+	                    }
+	                    try {
+		                    long len = _this.arrayLength();
+		                    String sep = paramString(args,0, ",");
+		                    StringBuilder b = new StringBuilder();
+		                    AtomicBoolean first = new AtomicBoolean(true);
+		                    _this.arrayForEach( (i,v) -> {
+		                    	if(first.get()) {
+		                    		first.set(false);
+		                    	} else {
+		                    		b.append(sep);
+		                    	}
+		                    	// v is already the resolved value for index i - re-fetching
+		                    	// via getProperty() would call an index getter a second time,
+		                    	// an observable double-invocation, not just wasted dispatch.
+		                		if(RuntimeUtil.isNotNullOrUndefined(v)) {
+		                    		b.append(RuntimeUtil.toString(getEnvironment(),v));
+		                    	}
+		                    }, true, RuntimeUtil.UNDEFINED, len);
+		                    return b.toString();
+	                    } finally {
+	                    	exitJoin(thisObj);
+	                    }
 	        		}
 	        		return "";
 	            }
@@ -1077,16 +1101,13 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	        		// only fires once per spec (confirmed via
 	        		// flatMap/array-like-objects.js's sibling requirement).
 	        		long len = _this!=null ? _this.arrayLength() : 0;
+	        		// IsCallable(callbackfn) is checked before ArraySpeciesCreate
+	        		Callable function = _this!=null ? paramCallableNotNull(args, 0) : null;
 	        		JSArray result = RuntimeUtil.arraySpeciesCreate(getEnvironment(), thisObj, len);
 	        		if(_this!=null) {
-	                    Callable function = paramCallableNotNull(args, 0);
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 	                    _this.arrayForEachWhile( (i,v) -> {
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        Object r = function.call(thisArg, cbArgs);
+	                        Object r = function.call(thisArg, v, i, thisObj);
 	                        result.setOwnProperty(i, r, PropertyDescriptor.DESC_PROP_ARRAYINDEX, JSObject.DESC_CHECK.STRICT);
 	                    	return true;
 	                    }, 0, false, RuntimeUtil.UNDEFINED, len );
@@ -1162,7 +1183,6 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
                     Callable function = paramCallableNotNull(args, 0);
                     boolean hasInitialValue = args.length>=2;
 	        		if(_this!=null) {
-	                    Object[] cbArgs = new Object[4];
 	                    // When no initial value is given, the accumulator must
 	                    // be seeded from the FIRST element that actually HAS a
 	                    // property (skipping leading holes), not blindly
@@ -1177,11 +1197,7 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                    		first.set(false);
 	                    		return true;
 	                    	}
-	                    	cbArgs[0]=p.get();
-	                    	cbArgs[1]=v;
-	                    	cbArgs[2]=i;
-	                    	cbArgs[3]=thisObj;
-	                        p.set(function.call(RuntimeUtil.UNDEFINED, cbArgs));
+	                        p.set(function.call(RuntimeUtil.UNDEFINED, p.get(), v, i, thisObj));
 	                    	return true;
 	                    }, 0, false, RuntimeUtil.UNDEFINED, len);
 	                    if(!hasInitialValue && first.get()) {
@@ -1201,7 +1217,6 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	            	Callable function = paramCallableNotNull(args, 0);
                     boolean hasInitialValue = args.length>=2;
 	        		if(_this!=null) {
-	                    Object[] cbArgs = new Object[4];
 		        		AtomicBoolean first = new AtomicBoolean(!hasInitialValue);
 	                    AtomicReference<Object> p = new AtomicReference<>(hasInitialValue ? param(args, 1) : RuntimeUtil.UNDEFINED);
 	                    _this.arrayForEachWhileReverse( (i,v) -> {
@@ -1210,11 +1225,7 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                    		first.set(false);
 	                    		return true;
 	                    	}
-	                    	cbArgs[0]=p.get();
-	                    	cbArgs[1]=v;
-	                    	cbArgs[2]=i;
-	                    	cbArgs[3]=thisObj;
-	                        p.set(function.call(RuntimeUtil.UNDEFINED, cbArgs));
+	                        p.set(function.call(RuntimeUtil.UNDEFINED, p.get(), v, i, thisObj));
 	                    	return true;
 	                    }, len, false, RuntimeUtil.UNDEFINED, len);
 	                    if(!hasInitialValue && first.get()) {
@@ -1354,14 +1365,10 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
                     long len = _this.arrayLength();
 	                    Callable function = paramCallableNotNull(args, 0);
 	                    Object thisArg = param(args, 1, RuntimeUtil.UNDEFINED);
-	                    Object[] cbArgs = new Object[3];
 
 		        		AtomicBoolean result = new AtomicBoolean(false);
 	                    _this.arrayForEachWhile( (i,v) -> {
-	                    	cbArgs[0]=v;
-	                    	cbArgs[1]=i;
-	                    	cbArgs[2]=thisObj;
-	                        Object r = function.call(thisArg, cbArgs);
+	                        Object r = function.call(thisArg, v, i, thisObj);
 	                        if(RuntimeUtil.toBoolean(getEnvironment(),r)) {
 	                        	result.set(true);
 	                        	return false;
@@ -1406,11 +1413,11 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                		}
 	                		List<Object> items = new ArrayList<>();
 	                		_this.arrayForEach( (i,v) -> items.add(v), true, RuntimeUtil.UNDEFINED, len);
-	                		items.sort(cp);
+	                		Object[] sorted = items.toArray();
+	                		BuiltinUtil.mergeSort(sorted, cp);
 	                		JSArray result = JSArray.create(getEnvironment());
-	                		int n = items.size();
-	                		for(int i=0; i<n; i++) {
-	                			result.setOwnProperty(i, items.get(i));
+	                		for(int i=0; i<sorted.length; i++) {
+	                			result.setOwnProperty(i, sorted[i]);
 	                		}
 	                		return result;
 	                	}
@@ -1418,10 +1425,14 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	                	// the genuine RECEIVER (thisObj), not `_this`'s own
 	                	// storage directly - see JSArrayImpl.arraySort's
 	                	// matching comment.
-	                	_this.arraySort(cp, JSObject.DESC_CHECK.NONE, thisObj);
+	                	if(_this instanceof JSArrayImpl impl) {
+	                		sortInPlace(impl, cp, thisObj);
+	                	} else {
+	                		_this.arraySort(cp, JSObject.DESC_CHECK.NONE, thisObj);
+	                	}
 	                    return thisObj;
 	        		}
-                    return methodId==MethodId.toReversed ? JSArray.create(getEnvironment()): thisObj; // Initial object, not _this (temporary array)
+                    return thisObj; // Initial object, not _this (temporary array)
 	            }
 	            case splice -> {
 	        		if(_this!=null) {
@@ -1594,31 +1605,38 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	            }
 	        	case toLocaleString -> {
 	        		if(_this!=null) {
-	    		StringBuilder b = new StringBuilder();
-	    		long sz = _this.arrayLength();
-	    		for(int i=0; i<sz; i++) {
-	    			if(i>0) {
-	    				b.append(',');
-	    			}
-	    			// Spec step 6c: "If nextElement is not undefined or
-	    			// null" - such elements are SKIPPED entirely
-	    			// (contribute nothing, not the literal word "null"/
-	    			// "undefined"), unlike RuntimeUtil.toLocaleString's
-	    			// own null/undefined handling (designed for a
-	    			// different, JSON-stringification-flavored use case)
-	    			// - confirmed via invoke-element-tolocalestring.js:
-	    			// `[undefined].toLocaleString()` must be "", not
-	    			// "undefined". Each element's toLocaleString is
-	    			// invoked with NO ARGUMENTS regardless of what was
-	    			// passed to the array's own toLocaleString - already
-	    			// correct via RuntimeUtil.toLocaleString's use of
-	    			// EMPTY_PARAMS.
-	    			Object el = _this.getProperty(i,RuntimeUtil.UNDEFINED);
-	    			if(!RuntimeUtil.isNullOrUndefined(el)) {
-	    				b.append(RuntimeUtil.toLocaleString(getEnvironment(),el));
-	    			}
-	    		}
-	            		return b.toString();
+	        		if(!enterJoin(thisObj)) {
+	        			return "";
+	        		}
+	        		try {
+		    		StringBuilder b = new StringBuilder();
+		    		long sz = _this.arrayLength();
+		    		for(int i=0; i<sz; i++) {
+		    			if(i>0) {
+		    				b.append(',');
+		    			}
+		    			// Spec step 6c: "If nextElement is not undefined or
+		    			// null" - such elements are SKIPPED entirely
+		    			// (contribute nothing, not the literal word "null"/
+		    			// "undefined"), unlike RuntimeUtil.toLocaleString's
+		    			// own null/undefined handling (designed for a
+		    			// different, JSON-stringification-flavored use case)
+		    			// - confirmed via invoke-element-tolocalestring.js:
+		    			// `[undefined].toLocaleString()` must be "", not
+		    			// "undefined". Each element's toLocaleString is
+		    			// invoked with NO ARGUMENTS regardless of what was
+		    			// passed to the array's own toLocaleString - already
+		    			// correct via RuntimeUtil.toLocaleString's use of
+		    			// EMPTY_PARAMS.
+		    			Object el = _this.getProperty(i,RuntimeUtil.UNDEFINED);
+		    			if(!RuntimeUtil.isNullOrUndefined(el)) {
+		    				b.append(RuntimeUtil.toLocaleString(getEnvironment(),el));
+		    			}
+		    		}
+		            		return b.toString();
+	        		} finally {
+	        			exitJoin(thisObj);
+	        		}
 	        		}
 	        		return "";
             	}
@@ -1645,7 +1663,7 @@ public class BuiltinArrayPrototype extends BasePrimitivePrototype {
 	        			// (confirmed via toString/detached-buffer.js).
 	        			JSAccessor accObj = getEnvironment().getAccessor(thisObj);
 	        			Object join = accObj.getProperty(thisObj,"join",RuntimeUtil.NOT_AVAILABLE);
-	        			if(join instanceof Callable cb) {
+	        			if(join instanceof Callable cb && cb.isCallable()) {
 	        				return cb.call(thisObj, RuntimeUtil.EMPTY_PARAMS);
 	        			}
 	        			// Spec: "If IsCallable(func) is false, set func to the

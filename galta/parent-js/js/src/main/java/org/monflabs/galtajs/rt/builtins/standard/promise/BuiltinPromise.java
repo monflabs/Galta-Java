@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.promise;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -83,10 +84,8 @@ public class BuiltinPromise extends NativeObject {
 		this.state = State.REJECTED;
 		this.result = reason;
 		triggerReactions(rejectReactions);
-		if (!isHandled) {
-			// Host hook: onUnhandledRejection(this, reason)
-			// Schedule host unhandled rejection tracking here.
-		}
+		// HostPromiseRejectionTracker(promise, "reject") when !isHandled: a
+		// no-op, the engine has no unhandled-rejection reporting.
 	}
 
 	private void triggerReactions(List<PromiseReaction> reactions) {
@@ -110,7 +109,9 @@ public class BuiltinPromise extends NativeObject {
 				if (reaction.getType() == Type.FULFILL) {
 					handlerResult = argument;
 				} else {
-					throw asThrowable(argument);
+					// The reason is passed through as is (not re-wrapped)
+					reaction.getCapability().getReject().call(RuntimeUtil.UNDEFINED, argument);
+					return;
 				}
 			} else {
 				// Spec: Call(handler, undefined, «argument») - a raw Java
@@ -126,10 +127,11 @@ public class BuiltinPromise extends NativeObject {
 			reaction.getCapability().getResolve().call(RuntimeUtil.UNDEFINED, handlerResult);
         } catch(JSRuntimeUncatchableException t) {
         	throw t;
-		} catch (JSRuntimeException e) {
-			reaction.getCapability().getReject().call(RuntimeUtil.UNDEFINED, e.getJavascriptException());
-		} catch (Throwable e) {
-			reaction.getCapability().getReject().call(RuntimeUtil.UNDEFINED, RuntimeUtil.error("Unknown exception thrown {0}", e.getClass()));
+		} catch (Exception e) {
+			// The handler's exception, as a JS catch clause sees it. Errors
+			// (StackOverflowError, OutOfMemoryError...) are not JS exceptions
+			// and propagate, as they do through a JS try/catch.
+			reaction.getCapability().getReject().call(RuntimeUtil.UNDEFINED, JSRuntimeException.exceptionObject(e));
 		}
 	}
 
@@ -188,7 +190,7 @@ public class BuiltinPromise extends NativeObject {
 		cap.setPromise(p);
 
 	    // --- Verify resolve/reject are callable ---
-	    if (!(rawResolve[0] instanceof Callable resolveFn) || !(rawReject[0] instanceof Callable rejectFn)) {
+	    if (!(rawResolve[0] instanceof Callable resolveFn && resolveFn.isCallable()) || !(rawReject[0] instanceof Callable rejectFn && rejectFn.isCallable())) {
 	        throw RuntimeUtil.typeError("Promise constructor did not provide callable resolve/reject functions");
 	    }
 	    cap.setResolve(resolveFn);
@@ -217,7 +219,7 @@ public class BuiltinPromise extends NativeObject {
         Constructor speciesCtor = RuntimeUtil.speciesConstructor(env, promise, defaultCtor);
         Object thenFinally;
         Object catchFinally;
-        if (onFinallyArg instanceof Callable onFinally) {
+        if (onFinallyArg instanceof Callable onFinally && onFinally.isCallable()) {
             thenFinally = new FinallyCallable(env, onFinally) {
                 @Override
                 public Object call(Object thisArg, Object[] args, Constructor newTarget) {
@@ -272,7 +274,7 @@ public class BuiltinPromise extends NativeObject {
             catchFinally = onFinallyArg;
         }
         Object thenFn = env.getAccessor(promise).getProperty(promise, "then", RuntimeUtil.UNDEFINED);
-        if (!(thenFn instanceof Callable c)) {
+        if (!(thenFn instanceof Callable c && c.isCallable())) {
             throw RuntimeUtil.typeError("then is not a function");
         }
         return c.call(promise, new Object[] { thenFinally, catchFinally });
@@ -284,7 +286,7 @@ public class BuiltinPromise extends NativeObject {
     // own top-level `.then()` call.
     private static Object invokeThen(JSEnvironment env, Object promiseLike, Callable valueThunk) {
         Object thenFn = env.getAccessor(promiseLike).getProperty(promiseLike, "then", RuntimeUtil.UNDEFINED);
-        if (!(thenFn instanceof Callable c)) {
+        if (!(thenFn instanceof Callable c && c.isCallable())) {
             throw RuntimeUtil.typeError("then is not a function");
         }
         return c.call(promiseLike, new Object[] { valueThunk });
@@ -334,13 +336,12 @@ public class BuiltinPromise extends NativeObject {
 	private Object registerReactions(Constructor constructor, Callable onFulfilled, Callable onRejected) {
 		PromiseCapability capability = newPromiseCapability(getEnvironment(),constructor);
 
-		Callable onFul = isCallable(onFulfilled) ? (Callable) onFulfilled : null;
-		Callable onRej = isCallable(onRejected) ? (Callable) onRejected : null;
+		Callable onFul = BuiltinUtil.asCallable(onFulfilled);
+		Callable onRej = BuiltinUtil.asCallable(onRejected);
 
-		// Per spec: if a rejection handler is provided, mark promise as handled
-		if (onRej != null) {
-			this.isHandled = true;
-		}
+		// PerformPromiseThen: every then() marks the promise as handled, with or
+		// without a rejection handler (the derived promise carries the rejection)
+		this.isHandled = true;
 
 		PromiseReaction fulfillReaction = new PromiseReaction(Type.FULFILL, capability, onFul);
 		PromiseReaction rejectReaction = new PromiseReaction(Type.REJECT, capability, onRej);
@@ -397,10 +398,6 @@ public class BuiltinPromise extends NativeObject {
 		return null;
 	}
 
-	private static boolean isCallable(Object o) {
-		return o instanceof Callable;
-	}
-
 	public State getState() {
 		return state;
 	}
@@ -439,13 +436,13 @@ public class BuiltinPromise extends NativeObject {
 				// The getter can fail...
 		        JSAccessor a = getEnvironment().getAccessor(resolution);
 		        thenValue = a.getProperty(resolution, "then", null);
-	        } catch (Throwable ex) {
+	        } catch (Exception ex) {
 	        	RuntimeUtil.rethrowIfUncatchable(ex);
 	            _this.reject(JSRuntimeException.exceptionObject(ex));
 	            return;
 	        }
 
-	        if (!(thenValue instanceof Callable then)) {
+	        if (!(thenValue instanceof Callable then && then.isCallable())) {
 	            _this.fulfill(resolution);
 	            return;
 	        }
@@ -489,7 +486,7 @@ public class BuiltinPromise extends NativeObject {
 						then.call(resolution, resolveFn, rejectFn);
 					} catch(JSRuntimeUncatchableException t) {
 						throw t;
-					} catch (Throwable t) {
+					} catch (Exception t) {
 						if (!called.get()) {
 							_this.reject(JSRuntimeException.exceptionObject(t));
 						}

@@ -41,7 +41,7 @@ public class BuiltinSet implements Set<Object>, SetLike, PropertiesHolder {
 	private JSObjectInternal properties;
 
 	public BuiltinSet(JSEnvironment env) {
-		this.map = new JavaScriptMap(env.supportMixedBigNumber());
+		this.map = new JavaScriptMap(env, env.supportMixedBigNumber());
 	}
 
 	@Override
@@ -96,7 +96,7 @@ public class BuiltinSet implements Set<Object>, SetLike, PropertiesHolder {
 	@Override
 	public boolean add(Object e) {
 		// Spec: a -0 value is stored as +0
-		e = RuntimeUtil.canonicalizeKeyedCollectionKey(e);
+		e = map.canonicalKey(e);
 		if(!map.containsKey(e)) {
 			map.put(e,null);
 			return true;
@@ -137,7 +137,7 @@ public class BuiltinSet implements Set<Object>, SetLike, PropertiesHolder {
 			return true;
 		}
 		// We have to use a copy so the right equals() operation is used
-		JavaScriptMap cmap = new JavaScriptMap(map.isMixedBigNumbers());
+		JavaScriptMap cmap = new JavaScriptMap(map.getEnvironment(), map.isMixedBigNumbers());
 		for(Object k: c) {
 			cmap.put(k,null);
 		}

@@ -15,11 +15,14 @@
  */
 package org.monflabs.galtajs.rt.builtins.primitives.string;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import java.text.Collator;
 import java.text.Normalizer;
 import java.text.Normalizer.Form;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
+import java.util.Map;
 
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.jsonfactory.JSArray;
@@ -190,6 +193,14 @@ public class BuiltinStringPrototype extends BasePrimitivePrototype {
 		}
 	}
 	
+	// Collators per locale, cached per thread (a Collator is not thread-safe):
+	// localeCompare is the usual sort comparator, called O(n log n) times.
+	private static final ThreadLocal<Map<Locale,Collator>> COLLATORS = ThreadLocal.withInitial(HashMap::new);
+
+	private static Collator collator(Locale locale) {
+		return COLLATORS.get().computeIfAbsent(locale, Collator::getInstance);
+	}
+
 	private final static class Method extends BaseMethod {
 		private MethodId methodId;
 
@@ -221,7 +232,7 @@ public class BuiltinStringPrototype extends BasePrimitivePrototype {
 			if(RuntimeUtil.isNullOrUndefined(method)) {
 				return NO_DISPATCH;
 			}
-			if(!(method instanceof Callable c)) {
+			if(!(method instanceof Callable c && c.isCallable())) {
 				throw notCallableError(receiver, symbol, method);
 			}
 			return c.call(receiver, args);
@@ -256,7 +267,7 @@ public class BuiltinStringPrototype extends BasePrimitivePrototype {
 		private Object invokeMethodRequired(Object receiver, Symbol symbol, Object... args) {
 			JSAccessor acc = getEnvironment().getAccessor(receiver);
 			Object method = acc.getProperty(receiver, symbol, RuntimeUtil.UNDEFINED);
-			if(!(method instanceof Callable c)) {
+			if(!(method instanceof Callable c && c.isCallable())) {
 				throw notCallableError(receiver, symbol, method);
 			}
 			return c.call(receiver, args);
@@ -439,7 +450,7 @@ public class BuiltinStringPrototype extends BasePrimitivePrototype {
 	        		// differently-ORDERED (but canonically equivalent) combining
 	        		// sequences can still compare unequal. Normalizing both operands to
 	        		// NFC first (which performs that reordering) before handing them to
-	        		// a Collator (default locale when none is explicitly requested)
+	        		// a Collator (Locale.ROOT when no locale is explicitly requested)
 	        		// satisfies both requirements.
 	        		// isNormalized() is a cheap scan (no allocation) that
 	        		// short-circuits the actual normalize() call for the
@@ -448,8 +459,7 @@ public class BuiltinStringPrototype extends BasePrimitivePrototype {
 	        		// so it runs O(n log n) times per sort.
 	        		String thisNorm = Normalizer.isNormalized(_this, Form.NFC) ? _this : Normalizer.normalize(_this, Form.NFC);
 	        		String thatNorm = Normalizer.isNormalized(that, Form.NFC) ? that : Normalizer.normalize(that, Form.NFC);
-	        		Collator collator = Collator.getInstance(locale!=null ? locale : Locale.ROOT);
-	        		return collator.compare(thisNorm,thatNorm);
+	        		return collator(locale!=null ? locale : Locale.ROOT).compare(thisNorm,thatNorm);
 	        	}
 	    		case match -> {
 	    			// Per spec: RequireObjectCoercible(this) already happened
@@ -644,7 +654,8 @@ public class BuiltinStringPrototype extends BasePrimitivePrototype {
 	        	}
 	        	case split -> {
 	        		JSArray a = JSArray.create(getEnvironment());
-	        		Object sep = param(args, 0, null);
+	        		// A missing separator is undefined (not null, which is the "null" separator)
+	        		Object sep = param(args, 0, RuntimeUtil.UNDEFINED);
 	        		Object pLimit = param(args,1,RuntimeUtil.UNDEFINED);
 	        		// Per spec, a custom @@split method is called with the RAW
 	        		// limit argument, unconverted - ToUint32(limit) only
@@ -677,11 +688,13 @@ public class BuiltinStringPrototype extends BasePrimitivePrototype {
 	        			limit = (int) Math.min(RuntimeUtil.toUInt32(getEnvironment(), pLimit), Integer.MAX_VALUE);
 	        		}
 	        		//int limit = (int)Math.min(RuntimeUtil.toLength(context,pLimit),Integer.MAX_VALUE); // Doesn't make sense to have a huge limit (long)
-	        		if(sep instanceof RegExp re) {
-	        			if(limit==0) {
-	        				return a;
+	        		// A RegExp reaches this point only when its @@split was removed:
+	        		// it is then an ordinary object, converted with ToString below
+	        		if(sep==RuntimeUtil.UNDEFINED) {
+	        			if(limit>0) {
+	        				a.arrayAdd(_this);
 	        			}
-	        			return re.split(JSRuntimeContext.get(), _this, limit);
+	        			return a;
 	        		}
 	        		// Per spec, separator is ToString()-converted BEFORE the
 	        		// "if limit is 0" check - confirmed via
@@ -1009,7 +1022,7 @@ public class BuiltinStringPrototype extends BasePrimitivePrototype {
 	    	// replace/replaceValue-evaluation-order.js:
 	    	// "".replace("a", {toString(){...}}) must still invoke toString()
 	    	// exactly once even though "a" is never found in "").
-	    	String nonCallableReplace = replace instanceof Callable ? null : RuntimeUtil.toString(env, replace);
+	    	String nonCallableReplace = BuiltinUtil.isCallable(replace) ? null : RuntimeUtil.toString(env, replace);
 			int idx = indexOf(source,value,0);
 			if (idx >= 0) {
 				StringBuilder b = new StringBuilder(source.length()+64);
@@ -1020,7 +1033,7 @@ public class BuiltinStringPrototype extends BasePrimitivePrototype {
 				do {
 					// Add the replacement
 					String toReplace;
-					if(replace instanceof Callable cb) {
+					if(replace instanceof Callable cb && cb.isCallable()) {
 		                final Object[] args = new Object[] {
 		                	value,
 		                	idx,

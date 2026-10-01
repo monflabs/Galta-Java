@@ -343,7 +343,7 @@ class IteratorZip {
 				throw RuntimeUtil.typeError("Iterator.concat arguments must be objects");
 			}
 			Object method = RuntimeUtil.getProperty(env, item, org.monflabs.galtajs.rt.builtins.primitives.symbol.Symbol.ITERATOR, RuntimeUtil.UNDEFINED);
-			if(!(method instanceof Callable c)) {
+			if(!(method instanceof Callable c && c.isCallable())) {
 				throw RuntimeUtil.typeError("Object is not iterable");
 			}
 			iterables.add(new Object[]{item,c});

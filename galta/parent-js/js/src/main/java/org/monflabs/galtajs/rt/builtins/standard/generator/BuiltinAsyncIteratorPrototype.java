@@ -15,6 +15,7 @@
  */
 package org.monflabs.galtajs.rt.builtins.standard.generator;
 
+import org.monflabs.galtajs.rt.builtins.BuiltinUtil;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.rt.JSRuntimeException;
 import org.monflabs.galtajs.rt.RuntimeUtil;
@@ -79,7 +80,7 @@ public class BuiltinAsyncIteratorPrototype extends BasePrototype {
 			Object returnMethod;
 			try {
 				returnMethod = RuntimeUtil.getProperty(env, _this, "return");
-				if(returnMethod!=null && returnMethod!=RuntimeUtil.UNDEFINED && !(returnMethod instanceof Callable)) {
+				if(returnMethod!=null && returnMethod!=RuntimeUtil.UNDEFINED && !BuiltinUtil.isCallable(returnMethod)) {
 					throw RuntimeUtil.typeError("return is not a function");
 				}
 			} catch(RuntimeException ex) {
