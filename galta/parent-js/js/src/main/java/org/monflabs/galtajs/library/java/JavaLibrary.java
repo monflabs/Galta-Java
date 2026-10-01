@@ -17,6 +17,7 @@ package org.monflabs.galtajs.library.java;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
@@ -35,6 +36,7 @@ import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.JSEnvironment.Builder;
 import org.monflabs.galtajs.jsonfactory.JSObject;
 import org.monflabs.galtajs.jsonfactory.JSObject.DESC_CHECK;
+import org.monflabs.galtajs.rt.JSRuntimeException;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.Callable;
 import org.monflabs.galtajs.rt.builtins.Constructor;
@@ -70,15 +72,7 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			@Override
 			public Object call(Object _this, Object[] parameters) {
 				Object result = call( (v,c) -> JavaLibrary.this.convertObject(v, c), _this instanceof JavaClass, _this, parameters);
-				// A reflective handle (Class.forName(), obj.getClass(), ...) must not give
-				// access to a class the access manager refuses to load by name
-				if(result instanceof Class<?> c) {
-					AccessManager am = getAccessManager();
-					if(am!=null && !am.canLoadClass(c.getName())) {
-						throw RuntimeUtil.typeError("Java class '{0}' cannot be loaded", c.getName());
-					}
-				}
-				return result;
+				return checkClassAccess(result);
 			}
 		}
 		private JavaClassMetadata( AccessManager accessManager) {
@@ -155,7 +149,15 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 		
 	private HashMap<String, JavaClass> primitives = new HashMap<String, JavaClass>();
 	
-	private HashMap<Class<?>, JavaClass> javaClassCache = new HashMap<Class<?>, JavaClass>();
+	// A ClassValue rather than a Map keyed by Class (like ClassMetadata's own
+	// cache): the entry lives with the class, so a class and its loader are
+	// not pinned by this library
+	private final ClassValue<JavaClass> javaClassCache = new ClassValue<>() {
+		@Override
+		protected JavaClass computeValue(Class<?> clazz) {
+			return new JavaClassImpl(classMetadata.getClassInfoCache(clazz));
+		}
+	};
 
 	private boolean useConstructors = true;
 	private boolean useFields = true;
@@ -208,14 +210,30 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 	}
 	
 	@Override
-	public synchronized JavaClass getJavaClass(Class<?> clazz) {
-		JavaClass jc = javaClassCache.get(clazz);
-		if(jc==null) {
-			ClassInfoCache ci = classMetadata.getClassInfoCache(clazz);
-			jc = new JavaClassImpl(ci);
-			javaClassCache.put(clazz, jc);
+	public JavaClass getJavaClass(Class<?> clazz) {
+		return javaClassCache.get(clazz);
+	}
+
+	// A reflective handle (Class.forName(), obj.getClass(), getInterfaces(), a
+	// Class-typed field...) must not give access to a class the access manager
+	// refuses to load by name
+	private Object checkClassAccess(Object value) {
+		AccessManager am = getAccessManager();
+		if(am!=null) {
+			if(value instanceof Class<?> c) {
+				checkClassAccess(am, c);
+			} else if(value instanceof Class<?>[] classes) {
+				for(Class<?> c: classes) {
+					checkClassAccess(am, c);
+				}
+			}
 		}
-		return jc;
+		return value;
+	}
+	private static void checkClassAccess(AccessManager am, Class<?> c) {
+		if(c!=null && !am.canLoadClass(c.getName())) {
+			throw RuntimeUtil.typeError("Java class '{0}' cannot be loaded", c.getName());
+		}
 	}
 
 	@Override
@@ -336,19 +354,30 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			ConstructorCache m = (ConstructorCache) cache.findCallable(true, parameters, true);
 			if (m != null) {
 				// Create the java object
-				try {
-					if (parameters != null && parameters.length > 0) {
-						Class<?>[] args = m.getArgClasses();
-						for (int i = 0; i < parameters.length; i++) {
-							parameters[i] = convertObject(parameters[i], args[i]);
-						}
+				// Convert into a copy: the caller's array must not be modified
+				Object[] args = parameters;
+				if (parameters != null && parameters.length > 0) {
+					Class<?>[] argClasses = m.getArgClasses();
+					args = new Object[parameters.length];
+					for (int i = 0; i < parameters.length; i++) {
+						args[i] = convertObject(parameters[i], argClasses[i]);
 					}
-					Object o = m.getConstructor().newInstance(parameters);
+				}
+				try {
+					Object o = m.getConstructor().newInstance(args);
 					if(RuntimeUtil.isPrimitiveType(o)) {
 						return RuntimeUtil.primitiveAsObject(JSEnvironment.getEnvironment(),o);
 					}
 					return o;
-				} catch (Exception e) {
+				} catch (InvocationTargetException e) {
+					// The exception thrown by the constructor itself
+					Throwable t = e.getCause()!=null ? e.getCause() : e;
+					if(t instanceof JSRuntimeException jse) {
+						throw jse;
+					}
+					throw RuntimeUtil.error(t, "Error while calling java constructor '{0}': {1}",
+							ClassMetadata.getMethodSignature(c.getName(), parameters), t.toString());
+				} catch (ReflectiveOperationException | IllegalArgumentException e) {
 					throw RuntimeUtil.error(e, "Error while calling java constructor '{0}'",
 							ClassMetadata.getMethodSignature(c.getName(), parameters));
 				}
@@ -672,7 +701,7 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			if (m != null) {
 				// Value accessor
 				if (m instanceof ValueAccessor acc) {
-					return acc.get(null);
+					return checkClassAccess(acc.get(null));
 				}
 				// If it is a method, then return a callable object
 				if (m instanceof MethodCache mc) {
@@ -683,67 +712,6 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			return defaultValue;
 			//return super._getOwnMember(env,base,  _this, member, defaultValue);
 		}
-
-//		@Override
-//		public Object constructObject(Object _ctor, Object[] parameters) {
-//			JavaClassImpl jc = (JavaClassImpl) _ctor;
-//
-//			AccessManager accessManager = getAccessManager(); 
-//			if(accessManager!=null && !accessManager.canCreateObject(jc.getClass())) {
-//				throw RuntimeUtil.typeError("Java class '{0}' cannot be created", jc.getClass());
-//			}
-//
-//			// Find and call the proper ctor
-//			// Find the best constructor using 2 passes
-//			ConstructorCache cache = jc.getClassInfoCache().getConstructors();
-//			ConstructorCache m = (ConstructorCache) cache.findCallable(true, parameters, true);
-//			if (m != null) {
-//				// Create the java object
-//				try {
-//					if (parameters != null && parameters.length > 0) {
-//						Class<?>[] args = m.getArgClasses();
-//						for (int i = 0; i < parameters.length; i++) {
-//							parameters[i] = convertObject(parameters[i], args[i]);
-//						}
-//					}
-//					return m.getConstructor().newInstance(parameters);
-//				} catch (Exception e) {
-//					throw JSRuntimeException.jsRuntimeException(e, "Error while calling java constructor '{0}'",
-//							ClassMetadata.getMethodSignature(jc.getNativeClass().getName(), parameters));
-//				}
-//			}
-//			throw JSRuntimeException.jsRuntimeException("Cannot find java public constructor '{0}'",
-//					ClassMetadata.getMethodSignature(jc.getNativeClass().getName(), parameters));
-//		}
-//
-//		@Override
-//		public final Object constructArray(Object _ctor, int dimensions, long size) {
-//			JavaClassImpl jc = (JavaClassImpl) _ctor;
-//			
-//			AccessManager accessManager = getAccessManager(); 
-//			if(accessManager!=null && !accessManager.canCreateArray(jc.getClass())) {
-//				throw RuntimeUtil.typeError("Java array '{0}' cannot be created", jc.getClass());
-//			}
-//			
-//			Class<?> c = jc.getNativeClass();
-//			return _constructArray(c, dimensions, size);
-//		}
-//
-//		protected Object _constructArray(Class<?> c, int dimensions, long size) {
-//			if (dimensions > 0) {
-//				for (int i = 0; i < dimensions; i++) {
-//					c = getArrayClass(c);
-//				}
-//			}
-//			if(size>Integer.MAX_VALUE) {
-//            	throw RuntimeUtil.typeError("Invalid size {0}", size);
-//			}
-//			return Array.newInstance(c, (int)size);
-//		}
-//
-//		private Class<?> getArrayClass(Class<?> c) {
-//			return Array.newInstance(c, 0).getClass();
-//		}
 	}
 	
 	public class JavaAccessor extends JavaLibraryAccessor {
@@ -830,9 +798,8 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			Class<?> clazz = _this instanceof JavaClass jc ? jc.getNativeClass() : _this.getClass();
 			MemberCache m = classMetadata.getClassInfoCache(clazz).getMembers(member);
 			if (m != null) {
-				if (m instanceof ValueAccessor) {
-					ValueAccessor acc = (ValueAccessor) m;
-					return acc.get(_this);
+				if (m instanceof ValueAccessor acc) {
+					return checkClassAccess(acc.get(_this));
 				}
 				// If it is a method, then return a callable object
 				if (m instanceof MethodCache mc) {
@@ -846,10 +813,11 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 		@Override
 		public Object getOwnProperty(Object _this, long index, Object defaultValue, Object receiver) {
 			if (_this instanceof List<?> list) {
-				if(index>Integer.MAX_VALUE) {
-	            	throw RuntimeUtil.typeError("Invalid index value {0}", index);
+				// Like a JS array: reading past the end gives undefined
+				if(index>=0 && index<list.size()) {
+					return list.get((int)index);
 				}
-				return list.get((int)index);
+				return RuntimeUtil.UNDEFINED;
 			}
 			return defaultValue;
 		}
@@ -876,10 +844,20 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 		@Override
 		public boolean setOwnProperty(Object _this, long index, Object value, PropertyDescriptor desc, DESC_CHECK check, Object receiver) {
 			if (_this instanceof List<?> list) {
-				if(index>Integer.MAX_VALUE) {
-	            	throw RuntimeUtil.typeError("Invalid index value {0}", index);
+				if(index>Integer.MAX_VALUE-8) {
+					throw RuntimeUtil.rangeError("Invalid Java List index {0}", index);
 				}
-				((List<Object>) list).set((int)index, value);
+				// Past the end, like a JS array: the list grows (a Java list
+				// has no holes, they are null - as in the JSArrayList wrapper)
+				List<Object> l = (List<Object>) list;
+				while(l.size()<index) {
+					l.add(null);
+				}
+				if(index<l.size()) {
+					l.set((int)index, value);
+				} else {
+					l.add(value);
+				}
 				return true;
 			}
 			return false;
@@ -977,7 +955,13 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			}
 			int size = Array.getLength(_this);
 			if (index >= 0 && index < size) {
-				Array.set(_this, (int)index, value);
+				// A JS number is a Double (or an Integer): convert it to the
+				// component type (an int[] slot cannot take a Double as is)
+				try {
+					Array.set(_this, (int)index, convertObject(value, _this.getClass().getComponentType()));
+				} catch(IllegalArgumentException | ClassCastException e) {
+					throw RuntimeUtil.typeError("Cannot store {0} into a Java {1}", RuntimeUtil.objectTypeName(value), getClassName(_this));
+				}
 				return true;
 			}
 			throw RuntimeUtil.error("Invalid Java Array index {0}, max is {1}", index, size);

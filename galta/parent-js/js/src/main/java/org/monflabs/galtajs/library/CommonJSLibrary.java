@@ -17,13 +17,11 @@ package org.monflabs.galtajs.library;
 
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.JSEnvironment.Builder;
-import org.monflabs.galtajs.JSException;
 import org.monflabs.galtajs.JSModule;
 import org.monflabs.galtajs.rt.JSRuntimeContext;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.BaseMethod;
 import org.monflabs.galtajs.rt.builtins.standard.global.StandardObjects;
-import org.monflabs.util.PathUtil;
 
 
 /**
@@ -62,31 +60,12 @@ public class CommonJSLibrary extends GlobalLibrary {
 			switch(index) {
 				case require: {
 					String name = paramString(parameters, 0);
-					// Extension, load as is
-					if(PathUtil.FILE_AGNOSTIC.hasFileExtension(name)) {
-						JSModule mod = RuntimeUtil.importModule(JSRuntimeContext.get(), name);
-						return mod.getDefaultExport();
-					}
-					// No extension, multiple tries
-					JSException jse;
-					try {
-						JSModule mod = RuntimeUtil.importModule(JSRuntimeContext.get(), name);
-						return mod.getDefaultExport();
-					} catch(JSException ex) {
-						jse = ex;
-					}
-					try {
-						JSModule mod = RuntimeUtil.importModule(JSRuntimeContext.get(), PathUtil.FILE_AGNOSTIC.setExtension(name,"js"));
-						return mod.getDefaultExport();
-					} catch(JSException ex) {
-					}
-// We don't do JSON for now
-//					try {
-//						JSModule mod = RuntimeUtil.importModule(JSRuntimeContext.get(), PathUtil.FILE_AGNOSTIC.setExtension(name,"json"));
-//						return mod.getDefaultExport();
-//					} catch(JSException ex) {
-//					}
-					throw jse;
+					// The module resolvers already fall back to name+".js" for
+					// an extension-less name (AbstractModuleResolver.getModule())
+					// - retrying here would run a failing module body twice and
+					// replace its error with a "not found" one
+					JSModule mod = RuntimeUtil.importModule(JSRuntimeContext.get(), name);
+					return mod.getDefaultExport();
 				}
 				default: {
 				    throw new IllegalStateException(); // Should never be here 

@@ -172,4 +172,34 @@ public class InProcessCdpConnectionTest extends TestCase {
 		final CdpException cdp = failureOf(() -> connection.call("Runtime.enable", null).get(TIMEOUT, TimeUnit.SECONDS));
 		assertEquals(CdpException.TRANSPORT_CLOSED, cdp.code());
 	}
+
+	// A failed send fails only its own call: the next calls still go out
+	public void testAFailedSendDoesNotPoisonLaterCalls() throws Exception {
+		final java.util.concurrent.atomic.AtomicInteger sends = new java.util.concurrent.atomic.AtomicInteger();
+		final AtomicReference<org.monflabs.galtajs.cdp.CdpClientChannel.ChannelListener> peer = new AtomicReference<>();
+		final org.monflabs.galtajs.cdp.CdpClientChannel channel = new org.monflabs.galtajs.cdp.CdpClientChannel() {
+			@Override
+			public void listen(final ChannelListener listener) {
+				peer.set(listener);
+			}
+			@Override
+			public java.util.concurrent.CompletionStage<?> sendText(final String text) {
+				if (sends.getAndIncrement() == 0) {
+					return java.util.concurrent.CompletableFuture.failedFuture(new java.io.IOException("first send fails"));
+				}
+				// Echo an empty result for the request's id
+				final Object id = ((Map<?, ?>)Json.parse(text)).get("id");
+				peer.get().onText(Json.write(Json.object("id", id, "result", Json.object())), true);
+				return java.util.concurrent.CompletableFuture.completedFuture(null);
+			}
+			@Override
+			public void requestClose() {
+			}
+		};
+		final CdpConnection connection = CdpConnection.open(channel, new Events());
+		final CdpException cdp = failureOf(() -> connection.call("Runtime.enable", null).get(TIMEOUT, TimeUnit.SECONDS));
+		assertEquals(CdpException.TRANSPORT_CLOSED, cdp.code());
+		assertNotNull(connection.call("Runtime.enable", null).get(TIMEOUT, TimeUnit.SECONDS));
+		assertNotNull(connection.call("Debugger.enable", null).get(TIMEOUT, TimeUnit.SECONDS));
+	}
 }

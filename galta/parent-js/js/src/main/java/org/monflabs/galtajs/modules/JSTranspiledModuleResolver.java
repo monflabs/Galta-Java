@@ -16,6 +16,7 @@
 package org.monflabs.galtajs.modules;
 
 import java.lang.reflect.Constructor;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import org.monflabs.galtajs.JSEnvironment;
@@ -56,23 +57,30 @@ public class JSTranspiledModuleResolver extends ScriptModuleResolver {
 		// Instantiating the unit does not run its body (initModule() does).
 		@Override
 		public String getModuleSourceText() {
-			try {
-				Constructor<?> ctor = clazz.getConstructor(JSEnvironment.class,String.class);
-				JSTranspiledUnit unit = (JSTranspiledUnit)ctor.newInstance(env,getName());
-				String source = unit.getFullSourceCode();
-				if(source!=null) {
-					return source;
-				}
-			} catch(Exception e) {
-				// Fall through: treated as a native module.
-			}
-			return super.getModuleSourceText();
+			String source = sourceTexts.get(clazz).orElse(null);
+			return source!=null ? source : super.getModuleSourceText();
 		}
 	}
 
 	private JSEnvironment env;
 	private ClassLoader classLoader;
 	private String basePackage;
+
+	// The source text retained by a generated class, read once per class
+	// (reading it takes an instance)
+	private final ClassValue<Optional<String>> sourceTexts = new ClassValue<>() {
+		@Override
+		protected Optional<String> computeValue(Class<?> clazz) {
+			try {
+				Constructor<?> ctor = clazz.getConstructor(JSEnvironment.class,String.class);
+				JSTranspiledUnit unit = (JSTranspiledUnit)ctor.newInstance(env,null);
+				return Optional.ofNullable(unit.getFullSourceCode());
+			} catch(ReflectiveOperationException | ClassCastException e) {
+				// Treated as a native module
+				return Optional.empty();
+			}
+		}
+	};
 
 	public JSTranspiledModuleResolver(JSEnvironment env, ClassLoader classLoader, String basePackage) {
 		this.env = env;
@@ -98,8 +106,13 @@ public class JSTranspiledModuleResolver extends ScriptModuleResolver {
 		try {
 			String className = moduleNameToJavaClassName(basePackage, name);
 			Class<? extends JSTranspiledUnit> clazz = loadClass(env,className);
+			if(!JSTranspiledUnit.class.isAssignableFrom(clazz)) {
+				return null;
+			}
 			return new Descriptor(name, clazz);
-		} catch(Exception e) {
+		} catch(ClassNotFoundException | LinkageError e) {
+			// Not found (a LinkageError: a class file whose name differs only
+			// by case, on a case-insensitive file system...)
 			return null;
 		}
 	}

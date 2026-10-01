@@ -86,6 +86,8 @@ assertEquals("[function, text/plain, POST, https://example.com/items, 201]", Str
 
 Sample: `doc_examples/BundledLibrariesExamples.java` (`testFetchLibraryObjects`)
 
+`new FetchLibrary(uriPolicy, maxBodySize)` restricts what scripts can reach: `uriPolicy` (a `Predicate<URI>`, null allows everything) is checked for the request URL and for every redirect target before it is followed, and a response body larger than `maxBodySize` bytes rejects the promise. The no-argument constructor allows every `http`/`https` URL and caps bodies at 64 MB (system property `galtajs.fetch.maxBodyBytes`). An invalid or non-http(s) URL, a URL refused by the policy and a header the HTTP client manages itself (`Host`, `Content-Length`, `Connection`...) reject the promise with a `TypeError`.
+
 ## NodeLibrary
 
 Registers `NodeModuleResolver`, which serves a Node-compatible file-system module under the specifiers `fs`, `node:fs`, `fs/promises` and `node:fs/promises`.
@@ -93,6 +95,8 @@ Registers `NodeModuleResolver`, which serves a Node-compatible file-system modul
 `fs` (`NodeFsModule`) exports the synchronous functions `readFileSync`, `writeFileSync`, `appendFileSync`, `existsSync`, `statSync`, `mkdirSync`, `rmSync`, `readdirSync`, `unlinkSync`, `renameSync`, `copyFileSync`, `realpathSync`, `accessSync`, and the callback forms `readFile`, `writeFile`, `appendFile`, `exists`, `stat`, `mkdir`, `rm`, `readdir`, `unlink`, `rename`, `copyFile`, `realpath`, `access`.
 
 `fs/promises` (`NodeFsPromisesModule`) exports the promise-returning `readFile`, `writeFile`, `appendFile`, `stat`, `access`, `realpath`, `mkdir`, `rm`, `readdir`, `unlink`, `rename`, `copyFile`.
+
+As in Node, a failed call gives an `Error` whose `code` is the Node error code (`ENOENT`, `EEXIST`, `EISDIR`, `ENOTDIR`, `ENOTEMPTY`, `EACCES`, `EIO` otherwise), with `syscall` and `path` properties; `stat()` results have `size`, the `*timeMs` times and the `isFile()`, `isDirectory()`, `isSymbolicLink()` methods. The `encoding` option accepts `utf8`, `latin1`/`binary`, `ascii`, `utf16le`/`ucs2`, `hex`, `base64` and `base64url` (a file is read as a UTF-8 string when no encoding is given: there is no `Buffer`). An invalid path argument throws (callback API) or rejects (promise API) a `TypeError`.
 
 ```java
 JSEnvironment env = JavaScriptEnvironment.newBuilder()

@@ -166,14 +166,14 @@ public class EngineRegression2JavaTest extends __BaseTestCase {
 	public void testPathTranspilerNamesAndCommonJS() throws Exception {
 		Path src = Files.createTempDirectory("pt-src");
 		Path out = Files.createTempDirectory("pt-out");
-		// "a-.js" and "A.js" both map to class p.A (names are case-insensitive,
-		// non-identifier characters are dropped)
-		Files.writeString(src.resolve("A.js"), "var x=1;");
-		Files.writeString(src.resolve("a-.js"), "var x=2;");
+		// "fooBar.js" and "foobar.js" map to classes p.FooBar and p.Foobar,
+		// whose files would overwrite each other on a case-insensitive file system
+		Files.writeString(src.resolve("fooBar.js"), "var x=1;");
+		Files.writeString(src.resolve("foobar.js"), "var x=2;");
 		PathTranspiler t = PathTranspiler.newBuilder()
 				.options(JSTranspilerOptions.newBuilder().build())
 				.sourceFolder(src).outputFolder(out).jsPackage("p")
-				.pathFactory(() -> List.of(src.resolve("A.js"), src.resolve("a-.js")))
+				.pathFactory(() -> List.of(src.resolve("fooBar.js"), src.resolve("foobar.js")))
 				.build();
 		assertThrows(JSTranspilerException.class, t::execute);
 		Path src2 = Files.createTempDirectory("pt-src2");

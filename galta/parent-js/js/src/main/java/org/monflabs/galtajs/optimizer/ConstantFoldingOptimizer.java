@@ -33,7 +33,6 @@ import org.monflabs.galtajs.node.unaryop.ASTUnaryOp;
 import org.monflabs.galtajs.node.variable.ASTVariableDecl;
 import org.monflabs.galtajs.rt.JSResult;
 import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext;
-import org.monflabs.util.Console;
 import org.monflabs.util.StringFormat;
 
 /**
@@ -98,9 +97,12 @@ next:	for(int i=0; i<count; i++) {
 							continue next;
 						}
 					} catch(Exception ex) {
-						// Ignore errors, keep the code as is
-						Console.log("Issue in ConstantFolding Optimizer - Keep existing code, {0}:{1}",ex.getClass(),ex.getMessage());
-						//ex.printStackTrace();
+						// The expression throws when evaluated (6+2n...): keep the
+						// code as is, it throws at runtime
+						PrintStream ps = context.getTraceStream();
+						if(ps!=null) {
+							ps.println(StringFormat.format("*** Constant folding not applied, {0}: {1}",ex.getClass().getName(),ex.getMessage()));
+						}
 					}
 				}
 				

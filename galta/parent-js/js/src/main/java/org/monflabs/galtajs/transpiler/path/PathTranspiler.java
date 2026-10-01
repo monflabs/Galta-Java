@@ -178,16 +178,17 @@ public class PathTranspiler {
 	        info("[js-transpiler] Found {0} source files.", paths.size());
 	        
 	        List<String> targetFiles = new ArrayList<String>();
-	        // Class and module names are case-insensitive (lower-cased): A.js and
-	        // a.js would silently overwrite each other's generated class
+	        // Class names are case-sensitive, but the generated .java/.class files
+	        // can land on a case-insensitive file system: fooBar.js and foobar.js
+	        // (classes FooBar and Foobar) would silently overwrite each other
 	        java.util.Map<String,Path> classSources = new java.util.HashMap<>();
 	        for(Path source: paths) {
 	            info("[js-transpiler] Transpiling " + source + ".");
 	            
 	            String sourcePath = PathUtil.FILE.getRelativePath(rootPath, source.toString());
 	            String fullClassName = JSTranspiler.moduleNameToJavaClassName(jsPackage, sourcePath);
-	            String moduleName = sourcePath.toLowerCase();
-	            Path previous = classSources.putIfAbsent(fullClassName, source);
+	            String moduleName = sourcePath;
+	            Path previous = classSources.putIfAbsent(fullClassName.toLowerCase(java.util.Locale.ROOT), source);
 	            if(previous!=null) {
 	            	throw new JSTranspilerException(null, "{0} and {1} map to the same class {2}", previous, source, fullClassName);
 	            }

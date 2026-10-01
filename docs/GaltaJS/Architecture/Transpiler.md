@@ -14,6 +14,8 @@ r.getTranspilerMap();   // JSTranspilerMap, when sourceMap(true)
 
 `JSTranspiler.moduleNameToJavaClassName(basePackage, moduleName)` derives class names; resolvers use the base package `js` (`JSSourceModuleResolver.JS_PACKAGE_NAME`).
 
+The mapping drops an optional trailing `.js`, turns path separators into package separators and capitalizes the first letter of the class (`a/b/calc.js` -> `a.b.Calc`); it is otherwise injective (case preserved, `_` escapes: `beautify-html.js` -> `Beautify_dhtml`, `Ab` -> `_Ab`, `1a` -> `_1a`), so distinct modules never share a class.
+
 ## Generated class layout
 
 Verified shape (from the probe in this session and `parent-js-precompiled/js-precompiled-beautify-js/target/generated-sources/js/js/Beautify.java`):

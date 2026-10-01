@@ -17,11 +17,15 @@ package org.monflabs.galtajs.library.node.fs;
 
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
+import java.nio.file.Path;
+
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.JSModuleDescriptor;
 import org.monflabs.galtajs.jsonfactory.JSObject;
 import org.monflabs.galtajs.modules.JSNativeModule;
 import org.monflabs.galtajs.rt.JSRuntimeContext;
+import org.monflabs.galtajs.rt.JSRuntimeException;
+import org.monflabs.galtajs.rt.JSRuntimeUncatchableException;
 import org.monflabs.galtajs.rt.builtins.BaseMethod;
 import org.monflabs.galtajs.rt.executors.JSExecutor;
 
@@ -91,44 +95,58 @@ public final class NodeFsPromisesModule extends JSNativeModule {
 
 		@Override
 		protected Object invoke(final Object obj, final Object[] args) {
-			final Object a0 = arg(args, 0), a1 = arg(args, 1), a2 = arg(args, 2);
+			final Object a1 = arg(args, 1), a2 = arg(args, 2);
 			JSExecutor executor = JSRuntimeContext.get().getGlobalContext().getExecutor();
+			// The path is checked here, on the script's thread: an invalid
+			// one rejects the promise
+			final Path p0;
+			final Path p1;
+			try {
+				p0 = NodeFsOps.pathOf(fs, arg(args, 0));
+				p1 = methodId == MethodId.rename || methodId == MethodId.copyFile ? NodeFsOps.pathOf(fs, a1) : null;
+			} catch (JSRuntimeUncatchableException e) {
+				throw e;
+			} catch (JSRuntimeException e) {
+				return executor.asyncFunction(() -> {
+					throw e;
+				});
+			}
 			switch (methodId) {
 				case readFile -> {
-					return executor.asyncFunction(() -> NodeFsOps.readFile(NodeFsOps.pathOf(fs, a0), a1));
+					return executor.asyncFunction(() -> NodeFsOps.readFile(p0, a1));
 				}
 				case writeFile -> {
-					return executor.asyncFunction(() -> { NodeFsOps.writeFile(NodeFsOps.pathOf(fs, a0), a1, a2); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.writeFile(p0, a1, a2); return null; });
 				}
 				case appendFile -> {
-					return executor.asyncFunction(() -> { NodeFsOps.appendFile(NodeFsOps.pathOf(fs, a0), a1, a2); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.appendFile(p0, a1, a2); return null; });
 				}
 				case stat -> {
-					return executor.asyncFunction(() -> NodeFsOps.stat(env, NodeFsOps.pathOf(fs, a0)));
+					return executor.asyncFunction(() -> NodeFsOps.stat(env, p0));
 				}
 				case access -> {
-					return executor.asyncFunction(() -> { NodeFsOps.access(NodeFsOps.pathOf(fs, a0)); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.access(p0); return null; });
 				}
 				case realpath -> {
-					return executor.asyncFunction(() -> NodeFsOps.realpath(NodeFsOps.pathOf(fs, a0)));
+					return executor.asyncFunction(() -> NodeFsOps.realpath(p0));
 				}
 				case mkdir -> {
-					return executor.asyncFunction(() -> { NodeFsOps.mkdir(NodeFsOps.pathOf(fs, a0), a1); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.mkdir(p0, a1); return null; });
 				}
 				case rm -> {
-					return executor.asyncFunction(() -> { NodeFsOps.rm(NodeFsOps.pathOf(fs, a0), a1); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.rm(p0, a1); return null; });
 				}
 				case readdir -> {
-					return executor.asyncFunction(() -> NodeFsOps.readdir(env, NodeFsOps.pathOf(fs, a0)));
+					return executor.asyncFunction(() -> NodeFsOps.readdir(env, p0));
 				}
 				case unlink -> {
-					return executor.asyncFunction(() -> { NodeFsOps.unlink(NodeFsOps.pathOf(fs, a0)); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.unlink(p0); return null; });
 				}
 				case rename -> {
-					return executor.asyncFunction(() -> { NodeFsOps.rename(NodeFsOps.pathOf(fs, a0), NodeFsOps.pathOf(fs, a1)); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.rename(p0, p1); return null; });
 				}
 				case copyFile -> {
-					return executor.asyncFunction(() -> { NodeFsOps.copyFile(NodeFsOps.pathOf(fs, a0), NodeFsOps.pathOf(fs, a1)); return null; });
+					return executor.asyncFunction(() -> { NodeFsOps.copyFile(p0, p1); return null; });
 				}
 				default -> {
 					throw new IllegalStateException();

@@ -103,6 +103,15 @@ public class JSPathModuleResolver extends JSSourceModuleResolver {
 		if(!f.startsWith(root) || !Files.isRegularFile(f)) {
 			return null;
 		}
+		// The lexical check is not enough: a symbolic link inside the root can
+		// point outside of it
+		try {
+			if(!f.toRealPath().startsWith(root.toRealPath())) {
+				return null;
+			}
+		} catch(java.io.IOException ex) {
+			return null;
+		}
 		return new Descriptor(name,f,cs);
 	}
 	

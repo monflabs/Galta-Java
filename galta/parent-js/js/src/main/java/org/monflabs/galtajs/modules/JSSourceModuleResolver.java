@@ -120,6 +120,8 @@ public abstract class JSSourceModuleResolver extends ScriptModuleResolver {
 						int flags = 0;
 						if(isCommonJS()) {
 							flags |= JSEnvironment.SCRIPT_COMMONJS;
+						} else {
+							flags |= JSEnvironment.SCRIPT_MODULE;
 						}
 						JSInterpretedUnit script = env.createScript(jsSourceCode,moduleName,flags);
 						JSTranspiler transpiler = new JSTranspiler(env,options);
@@ -173,7 +175,7 @@ public abstract class JSSourceModuleResolver extends ScriptModuleResolver {
 		this.targetFactory = targetFactory;
 	}
 	
-	protected FactoryClassLoader getFactoryClassLoader() {
+	protected synchronized FactoryClassLoader getFactoryClassLoader() {
 		if(classLoader==null) {
 			classLoader = new FactoryClassLoader(baseClassloader, targetFactory);
 		}

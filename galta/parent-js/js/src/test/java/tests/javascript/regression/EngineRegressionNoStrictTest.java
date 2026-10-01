@@ -31,4 +31,12 @@ public class EngineRegressionNoStrictTest extends JavaScriptNoStrictTestCase {
 			assertEquals(7, g(1));
 			""");
 	}
+
+	// An unresolvable identifier read-modify-written inside a with is a ReferenceError
+	public void testUnresolvableInWith() throws Exception {
+		executeCode("""
+			assertThrows(ReferenceError, () => { with({}) { undeclaredInWith++ } });
+			assertThrows(ReferenceError, () => { with({}) { undeclaredInWith += 1 } });
+			""");
+	}
 }

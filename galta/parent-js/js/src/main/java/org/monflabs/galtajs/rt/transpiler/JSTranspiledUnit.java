@@ -103,21 +103,24 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 	protected static class Descriptor implements JSModuleDescriptor {
 		
 		private String name;
-		private Class<? extends JSTranspiledUnit> clazz;
-		
-		public Descriptor(String name, Class<? extends JSTranspiledUnit> clazz) {
+
+		public Descriptor(String name) {
 			this.name = name;
 		}
-		
+		/**
+		 * @deprecated the class is not used: kept for the classes generated
+		 * by earlier versions of the transpiler
+		 */
+		@Deprecated
+		public Descriptor(String name, Class<? extends JSTranspiledUnit> clazz) {
+			this(name);
+		}
+
 		@Override
 		public String getName() {
 			return name;
 		}
 
-		public Class<? extends JSTranspiledUnit> getTranspiledClass() {
-			return clazz;
-		}
-		
 		@Override
 		public boolean isScript() {
 			return false;
@@ -968,54 +971,57 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 		return false;
 	}
 
-	public Object getIdentifierValue(JSTranspiledRuntimeContext context, String varName,  Object[] vars, int index, boolean throwError, Object...with) {
+	// The with-object a name resolves to: HasBinding (9.1.1.2.1) is a genuine
+	// [[HasProperty]] - not a "read and see if it's NOT_AVAILABLE" [[Get]]:
+	// the two are separately observable through a Proxy with-object's own
+	// has/get traps (test262 has-binding-call-with-proxy-env.js) - and the
+	// with-object's @@unscopables can hide the name. -1 when none has it.
+	private int findWithBinding(JSEnvironment env, String varName, Object[] with) {
 		for(int i=0; i<with.length; i++) {
-			// HasBinding (9.1.1.2.1) and GetBindingValue (9.1.1.2.6) are two
-			// DISTINCT [[HasProperty]]/[[Get]] operations, each independently
-			// observable through a Proxy with-object's own `has`/`get` traps
-			// (test262 has-binding-call-with-proxy-env.js and neighbors) -
-			// using [[Get]] alone (as a "not NOT_AVAILABLE" existence check)
-			// wrongly fires `get` for a binding that HasBinding would have
-			// reported false for (and skipped straight to the enclosing
-			// scope), and skips the SEPARATE `get` trap call GetBindingValue
-			// itself must make once existence is confirmed.
 			if(RuntimeUtil.hasProperty(env,with[i],varName) && !isUnscopable(with[i],varName)) {
-				// GetBindingValue (9.1.1.2.6) re-checks HasProperty on its own,
-				// independently of the HasBinding check just above that decided
-				// THIS environment record is where the identifier resolves -
-				// observably distinct for a Proxy with-object whose `has` trap
-				// can log/count calls, or a self-deleting @@unscopables getter
-				// (test262 get-binding-value-*-with-proxy-env.js: expects
-				// has,get(unscopables),has,get - not just has,get(unscopables),
-				// get). GetBindingValue's own S parameter is the REFERENCING
-				// code's own strictness (context.isStrictMode()) - a `with`
-				// statement itself is always non-strict syntactically, but a
-				// nested strict-mode function inside it can still resolve a
-				// free identifier through this with environment and must get
-				// a ReferenceError, not undefined, if the binding vanished
-				// (test262 get-mutable-binding-binding-deleted-in-get-
-				// unscopables-strict-mode.js: a same-named property deleted
-				// by its own @@unscopables getter, read by a nested "use
-				// strict" function).
-				if(!RuntimeUtil.hasProperty(env,with[i],varName)) {
-					if(context.isStrictMode()) {
-						throw RuntimeUtil.referenceError("{0} is not defined", varName);
-					}
-					return RuntimeUtil.UNDEFINED;
-				}
-				Object v = RuntimeUtil.getProperty(env,with[i],varName,RuntimeUtil.UNDEFINED);
-				if(v instanceof Callable c) {
-					return WithClosure.of(with[i],c);
-				}
-				return v;
+				return i;
 			}
+		}
+		return -1;
+	}
+
+	// GetBindingValue (9.1.1.2.6) on a with-object. It re-checks HasProperty
+	// on its own, independently of the HasBinding check that found the
+	// object - observably distinct for a Proxy with-object (test262
+	// get-binding-value-*-with-proxy-env.js expects has,get(unscopables),
+	// has,get). S is the REFERENCING code's own strictness
+	// (context.isStrictMode()), not the with-statement's own (always
+	// non-strict): a nested strict-mode function resolving a free identifier
+	// through this with environment gets a ReferenceError if the binding
+	// vanished (test262 get-mutable-binding-binding-deleted-in-get-
+	// unscopables-strict-mode.js). A function value keeps the with-object as
+	// its `this`.
+	private static Object getWithBindingValue(JSTranspiledRuntimeContext context, Object withObj, String varName) {
+		JSEnvironment env = context.getEnvironment();
+		if(!RuntimeUtil.hasProperty(env,withObj,varName)) {
+			if(context.isStrictMode()) {
+				throw RuntimeUtil.referenceError("{0} is not defined", varName);
+			}
+			return RuntimeUtil.UNDEFINED;
+		}
+		Object v = RuntimeUtil.getProperty(env,withObj,varName,RuntimeUtil.UNDEFINED);
+		if(v instanceof Callable c) {
+			return WithClosure.of(withObj,c);
+		}
+		return v;
+	}
+
+	public Object getIdentifierValue(JSTranspiledRuntimeContext context, String varName,  Object[] vars, int index, boolean throwError, Object...with) {
+		int w = findWithBinding(context.getEnvironment(), varName, with);
+		if(w>=0) {
+			return getWithBindingValue(context, with[w], varName);
 		}
 		if(vars!=null) {
 			return vars[index];
 		}
 		return getIdentifierValue(context, varName, throwError);
 	}
-	
+
 	public VarAccessor getIdentifierAccessor(JSTranspiledRuntimeContext context, String varName) {
 		return getIdentifierAccessor(context, varName, true);
 	}
@@ -1134,93 +1140,62 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 		};
 	}
 	public VarAccessor getIdentifierAccessor(JSTranspiledRuntimeContext context, String varName, Object[] vars, int index, boolean create, Object...with) {
-		for(int i=0; i<with.length; i++) {
-			// See getIdentifierValue(...)'s identical comment: HasBinding
-			// ([[HasProperty]]) and GetBindingValue/SetMutableBinding
-			// ([[Get]]/[[Set]]) are separately observable Proxy trap calls -
-			// this existence check must be a genuine [[HasProperty]], not a
-			// "read and see if it's NOT_AVAILABLE" [[Get]].
-			if(RuntimeUtil.hasProperty(context.getEnvironment(),with[i],varName) && !isUnscopable(with[i],varName)) {
-				int idx = i;
-				return new VarAccessor() {
-					@Override
-					public String getKey() {
-						return varName;
+		int w = findWithBinding(context.getEnvironment(), varName, with);
+		if(w>=0) {
+			Object withObj = with[w];
+			return new VarAccessor() {
+				@Override
+				public String getKey() {
+					return varName;
+				}
+				@Override
+				public Object getValue() {
+					return getWithBindingValue(context, withObj, varName);
+				}
+				@Override
+				public Object setValue(Object value) {
+					// SetMutableBinding (9.1.1.2.5) re-checks HasProperty on its
+					// own too (step 2) - same Proxy-observability reasoning as
+					// getValue() (test262 set-mutable-binding-*-with-proxy-env.js).
+					// A PLAIN assignment's generated code calls setValue()
+					// directly (no surrounding stillExists() check the way
+					// compound assignment's assignXXX() runtime methods have),
+					// so S must be checked HERE: a strict function writing to a
+					// binding its @@unscopables getter just deleted gets a
+					// ReferenceError, not a silent recreate (test262
+					// set-mutable-binding-binding-deleted-in-get-unscopables-
+					// strict-mode.js).
+					if(!RuntimeUtil.hasProperty(context.getEnvironment(),withObj,varName) && context.isStrictMode()) {
+						throw RuntimeUtil.referenceError("{0} is not defined", varName);
 					}
-					@Override
-					public Object getValue() {
-						// GetBindingValue (9.1.1.2.6) re-checks HasProperty on its own,
-						// independently of the HasBinding check that already ran to
-						// even reach this VarAccessor - observably distinct for a Proxy
-						// with-object (test262 get-binding-value-*-with-proxy-env.js).
-						// S is the REFERENCING code's own strictness
-						// (context.isStrictMode()), not the with-statement's own
-						// (always non-strict) - a nested strict-mode function can
-						// still resolve a free identifier through this with
-						// environment (test262 get-mutable-binding-binding-deleted-
-						// in-get-unscopables-strict-mode.js).
-						if(!RuntimeUtil.hasProperty(context.getEnvironment(),with[idx],varName)) {
-							if(context.isStrictMode()) {
-								throw RuntimeUtil.referenceError("{0} is not defined", varName);
-							}
-							return RuntimeUtil.UNDEFINED;
-						}
-						Object v = RuntimeUtil.getProperty(context.getEnvironment(),with[idx],varName,RuntimeUtil.UNDEFINED);
-						if(v instanceof Callable c) {
-							return WithClosure.of(with[idx],c);
-						}
-						return v;
-					}
-					@Override
-					public Object setValue(Object value) {
-						// SetMutableBinding (9.1.1.2.5) re-checks HasProperty on its
-						// own too (step 2), independently of the HasBinding check
-						// above - same Proxy-observability reasoning as getValue()
-						// (test262 set-mutable-binding-*-with-proxy-env.js). A PLAIN
-						// assignment's generated code calls setValue() directly (no
-						// surrounding stillExists() check the way compound
-						// assignment's assignXXX() runtime methods have), so S (the
-						// referencing code's own strictness) must be checked HERE -
-						// test262 set-mutable-binding-binding-deleted-in-get-
-						// unscopables-strict-mode.js: a nested "use strict" function
-						// writing through this with environment to a binding its own
-						// @@unscopables getter just deleted must get a
-						// ReferenceError, not a silent recreate.
-						if(!RuntimeUtil.hasProperty(context.getEnvironment(),with[idx],varName) && context.isStrictMode()) {
-							throw RuntimeUtil.referenceError("{0} is not defined", varName);
-						}
-						RuntimeUtil.setProperty(context.getEnvironment(),with[idx],varName,value);
-						return value;
-					}
-					@Override
-					public boolean stillExists() {
-						// Mirrors InterpretedWithRuntimeContext.resolveOwnIdentifierEntry's
-						// identical override - a with-object-backed binding can be deleted
-						// (e.g. by a self-deleting getter, or the RHS of the assignment
-						// itself) between this accessor's resolution and the eventual
-						// write; SetMutableBinding must re-check HasProperty rather than
-						// rely on the interface default of "always exists".
-						return RuntimeUtil.hasProperty(context.getEnvironment(),with[idx],varName);
-					}
-				};
-			}
+					RuntimeUtil.setProperty(context.getEnvironment(),withObj,varName,value);
+					return value;
+				}
+				@Override
+				public boolean stillExists() {
+					// Mirrors InterpretedWithRuntimeContext.resolveOwnIdentifierEntry's
+					// identical override - a with-object-backed binding can be
+					// deleted between this accessor's resolution and the write
+					return RuntimeUtil.hasProperty(context.getEnvironment(),withObj,varName);
+				}
+			};
 		}
 		if(vars!=null) {
 			return JSVarRef.of(varName,vars,index);
 		}
 		VarAccessor a = context.getGlobalContext().getGlobalThis().getOwnVariableAccessor(varName,create);
 		if(a==null) {
-			throw new IllegalStateException(StringFormat.format("Unknown variable {0}",varName));
+			throw RuntimeUtil.referenceError("{0} is not defined", varName);
 		}
 		return a;
 	}
 	
 	public boolean deleteIdentifier(JSTranspiledRuntimeContext ctx, String varName, VAR_TYPE varType, Object[] vars, int index, Object...with) {
-		for(int i=0; i<with.length; i++) {
-			boolean v = RuntimeUtil.getOwnPropertyDescriptor(ctx.getEnvironment(),with[i],varName)!=null;
-			if(v && !isUnscopable(with[i],varName)) {
-				return RuntimeUtil.deleteProperty(ctx.getEnvironment(),with[i],varName);
-			}
+		// HasBinding is [[HasProperty]]: an inherited property resolves to the
+		// with-object too (and is then not deleted, it is not its own)
+		int w = findWithBinding(ctx.getEnvironment(), varName, with);
+		if(w>=0) {
+			return RuntimeUtil.deleteProperty(ctx.getEnvironment(),with[w],varName);
 		}
 		return deleteIdentifier(ctx, varName, varType, vars, index);
 	}	
@@ -1315,23 +1290,6 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 	public Object memberGetWithThis(Object instance, Object memberName, Object thisArg) {
 		return RuntimeUtil.getPropertyWithReceiver(env, instance, memberName, thisArg);
 	}
-	
-	
-//	public Object memberGet(Object instance, Function<Object,Object> memberFunc) {
-//		if(instance instanceof JSObject jo) {
-//			return jo.getProperty(memberFunc.apply(instance),RuntimeUtil.UNDEFINED);
-//		}
-//		return RuntimeUtil.getProperty(env, instance, memberFunc.apply(instance),RuntimeUtil.UNDEFINED);
-//	}
-//	public Object memberGet(Object instance, Function<Object,Object> memberFunc, boolean nullop) {
-//		if(instance==null && nullop) {
-//			return RuntimeUtil.UNDEFINED;
-//		}
-//		if(instance instanceof JSObject jo) {
-//			return jo.getProperty(memberFunc.apply(instance),RuntimeUtil.UNDEFINED);
-//		}
-//		return RuntimeUtil.getProperty(env, instance, memberFunc.apply(instance), RuntimeUtil.UNDEFINED);
-//	}
 	
 	
 	//

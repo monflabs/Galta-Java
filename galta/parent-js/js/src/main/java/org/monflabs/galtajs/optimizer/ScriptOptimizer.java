@@ -34,8 +34,11 @@ public class ScriptOptimizer {
 		private PrintStream traceStream;
 		private boolean traceNodes;
 
+		/**
+		 * @param optimizers the optimizers to run, in order; the array is copied
+		 */
 		public Builder optimizers(NodeOptimizer[] optimizers) {
-			this.optimizers = optimizers;
+			this.optimizers = optimizers!=null ? optimizers.clone() : null;
 			return this;
 		}
 		public Builder traceStream(PrintStream traceStream) {
@@ -64,6 +67,11 @@ public class ScriptOptimizer {
 		return EMPTY_NODE_OPTIMIZER;
 	}
 
+	/**
+	 * The optimizers of {@link #defaultOptimizer()}. A public array, so it can
+	 * be modified: {@link Builder#optimizers(NodeOptimizer[])} copies it, so
+	 * that cannot affect an optimizer already built from it.
+	 */
 	public static final NodeOptimizer[] DEFAULT_NODE_OPTIMIZER_NODES = new NodeOptimizer[] {
 		// Constant folding and dead-code removal fused into one traversal
 		// instead of two separate full passes - see
@@ -96,7 +104,7 @@ public class ScriptOptimizer {
 	}
 	
 	public NodeOptimizer[] getNodeOptimizers() {
-		return optimizers;
+		return optimizers!=null ? optimizers.clone() : null;
 	}
 
 	public boolean isTraceNodes() {

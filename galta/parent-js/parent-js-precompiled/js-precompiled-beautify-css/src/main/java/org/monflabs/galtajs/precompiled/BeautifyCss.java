@@ -53,7 +53,7 @@ public class BeautifyCss {
 					.supportGlobalAlias(true)
 					.build();
 		}
-		js.Beautifycss js = new js.Beautifycss(env);
+		js.Beautify_dcss js = new js.Beautify_dcss(env);
 		runtimeContext = new TranspiledGlobalRuntimeContext(env,env.createProgramExecutor());
         js.executeWithContext(runtimeContext);	
 	}

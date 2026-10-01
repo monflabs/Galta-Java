@@ -33,6 +33,10 @@ import org.monflabs.galtajs.cdp.CdpClientChannel;
  */
 final class JdkWebSocketChannel implements CdpClientChannel {
 
+	// One client for every dial: an HttpClient owns a selector thread and
+	// its resources, released only when it is closed or collected
+	private static final HttpClient CLIENT = HttpClient.newHttpClient();
+
 	private volatile WebSocket socket;
 	private volatile ChannelListener listener;
 
@@ -77,7 +81,7 @@ final class JdkWebSocketChannel implements CdpClientChannel {
 				}
 			}
 		};
-		return HttpClient.newHttpClient()
+		return CLIENT
 				.newWebSocketBuilder()
 				.buildAsync(URI.create(wsUrl), wsListener)
 				.thenApply(ws -> {

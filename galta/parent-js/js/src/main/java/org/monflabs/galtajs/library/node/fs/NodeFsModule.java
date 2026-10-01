@@ -17,12 +17,14 @@ package org.monflabs.galtajs.library.node.fs;
 
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
+import java.nio.file.Path;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.JSModuleDescriptor;
 import org.monflabs.galtajs.jsonfactory.JSObject;
 import org.monflabs.galtajs.modules.JSNativeModule;
 import org.monflabs.galtajs.rt.JSRuntimeContext;
 import org.monflabs.galtajs.rt.JSRuntimeException;
+import org.monflabs.galtajs.rt.JSRuntimeUncatchableException;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.BaseMethod;
 import org.monflabs.galtajs.rt.builtins.Callable;
@@ -189,96 +191,96 @@ public final class NodeFsModule extends JSNativeModule {
 				case readFile -> {
 					// readFile(path, cb) or readFile(path, options, cb)
 					int last = args.length - 1;
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					final Object options = last >= 2 ? args[1] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> NodeFsOps.readFile(NodeFsOps.pathOf(fs, path), options));
+					runAsync(cb, () -> NodeFsOps.readFile(path, options));
 					return null;
 				}
 				case writeFile -> {
 					// writeFile(path, data, cb) or writeFile(path, data, options, cb)
 					int last = args.length - 1;
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					final Object data = arg(args, 1);
 					final Object options = last >= 3 ? args[2] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> { NodeFsOps.writeFile(NodeFsOps.pathOf(fs, path), data, options); return null; });
+					runAsync(cb, () -> { NodeFsOps.writeFile(path, data, options); return null; });
 					return null;
 				}
 				case appendFile -> {
 					int last = args.length - 1;
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					final Object data = arg(args, 1);
 					final Object options = last >= 3 ? args[2] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> { NodeFsOps.appendFile(NodeFsOps.pathOf(fs, path), data, options); return null; });
+					runAsync(cb, () -> { NodeFsOps.appendFile(path, data, options); return null; });
 					return null;
 				}
 				case exists -> {
 					// exists(path, cb) — legacy signature: cb(exists) — no error arg.
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					Callable cb = extractCallback(arg(args, 1));
-					runAsyncExists(cb, () -> NodeFsOps.exists(NodeFsOps.pathOf(fs, path)));
+					runAsyncExists(cb, () -> NodeFsOps.exists(path));
 					return null;
 				}
 				case stat -> {
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> NodeFsOps.stat(env, NodeFsOps.pathOf(fs, path)));
+					runAsync(cb, () -> NodeFsOps.stat(env, path));
 					return null;
 				}
 				case mkdir -> {
 					int last = args.length - 1;
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					final Object options = last >= 2 ? args[1] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> { NodeFsOps.mkdir(NodeFsOps.pathOf(fs, path), options); return null; });
+					runAsync(cb, () -> { NodeFsOps.mkdir(path, options); return null; });
 					return null;
 				}
 				case rm -> {
 					int last = args.length - 1;
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					final Object options = last >= 2 ? args[1] : null;
 					Callable cb = extractCallback(arg(args, last));
-					runAsync(cb, () -> { NodeFsOps.rm(NodeFsOps.pathOf(fs, path), options); return null; });
+					runAsync(cb, () -> { NodeFsOps.rm(path, options); return null; });
 					return null;
 				}
 				case readdir -> {
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> NodeFsOps.readdir(env, NodeFsOps.pathOf(fs, path)));
+					runAsync(cb, () -> NodeFsOps.readdir(env, path));
 					return null;
 				}
 				case unlink -> {
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					Callable cb = extractCallback(arg(args, 1));
-					runAsync(cb, () -> { NodeFsOps.unlink(NodeFsOps.pathOf(fs, path)); return null; });
+					runAsync(cb, () -> { NodeFsOps.unlink(path); return null; });
 					return null;
 				}
 				case rename -> {
-					final Object src = arg(args, 0);
-					final Object dst = arg(args, 1);
+					final Path src = NodeFsOps.pathOf(fs, arg(args, 0));
+					final Path dst = NodeFsOps.pathOf(fs, arg(args, 1));
 					Callable cb = extractCallback(arg(args, 2));
-					runAsync(cb, () -> { NodeFsOps.rename(NodeFsOps.pathOf(fs, src), NodeFsOps.pathOf(fs, dst)); return null; });
+					runAsync(cb, () -> { NodeFsOps.rename(src, dst); return null; });
 					return null;
 				}
 				case copyFile -> {
-					final Object src = arg(args, 0);
-					final Object dst = arg(args, 1);
+					final Path src = NodeFsOps.pathOf(fs, arg(args, 0));
+					final Path dst = NodeFsOps.pathOf(fs, arg(args, 1));
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> { NodeFsOps.copyFile(NodeFsOps.pathOf(fs, src), NodeFsOps.pathOf(fs, dst)); return null; });
+					runAsync(cb, () -> { NodeFsOps.copyFile(src, dst); return null; });
 					return null;
 				}
 				case realpath -> {
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> NodeFsOps.realpath(NodeFsOps.pathOf(fs, path)));
+					runAsync(cb, () -> NodeFsOps.realpath(path));
 					return null;
 				}
 				case access -> {
-					final Object path = arg(args, 0);
+					final Path path = NodeFsOps.pathOf(fs, arg(args, 0));
 					Callable cb = extractCallback(arg(args, args.length - 1));
-					runAsync(cb, () -> { NodeFsOps.access(NodeFsOps.pathOf(fs, path)); return null; });
+					runAsync(cb, () -> { NodeFsOps.access(path); return null; });
 					return null;
 				}
 				default -> {
@@ -310,7 +312,10 @@ public final class NodeFsModule extends JSNativeModule {
 				Object err = null;
 				try {
 					result = body.call();
-				} catch (Throwable t) {
+				} catch (JSRuntimeUncatchableException t) {
+					// a stop request: not an error for the callback
+					throw t;
+				} catch (Exception t) {
 					err = JSRuntimeException.exceptionObject(t);
 				}
 				final Object fErr = err;
@@ -334,7 +339,9 @@ public final class NodeFsModule extends JSNativeModule {
 				Object result;
 				try {
 					result = body.call();
-				} catch (Throwable t) {
+				} catch (JSRuntimeUncatchableException t) {
+					throw t;
+				} catch (Exception t) {
 					result = Boolean.FALSE;
 				}
 				final Object fResult = result;

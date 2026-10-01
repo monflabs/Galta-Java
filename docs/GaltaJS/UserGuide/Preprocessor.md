@@ -44,7 +44,7 @@ assertEquals(SOURCE.lines().count(), debug.lines().count());
 | `// #endif` | Ends the block. |
 | `// #define`, `// #undef` | Recognized but not implemented: they throw. |
 
-Whitespace between `//` and `#` is allowed. The condition is a single symbol name looked up in the map; expressions (`&&`, `!`, comparisons) are not supported. Truthiness follows JavaScript rules: a `Boolean` is itself, a `Number` is true when non-zero, a `String` when non-empty, `null` or an unknown symbol is false.
+Whitespace between `//` and `#` is allowed. A directive is a whole word at the start of a line comment: `//#ifdebug` or `//#elsewhere` are plain comments, and a source without any directive is returned unchanged. The condition is a single symbol name looked up in the map; expressions (`&&`, `!`, comparisons) are not supported. Truthiness follows JavaScript rules: a `Boolean` is itself, a `Number` is true when non-zero, a `String` when non-empty, `null` or an unknown symbol is false.
 
 Sample: `doc_examples/PreprocessorExamples.java` (`testSymbolsAreTruthyValues`)
 

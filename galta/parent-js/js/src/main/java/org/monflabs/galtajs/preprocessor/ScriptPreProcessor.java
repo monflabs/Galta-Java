@@ -46,9 +46,14 @@ public class ScriptPreProcessor {
 	 */
 	private static final String LINE_BREAK = "\n";
 
-	private static Pattern containsDirectives = Pattern.compile("//[\\ \\t]*#");
+	// A directive: a whole word (#if, not #ifdebug), right after "//" and
+	// spaces
+	private static final Pattern DIRECTIVE = Pattern.compile("#(define|undef|if|elif|else|endif)(?![\\w$])");
+	// Only a source with a directive at the start of a line is rewritten:
+	// "//#" elsewhere (a URL fragment in a string...) is not one
+	private static final Pattern CONTAINS_DIRECTIVES = Pattern.compile("(?m)^[ \\t]*//[ \\t]*#(define|undef|if|elif|else|endif)(?![\\w$])");
 	private static boolean shouldPreprocess(String s) {
-		return containsDirectives.matcher(s).find();
+		return s.contains("#") && CONTAINS_DIRECTIVES.matcher(s).find();
 	}
 	
 	private static enum State {
@@ -121,25 +126,18 @@ public class ScriptPreProcessor {
     		if(removeSpace.startsWith("//")) {
     	        PreprocessorMatcher m = (PreprocessorMatcher)_matcher.set(removeSpace,2);
     	        m.skipSpaces();
-    			if(m.match("#define")) {
-    				processDefine(m);
-    				return true;
-    			} else if(m.match("#undef")) {
-    				processUndef(m);
-    				return true;
-    			} else if(m.match("#if")) {
-    				processIf(m);
-    				return true;
-    			} else if(m.match("#else")) {
-    				processElse(m);
-    				return true;
-    			} else if(m.match("#elif")) {
-    				processElif(m);
-    				return true;
-    			} else if(m.match("#endif")) {
-    				processEndif(m);
-    				return true;
-    			}
+    	        String directive = m.readRegExp(DIRECTIVE);
+    	        if(directive!=null) {
+    	        	switch(directive) {
+    	        		case "#define" -> processDefine(m);
+    	        		case "#undef" -> processUndef(m);
+    	        		case "#if" -> processIf(m);
+    	        		case "#else" -> processElse(m);
+    	        		case "#elif" -> processElif(m);
+    	        		default -> processEndif(m);
+    	        	}
+    	        	return true;
+    	        }
     		}
     	}
         return false;
@@ -195,12 +193,14 @@ public class ScriptPreProcessor {
         state = State.DEFAULT;
     }
     
+    // Recognized, so that a script relying on them fails rather than
+    // silently running with the wrong code (see the documentation)
     private void processDefine(PreprocessorMatcher m) {
-        throw new PreProcessorException(null,"!!! not yet implemented");
+        throw new PreProcessorException(null,"#define is not supported");
     }
     
     private void processUndef(PreprocessorMatcher m) {
-        throw new PreProcessorException(null,"!!! not yet implemented");
+        throw new PreProcessorException(null,"#undef is not supported");
     }
     
     private boolean evalExpression(PreprocessorMatcher m) {

@@ -35,7 +35,6 @@ import org.monflabs.galtajs.transpiler.context.JSTranspilerGeneratorContext;
 import org.monflabs.galtajs.transpiler.context.TranspilerCodeSplitter;
 import org.monflabs.galtajs.transpiler.context.TranspilerGeneratorMainContext;
 import org.monflabs.galtajs.types.JSType;
-import org.monflabs.util.PathUtil;
 import org.monflabs.util.StringFormat;
 import org.monflabs.util.StringUtil;
 
@@ -67,7 +66,6 @@ public class JSTranspiler {
 	public static String MAIN_FUNCTION_IMPL = "_runValue";
 	
 	public static String MAIN_CONTEXT = "_ctx";
-	//public static String MAIN_ENVIRONMENT = "env";
 	public static String MAIN_ENVIRONMENT = "env";
 	public static String FUNCTION_ARGUMENTS = "_args";
 	public static String EXCEPTION_VAR = "_ex";
@@ -174,7 +172,6 @@ public class JSTranspiler {
 			b.println("import org.monflabs.galtajs.*;");
 			b.println("import org.monflabs.galtajs.rt.*;");
 			b.println("import org.monflabs.galtajs.rt.builtins.*;");
-			//b.println("import org.monflabs.galtajs.rt.builtin.jsobjects.*;");
 			b.println("import org.monflabs.galtajs.rt.builtins.standard.regexp.*;");
 			b.println("import org.monflabs.galtajs.rt.builtins.standard.function.*;");
 			b.println("import org.monflabs.galtajs.rt.builtins.standard.arguments.Arguments;");
@@ -206,7 +203,7 @@ public class JSTranspiler {
 			b.println("}");
 			b.println("public {0}(JSEnvironment env, String moduleName) {", className);
 			b.incIndent();
-			b.println("super(env,new Descriptor(moduleName,{0}.class));",className);
+			b.println("super(env,new Descriptor(moduleName));");
 			b.decIndent();
 			b.println("}");
 			b.println("");
@@ -454,7 +451,6 @@ public class JSTranspiler {
 		b.println("protected void {1}({2} {3}) {", resultClass, MAIN_FUNCTION_IMPL, JSTranspiledRuntimeContext.class.getSimpleName(), MAIN_CONTEXT);
 
 		b.incIndent();
-		//b.println("final var {0}={1}.getEnvironment();",MAIN_ENVIRONMENT,GLOBAL_CONTEXT);
 		//b.println("final var {0}={1};",MAIN_CONTEXT,GLOBAL_CONTEXT);
 		if(StaticConfiguration.TRANSPILER_NO_CLOSURE) {
 			b.println("final var tmp=new TempVar();",TEMP_VAR);
@@ -628,51 +624,34 @@ public class JSTranspiler {
 		return test.equals("false") ? "Boolean.FALSE.booleanValue()" : test;
 	}
 
+	// fn(value), the value of a sequence being dereferenced first
+	private static String convert(String fn, JSTranspilerGeneratorContext ctx, ASTNode node) {
+		String value = node.transpileJavaExpression(ctx);
+		return node.isSequence() ? fn+"(deref("+value+"))" : fn+"("+value+")";
+	}
+
 	public static String asNumber(JSTranspilerGeneratorContext ctx, ASTNode node) {
-		if(node.isSequence()) {
-			return StringFormat.format("toNumber(deref({0}))", node.transpileJavaExpression(ctx));
-		} else {
-			return StringFormat.format("toNumber({0})", node.transpileJavaExpression(ctx));
-		}
+		return convert("toNumber", ctx, node);
 	}
 
 	public static String asString(JSTranspilerGeneratorContext ctx, ASTNode node) {
-		if(node.isSequence()) {
-			return StringFormat.format("toString(deref({0}))", node.transpileJavaExpression(ctx));
-		} else {
-			return StringFormat.format("toString({0})", node.transpileJavaExpression(ctx));
-		}
+		return convert("toString", ctx, node);
 	}
 	public static String asString(JSTranspilerGeneratorContext ctx, ASTNode node, boolean nulls) {
-		if(node.isSequence()) {
-			return StringFormat.format("toString(deref({0}),{1})", node.transpileJavaExpression(ctx), nulls);
-		} else {
-			return StringFormat.format("toString({0},{1})", node.transpileJavaExpression(ctx), nulls);
-		}
+		String value = node.transpileJavaExpression(ctx);
+		return StringFormat.format(node.isSequence() ? "toString(deref({0}),{1})" : "toString({0},{1})", value, nulls);
 	}
 
 	public static String asInt32(JSTranspilerGeneratorContext ctx, ASTNode node) {
-		if(node.isSequence()) {
-			return StringFormat.format("toInt32(deref({0}))", node.transpileJavaExpression(ctx));
-		} else {
-			return StringFormat.format("toInt32({0})", node.transpileJavaExpression(ctx));
-		}
+		return convert("toInt32", ctx, node);
 	}
 
 	public static String asCallable(JSTranspilerGeneratorContext ctx, ASTNode node) {
-		if(node.isSequence()) {
-			return StringFormat.format("toCallable(deref({0}))", node.transpileJavaExpression(ctx));
-		} else {
-			return StringFormat.format("toCallable({0})", node.transpileJavaExpression(ctx));
-		}
+		return convert("toCallable", ctx, node);
 	}
 
 	public static String asFunction(JSTranspilerGeneratorContext ctx, ASTNode node) {
-		if(node.isSequence()) {
-			return StringFormat.format("toFunction(deref({0}))", node.transpileJavaExpression(ctx));
-		} else {
-			return StringFormat.format("toFunction({0})", node.transpileJavaExpression(ctx));
-		}
+		return convert("toFunction", ctx, node);
 	}
 
 	// Wider than asFunction()'s toFunction() (BuiltinFunction) - NamedEvaluation
@@ -680,11 +659,7 @@ public class JSTranspiler {
 	// CLASS expression value (test262 fn-name-class.js: `{id: class {}}`), and
 	// BuiltinClassConstructor is a BaseCallableObject but not a BuiltinFunction.
 	public static String asBaseCallableObject(JSTranspilerGeneratorContext ctx, ASTNode node) {
-		if(node.isSequence()) {
-			return StringFormat.format("toBaseCallableObject(deref({0}))", node.transpileJavaExpression(ctx));
-		} else {
-			return StringFormat.format("toBaseCallableObject({0})", node.transpileJavaExpression(ctx));
-		}
+		return convert("toBaseCallableObject", ctx, node);
 	}
 
 	public static String asVar(JSTranspilerGeneratorContext ctx, VariableDef var) {
@@ -721,56 +696,104 @@ public class JSTranspiler {
 	}
 
 
-	//
-	// Default conversion from a module name to a class name
-	// 
+	/**
+	 * Default conversion from a module name to a Java class name.
+	 * <p>
+	 * A trailing {@code .js} is dropped (the extension is optional in module
+	 * names, so "a" and "a.js" are the same module), the path separators
+	 * ({@code /} or {@code \\}) become package separators and the last segment
+	 * is the class name. The encoding is otherwise injective, so two distinct
+	 * module names never share a class (the class name is also the cache key
+	 * of the compiled modules):
+	 * <ul>
+	 * <li>ASCII letters and digits are kept as is, except the first character
+	 * of the class name: a lowercase letter is capitalized ("ab" -&gt; "Ab")</li>
+	 * <li>{@code _} is the escape character: {@code __} is '_', {@code _d} is
+	 * '-', {@code _o} is '.', {@code _s} is a space, {@code _xHHHH} is any
+	 * other UTF-16 char, {@code _e} is an empty segment</li>
+	 * <li>{@code _} followed by an uppercase letter or a digit is that
+	 * character, kept literally where it would otherwise be ambiguous or
+	 * invalid: an uppercase first class character ("Ab" -&gt; "_Ab") or a
+	 * leading digit ("1a" -&gt; "_1a")</li>
+	 * <li>a package segment that is a Java keyword has its first character
+	 * escaped</li>
+	 * </ul>
+	 */
 	public static String moduleNameToJavaClassName(String basePackage, String moduleName) {
-		StringBuilder b = new StringBuilder();
-
 		if(moduleName.endsWith(".js")) {
 			moduleName = moduleName.substring(0, moduleName.length()-3);
 		}
-		
-		int len = moduleName.length();
-		boolean newPart = true;
-		
-		for(int i=0; i<len; i++) {
-			char c = moduleName.charAt(i);
-			if(c=='/' || c=='\\') {
-				newPart = true;
-				continue;
-			}
-			
-			if(newPart) {
-				if(Character.isJavaIdentifierPart(c)) {
-					if(!b.isEmpty()) {
-						b.append('.');
-					}
-					b.append(Character.toLowerCase(c));
-					newPart = false;
-				}
-			} else {
-				if(Character.isJavaIdentifierPart(c)) {
-					b.append(Character.toLowerCase(c));
-				}
-			}
-		}
-		
-		String name = b.toString();
-		
-		// Capitalize the class name
-		int pos = name.lastIndexOf('.');
-		if(pos<0) {
-			name = StringUtil.capitalizeFirstCharacter(name);
-		} else {
-			name = name.substring(0,pos+1) + StringUtil.capitalizeFirstCharacter(name.substring(pos+1));
-		}
-		
+
+		StringBuilder b = new StringBuilder(moduleName.length()+16);
 		if(StringUtil.isNotEmpty(basePackage)) {
-			name = PathUtil.DOT.concat(basePackage, name);
+			b.append(basePackage);
 		}
-		
-		return name;
+		if(moduleName.isEmpty()) {
+			return b.toString();
+		}
+
+		int len = moduleName.length();
+		int start = 0;
+		while(start<=len) {
+			int end = start;
+			while(end<len && moduleName.charAt(end)!='/' && moduleName.charAt(end)!='\\') {
+				end++;
+			}
+			if(!b.isEmpty()) {
+				b.append('.');
+			}
+			encodeModuleNameSegment(b, moduleName.substring(start, end), end>=len);
+			start = end+1;
+		}
+		return b.toString();
+	}
+	private static void encodeModuleNameSegment(StringBuilder b, String segment, boolean className) {
+		if(segment.isEmpty()) {
+			b.append("_e");
+			return;
+		}
+		boolean keyword = !className && javax.lang.model.SourceVersion.isKeyword(segment);
+		for(int i=0; i<segment.length(); i++) {
+			char c = segment.charAt(i);
+			boolean first = i==0;
+			if(c>='a' && c<='z') {
+				if(first && className) {
+					b.append((char)(c-'a'+'A'));
+				} else if(first && keyword) {
+					appendHexEscape(b, c);
+				} else {
+					b.append(c);
+				}
+			} else if(c>='A' && c<='Z') {
+				if(first && className) {
+					b.append('_');
+				}
+				b.append(c);
+			} else if(c>='0' && c<='9') {
+				if(first) {
+					b.append('_');
+				}
+				b.append(c);
+			} else if(c=='_') {
+				b.append("__");
+			} else if(c=='-') {
+				b.append("_d");
+			} else if(c=='.') {
+				b.append("_o");
+			} else if(c==' ') {
+				b.append("_s");
+			} else {
+				appendHexEscape(b, c);
+			}
+		}
+	}
+	private static void appendHexEscape(StringBuilder b, char c) {
+		b.append("_x");
+		String hex = Integer.toHexString(c);
+		for(int k=hex.length(); k<4; k++) {
+			b.append('0');
+		}
+		b.append(hex);
 	}
 
 }

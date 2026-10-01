@@ -30,6 +30,7 @@ import org.monflabs.galtajs.debug.api.DebugListener;
 import org.monflabs.galtajs.debug.api.DebugScript;
 import org.monflabs.galtajs.debug.api.DebugValues;
 import org.monflabs.galtajs.debug.api.Debugger;
+import org.monflabs.galtajs.debug.api.ExceptionEvent;
 import org.monflabs.galtajs.debug.api.ExecutionContext;
 import org.monflabs.galtajs.debug.api.Location;
 import org.monflabs.galtajs.debug.api.PauseOnExceptions;
@@ -167,6 +168,16 @@ public class DebuggerImpl implements Debugger, DebugHook {
 				rootUnit.executeWithContext(gctxForThread);
 			} catch (JSRuntimeInterruptException e) {
 				// normal stop request
+			} catch (Throwable t) {
+				// Uncaught: reported to the listeners rather than lost in the
+				// thread's default handler
+				Object thrown = t instanceof JSRuntimeException ? JSRuntimeException.exceptionObject(t) : t;
+				String message = t.getMessage()!=null ? t.getMessage() : t.toString();
+				ExceptionEvent event = new ExceptionEvent(thrown, message, null, java.util.List.of(), executionContext);
+				fireListeners(l -> l.exceptionThrown(event));
+				if (t instanceof VirtualMachineError vme && !(t instanceof StackOverflowError)) {
+					throw vme;
+				}
 			} finally {
 				synchronized (DebuggerImpl.this) {
 					debuggable.setDebugHook(null);
@@ -175,6 +186,8 @@ public class DebuggerImpl implements Debugger, DebugHook {
 				fireListeners(DebugListener::executionFinished);
 			}
 		}, "GaltaJS-Debug-" + rootUnit.getDescriptor().getName());
+		// A script left paused or running must not keep the JVM alive
+		executionThread.setDaemon(true);
 		executionThread.start();
 	}
 

@@ -23,6 +23,7 @@ import org.monflabs.galtajs.rt.JSRuntimeContext;
 import org.monflabs.galtajs.rt.JSRuntimeInterruptException;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.BaseMethod;
+import org.monflabs.galtajs.rt.builtins.Callable;
 import org.monflabs.galtajs.rt.builtins.standard.global.StandardObjects;
 import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext;
 import org.monflabs.util.FileUtil;
@@ -127,14 +128,19 @@ public class RhinoShellLibrary extends RhinoLibrary {
 	        		}
 	        		for(int i=0; i<args.length; i++) {
 	        			String fn = paramString(args, i);
-	        			File f = new File(baseDir,fn);
-	        			if(!f.exists() || !f.isFile()) {
-		        			throw new IllegalStateException(StringFormat.format("File '{0}' is not a valid file",f.getPath()));
-	        			}
+	        			File f = resolveFile(baseDir, fn);
 		        		String code = FileUtil.readContent(f);
-		        		JSInterpretedUnit sc = env.createScript(code, fn);
-		        		// Should have a better way here to avoid the cast
-		        		sc.executeWithContext((JSInterpretedRuntimeContext)JSRuntimeContext.get());
+		        		// Like Rhino, the file runs in the global scope
+		        		JSRuntimeContext global = JSRuntimeContext.get().getGlobalContext();
+		        		if(global instanceof JSInterpretedRuntimeContext) {
+			        		JSInterpretedUnit sc = env.createScript(code, fn);
+			        		sc.executeWithContext(global);
+		        		} else {
+		        			// A transpiled caller: an indirect eval runs the code in
+		        			// that same global scope
+		        			Object eval = env.getStandardObjects().getOwnProperty("eval");
+		        			((Callable)eval).call(RuntimeUtil.UNDEFINED, new Object[] {code});
+		        		}
 	        		}
 	        		
 	        		return RuntimeUtil.UNDEFINED;
@@ -145,5 +151,19 @@ public class RhinoShellLibrary extends RhinoLibrary {
 	            }
 	        }
 	    }
-	}
+	
+	    // Only a file inside the base directory, symbolic links resolved
+	    private File resolveFile(File baseDir, String fn) {
+	    	try {
+	    		File base = baseDir.getCanonicalFile();
+	    		File f = new File(base,fn).getCanonicalFile();
+	    		if(!f.toPath().startsWith(base.toPath()) || !f.isFile()) {
+	    			throw RuntimeUtil.error("File '{0}' is not a valid file", fn);
+	    		}
+	    		return f;
+	    	} catch(java.io.IOException ex) {
+	    		throw RuntimeUtil.error(ex, "File '{0}' is not a valid file", fn);
+	    	}
+	    }
+}
 }

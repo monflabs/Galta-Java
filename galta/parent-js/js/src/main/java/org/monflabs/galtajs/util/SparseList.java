@@ -53,8 +53,8 @@ import org.monflabs.util.iterators.LongIterator;
  */
 public class SparseList<T> implements Cloneable, Iterable<T> {
 	
-	public static long MAX_LENGTH = 0xFFFFFFFFL;
-	public static long MAX_INDEX  = MAX_LENGTH-1;
+	public static final long MAX_LENGTH = 0xFFFFFFFFL;
+	public static final long MAX_INDEX  = MAX_LENGTH-1;
 	
     private int[] keySlots;
     private Object[] valueSlots;
@@ -64,15 +64,16 @@ public class SparseList<T> implements Cloneable, Iterable<T> {
     private static final int[] EMPTY_INTS = new int[0];
     private static final Object[] EMPTY_OBJECTS = new Object[0];
     
-    private static final int DEFAULT_INITIAL_CAPACITY = 64;
+    // Allocated on the first element: most JS arrays are small, or empty
+    private static final int MIN_CAPACITY = 8;
 
     public SparseList() {
-    	this.keySlots = new int[DEFAULT_INITIAL_CAPACITY];
-        this.valueSlots = new Object[DEFAULT_INITIAL_CAPACITY];
+    	this.keySlots = EMPTY_INTS;
+        this.valueSlots = EMPTY_OBJECTS;
     }
     public SparseList(int listSize) {
-    	this.keySlots = new int[DEFAULT_INITIAL_CAPACITY];
-        this.valueSlots = new Object[DEFAULT_INITIAL_CAPACITY];
+    	this.keySlots = EMPTY_INTS;
+        this.valueSlots = EMPTY_OBJECTS;
         this.slotSize = 0;
         this.listSize = listSize;
     }
@@ -149,7 +150,7 @@ public class SparseList<T> implements Cloneable, Iterable<T> {
     	if(available>=capacity) {
     		return;
     	}
-    	int newArraySize = powerOfTwo(capacity+slotSize);
+    	int newArraySize = powerOfTwo(Math.max(MIN_CAPACITY, capacity+slotSize));
 		int[] newKeys = new int[newArraySize];
 		Object[] newValues = new Object[newArraySize];
 		if(keySlots.length>0) {

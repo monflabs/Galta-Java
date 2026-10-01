@@ -127,6 +127,10 @@ public final class DebugRuntime {
 					try {
 						hook.wait();
 					} catch (InterruptedException ie) {
+						// The thread is being stopped: stop waiting, and keep
+						// the interrupt for the code that runs next
+						Thread.currentThread().interrupt();
+						break;
 					}
 					keepWaiting = hook.onWoken();
 				}

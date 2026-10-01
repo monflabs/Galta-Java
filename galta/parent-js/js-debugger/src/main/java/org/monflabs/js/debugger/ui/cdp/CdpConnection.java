@@ -145,15 +145,31 @@ public final class CdpConnection implements AutoCloseable {
             return result;
         }
         pending.put(id, result);
+        // onClosed() may have run between the check above and the put: it
+        // set closed before failing the pending calls, so re-checking here
+        // guarantees that this call is failed by one side or the other
+        if (closed) {
+            pending.remove(id);
+            result.completeExceptionally(new CdpException(CdpException.TRANSPORT_CLOSED, "connection closed"));
+            return result;
+        }
         final String text = Json.write(Json.object("id", id, "method", method, "params", params == null ? Json.object() : params));
         synchronized (this) {
-            sendChain = sendChain.thenCompose(ignored -> channel.sendText(text));
-            sendChain.exceptionally(error -> {
+            // Chained after the previous send whatever its outcome: a failed
+            // send only fails its own call, not every later one
+            final CompletableFuture<?> send = sendChain
+                    .handle((ignored, previousError) -> null)
+                    .thenCompose(ignored -> channel.sendText(text));
+            sendChain = send;
+            send.whenComplete((ignored, error) -> {
+                if (error == null) {
+                    return;
+                }
                 final CompletableFuture<Map<String, Object>> waiting = pending.remove(id);
                 if (waiting != null) {
-                    waiting.completeExceptionally(new CdpException(CdpException.TRANSPORT_CLOSED, "send failed: " + error.getMessage()));
+                    final Throwable cause = error instanceof java.util.concurrent.CompletionException && error.getCause() != null ? error.getCause() : error;
+                    waiting.completeExceptionally(new CdpException(CdpException.TRANSPORT_CLOSED, "send failed: " + cause.getMessage()));
                 }
-                return null;
             });
         }
         return result;

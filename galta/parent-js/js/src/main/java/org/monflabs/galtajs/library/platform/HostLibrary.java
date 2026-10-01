@@ -229,7 +229,15 @@ public class HostLibrary extends GlobalLibrary {
 		// Follows WHATWG "forgiving-base64": strip whitespace, then tolerate
 		// missing "=" padding.
 		private String decodeBase64(String encoded) {
-			String stripped = encoded.replaceAll("[\\t\\n\\f\\r ]", "");
+			StringBuilder sb = new StringBuilder(encoded.length());
+			for (int i = 0; i < encoded.length(); i++) {
+				char c = encoded.charAt(i);
+				// ASCII whitespace
+				if (c != '\t' && c != '\n' && c != '\f' && c != '\r' && c != ' ') {
+					sb.append(c);
+				}
+			}
+			String stripped = sb.toString();
 			int mod = stripped.length() % 4;
 			if (mod == 1) {
 				throw RuntimeUtil.error("atob: invalid Base64 input");
@@ -262,11 +270,9 @@ public class HostLibrary extends GlobalLibrary {
 			if (v instanceof Number n) {
 				return n.intValue();
 			}
-			try {
-				return RuntimeUtil.toInt32(getEnvironment(), v);
-			} catch (Throwable ignore) {
-				return null;
-			}
+			// WebIDL long conversion: a value that cannot be converted (a
+			// Symbol, a throwing valueOf()) throws
+			return RuntimeUtil.toInt32(getEnvironment(), v);
 		}
 	}
 }
