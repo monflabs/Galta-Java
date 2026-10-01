@@ -91,19 +91,13 @@ public class DateTimeParts {
 		this.offset = date.getOffset();
 	}
 	
+	/**
+	 * The parts of the calendar's instant in the proleptic Gregorian calendar (ISO 8601),
+	 * in the calendar's time zone. A GregorianCalendar uses the Julian calendar before
+	 * October 15, 1582: its own fields are not used, they would be off by several days.
+	 */
 	public DateTimeParts(GregorianCalendar cal) {
-		// Calendar.YEAR is always positive; the BC/AD ERA carries the sign
-		// (1 BC = proleptic year 0, 2 BC = proleptic year -1, ...). Reading
-		// YEAR alone silently drops the sign for any BC-era calendar.
-		this.year = cal.get(Calendar.ERA)==GregorianCalendar.BC ? 1-cal.get(Calendar.YEAR) : cal.get(Calendar.YEAR);
-		this.month = cal.get(Calendar.MONTH)+1;
-		this.day = cal.get(Calendar.DAY_OF_MONTH);
-		this.hour = cal.get(Calendar.HOUR_OF_DAY);
-		this.minute = cal.get(Calendar.MINUTE);
-		this.second = cal.get(Calendar.SECOND);
-		this.millis = cal.get(Calendar.MILLISECOND);
-		// Is there a better way?
-		this.offset = cal.getTimeZone().toZoneId().getRules().getOffset(cal.toInstant());
+		this(cal.toZonedDateTime());
 	}
 	
 	

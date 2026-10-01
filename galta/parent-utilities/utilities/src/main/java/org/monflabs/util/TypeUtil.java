@@ -44,6 +44,20 @@ public abstract class TypeUtil {
 	public static double toDouble(Number n) {
 		return n.doubleValue();
 	}
+	// NaN and the infinities have no BigDecimal/BigInteger value: they used to become 0
+	// (NaN) or saturate (to +-Double.MAX_VALUE for a BigDecimal, but to the long range
+	// for a BigInteger)
+	private static void checkFinite(double d) {
+		if(Double.isNaN(d) || Double.isInfinite(d)) {
+			throw new ArithmeticException(d + " cannot be converted to an exact number");
+		}
+	}
+
+	/**
+	 * Converts a number to a BigDecimal: exactly for the integral types, through the
+	 * shortest decimal representation for a float or a double.
+	 * @throws ArithmeticException for NaN and the infinities
+	 */
 	public static BigDecimal toBigDecimal(Number n) {
 		// Some libraries, like GSON, return their own number class (LazilyParsedNumber)
 		if(n instanceof BigDecimal) {
@@ -53,23 +67,13 @@ public abstract class TypeUtil {
 			return new BigDecimal((BigInteger)n);
 		}
 		if(n instanceof Float f) {
-			if(f.isNaN()) {
-				return BigDecimal.ZERO;
-			}
-			if(f.isInfinite()) {
-				return BigDecimal.valueOf(f.floatValue()==Float.NEGATIVE_INFINITY ? -Double.MAX_VALUE : Double.MAX_VALUE);
-			}
+			checkFinite(f.doubleValue());
 			// Via the float's own shortest decimal form: widening to double first
 			// exposes the binary error (0.1f became 0.10000000149011612)
 			return new BigDecimal(Float.toString(f));
 		}
 		if(n instanceof Double d) {
-			if(d.isNaN()) {
-				return BigDecimal.ZERO;
-			}
-			if(d.isInfinite()) {
-				return BigDecimal.valueOf(d.doubleValue()==Double.NEGATIVE_INFINITY ? -Double.MAX_VALUE : Double.MAX_VALUE);
-			}
+			checkFinite(d);
 			return BigDecimal.valueOf(n.doubleValue());
 		}
 		if(n instanceof Integer || n instanceof Long || n instanceof Byte || n instanceof Short) {
@@ -77,6 +81,10 @@ public abstract class TypeUtil {
 		}
 		return new BigDecimal(n.toString());
 	}	
+	/**
+	 * Converts a number to a BigInteger, truncating any fractional part.
+	 * @throws ArithmeticException for NaN and the infinities
+	 */
 	public static BigInteger toBigInteger(Number n) {
 		if(n instanceof BigInteger) {
 			return (BigInteger)n;
@@ -85,21 +93,11 @@ public abstract class TypeUtil {
 			return ((BigDecimal)n).toBigInteger();
 		}
 		if(n instanceof Float f) {
-			if(f.isNaN()) {
-				return BigInteger.ZERO;
-			}
-			if(f.isInfinite()) {
-				return BigInteger.valueOf(f.floatValue()==Float.NEGATIVE_INFINITY ? Long.MIN_VALUE : Long.MAX_VALUE);
-			}
+			checkFinite(f.doubleValue());
 			return new BigDecimal(n.floatValue()).toBigInteger();
 		}
 		if(n instanceof Double d) {
-			if(d.isNaN()) {
-				return BigInteger.ZERO;
-			}
-			if(d.isInfinite()) {
-				return BigInteger.valueOf(d.doubleValue()==Double.NEGATIVE_INFINITY ? Long.MIN_VALUE : Long.MAX_VALUE);
-			}
+			checkFinite(d);
 			return new BigDecimal(n.doubleValue()).toBigInteger();
 		}
 		if(n instanceof Integer || n instanceof Long || n instanceof Byte || n instanceof Short) {

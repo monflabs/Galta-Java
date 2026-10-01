@@ -48,6 +48,9 @@ public class BuiltinBigDecimalConstructor extends BaseStandardConstructor {
 	public Object call(Object _this, Object[] parameters) {
 		Object v = param(parameters, 0, RuntimeUtil.UNDEFINED);
 		if(v instanceof Number n ) {
+			if((n instanceof Double || n instanceof Float) && !Double.isFinite(n.doubleValue())) {
+				throw RuntimeUtil.rangeError("The number {0} cannot be converted to a Decimal because it is not finite", n);
+			}
 			return TypeUtil.toBigDecimal(n);
 		}
 		if(v instanceof CharSequence s) {

@@ -24,19 +24,35 @@ import tests.ProjectTestCase;
 
 public class TypeUtilTest extends ProjectTestCase {
 
-	public void testInfinityToBigDecimal() {
-		// -Infinity used to map to Double.MIN_VALUE, the smallest *positive* double
-		assertEquals( BigDecimal.valueOf(Double.MAX_VALUE), TypeUtil.toBigDecimal(Double.POSITIVE_INFINITY) );
-		assertEquals( BigDecimal.valueOf(-Double.MAX_VALUE), TypeUtil.toBigDecimal(Double.NEGATIVE_INFINITY) );
-		assertEquals( BigDecimal.valueOf(Double.MAX_VALUE), TypeUtil.toBigDecimal(Float.POSITIVE_INFINITY) );
-		assertEquals( BigDecimal.valueOf(-Double.MAX_VALUE), TypeUtil.toBigDecimal(Float.NEGATIVE_INFINITY) );
-		assertTrue( TypeUtil.toBigDecimal(Double.NEGATIVE_INFINITY).signum() < 0 );
-		assertEquals( BigDecimal.ZERO, TypeUtil.toBigDecimal(Double.NaN) );
+	public void testNonFiniteToBigDecimal() {
+		// NaN used to become 0 and the infinities +-Double.MAX_VALUE
+		for (Number n : new Number[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY}) {
+			assertThrows(ArithmeticException.class, () -> TypeUtil.toBigDecimal(n));
+		}
+		assertEquals( BigDecimal.valueOf(Double.MAX_VALUE), TypeUtil.toBigDecimal(Double.MAX_VALUE) );
 	}
 
-	public void testInfinityToBigInteger() {
-		assertEquals( BigInteger.valueOf(Long.MAX_VALUE), TypeUtil.toBigInteger(Double.POSITIVE_INFINITY) );
-		assertEquals( BigInteger.valueOf(Long.MIN_VALUE), TypeUtil.toBigInteger(Double.NEGATIVE_INFINITY) );
+	public void testNonFiniteToBigInteger() {
+		// NaN used to become 0 and the infinities Long.MIN_VALUE/MAX_VALUE
+		for (Number n : new Number[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY}) {
+			assertThrows(ArithmeticException.class, () -> TypeUtil.toBigInteger(n));
+		}
+		assertEquals( new BigDecimal(Double.MAX_VALUE).toBigInteger(), TypeUtil.toBigInteger(Double.MAX_VALUE) );
+	}
+
+	public void testPrimitiveTargets() {
+		assertEquals(0, TypeUtil.toInt(Double.NaN));
+		assertEquals(Long.MIN_VALUE, TypeUtil.toLong(Double.NEGATIVE_INFINITY));
+		assertEquals((short)-25536, TypeUtil.toShort(40000));
+		assertEquals(1.5f, TypeUtil.toFloat(1.5d));
+		assertEquals(3.0, TypeUtil.toDouble(BigInteger.valueOf(3)));
+		assertEquals(BigDecimal.valueOf(7), TypeUtil.toBigDecimal(BigInteger.valueOf(7)));
+		assertEquals(BigDecimal.valueOf(-3), TypeUtil.toBigDecimal((byte)-3));
+		assertEquals(BigInteger.valueOf(-2), TypeUtil.toBigInteger(-2.9f));
+	}
+
+	private static void assertThrows(Class<? extends Throwable> c, org.junit.function.ThrowingRunnable r) {
+		org.junit.Assert.assertThrows(c, r);
 	}
 
 	@SuppressWarnings("serial")
@@ -63,7 +79,6 @@ public class TypeUtilTest extends ProjectTestCase {
 		assertEquals(new BigDecimal("0.1"), TypeUtil.toBigDecimal(0.1f));
 		assertEquals(new BigDecimal("3.4028235E+38"), TypeUtil.toBigDecimal(Float.MAX_VALUE));
 		assertEquals(new BigDecimal("-2.5"), TypeUtil.toBigDecimal(-2.5f));
-		assertEquals(BigDecimal.ZERO, TypeUtil.toBigDecimal(Float.NaN));
 		assertEquals(new BigDecimal("0.1"), TypeUtil.toBigDecimal(0.1d));
 	}
 }

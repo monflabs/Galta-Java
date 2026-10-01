@@ -45,10 +45,9 @@ public class NumbersAndTypesExamples extends ProjectTestCase {
 		assertEquals(Integer.MAX_VALUE, TypeUtil.toInt(Double.POSITIVE_INFINITY));
 		assertEquals(44, TypeUtil.toByte(300));                          // wraps
 
-		// Big targets map NaN to zero and infinities to the largest finite value
-		assertEquals(BigDecimal.ZERO, TypeUtil.toBigDecimal(Double.NaN));
-		assertEquals(BigDecimal.valueOf(Double.MAX_VALUE), TypeUtil.toBigDecimal(Double.POSITIVE_INFINITY));
-		assertEquals(BigInteger.valueOf(Long.MIN_VALUE), TypeUtil.toBigInteger(Double.NEGATIVE_INFINITY));
+		// Big targets have no value for NaN and the infinities
+		assertThrows(ArithmeticException.class, () -> TypeUtil.toBigDecimal(Double.NaN));
+		assertThrows(ArithmeticException.class, () -> TypeUtil.toBigInteger(Double.NEGATIVE_INFINITY));
 
 		assertEquals(new BigDecimal("0.1"), TypeUtil.toBigDecimal(0.1));   // via Double.toString, not the binary value
 		assertEquals(BigInteger.valueOf(1900), TypeUtil.toBigInteger(1.9e3));

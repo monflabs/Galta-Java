@@ -255,4 +255,29 @@ public class ISO8601Test extends ProjectTestCase {
 		assertEquals("-2147483648-01-02", p.toDateString());
 		assertEquals("+010000-01-02", new DateTimeParts(10000, 1, 2, 0, 0, 0, 0, null).toDateString());
 	}
+
+	public void testCalendarBeforeGregorianChange() throws Exception {
+		// A GregorianCalendar uses the Julian calendar before 1582: its fields were used
+		// as is, so 1000-01-01Z came out as 0999-12-27
+		java.util.GregorianCalendar cal = new java.util.GregorianCalendar(java.util.TimeZone.getTimeZone("UTC"));
+		cal.setTimeInMillis(java.time.Instant.parse("1000-01-01T00:00:00Z").toEpochMilli());
+		assertEquals("1000-01-01T00:00:00.000Z", ISO8601.formatISO8601(cal));
+		cal.setTimeInMillis(java.time.Instant.parse("-0099-03-04T05:06:07.008Z").toEpochMilli());
+		assertEquals("-000099-03-04T05:06:07.008Z", ISO8601.formatISO8601(cal));
+		cal.setTimeInMillis(java.time.Instant.parse("2024-02-29T23:59:59.999Z").toEpochMilli());
+		assertEquals("2024-02-29T23:59:59.999Z", ISO8601.formatISO8601(cal));
+		// The calendar's own time zone gives the offset
+		java.util.GregorianCalendar paris = new java.util.GregorianCalendar(java.util.TimeZone.getTimeZone("Europe/Paris"));
+		paris.setTimeInMillis(java.time.Instant.parse("2024-07-01T10:00:00Z").toEpochMilli());
+		assertEquals("2024-07-01T12:00:00.000+02:00", ISO8601.formatISO8601(paris));
+	}
+
+	public void testRfc3339Forms() throws Exception {
+		// RFC 3339 allows a lowercase 't' and 'z', and ISO 8601 a comma as the decimal sign
+		assertEquals(OffsetDateTime.parse("2024-01-15T10:30:15.250Z"), ISO8601.parseOffsetDateTime("2024-01-15t10:30:15.250z"));
+		assertEquals(OffsetDateTime.parse("2024-01-15T10:30:15.250Z"), ISO8601.parseOffsetDateTime("2024-01-15T10:30:15,250Z"));
+		assertEquals(LocalTime.parse("10:30:15.500"), ISO8601.parseLocalTime("10:30:15,5"));
+		assertThrows(ParseException.class, () -> ISO8601.parseOffsetDateTime("2024-01-15x10:30:15Z"));
+		assertThrows(ParseException.class, () -> ISO8601.parseOffsetDateTime("2024-01-15T10:30:15y"));
+	}
 }

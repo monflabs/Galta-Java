@@ -40,8 +40,7 @@ assertEquals("1.0e21", DtoA.toJavaLiteral(1e21));               // Java-style, f
 
 | Source | `toBigDecimal` | `toBigInteger` |
 |---|---|---|
-| `NaN` | `0` | `0` |
-| `+Infinity` / `-Infinity` | `+/-Double.MAX_VALUE` | `Long.MAX_VALUE` / `Long.MIN_VALUE` |
+| `NaN`, `+Infinity`, `-Infinity` | throws `ArithmeticException` | throws `ArithmeticException` |
 | `Double` / `Float` | from the shortest decimal form (`Double.toString`/`Float.toString`), so `0.1` and `0.1f` stay `0.1` | truncated toward zero |
 | `BigDecimal` | itself | `toBigInteger()` (truncated) |
 | `Integer`, `Long`, `Short`, `Byte` | exact | exact |
@@ -55,10 +54,9 @@ assertEquals(0, TypeUtil.toInt(Double.NaN));
 assertEquals(Integer.MAX_VALUE, TypeUtil.toInt(Double.POSITIVE_INFINITY));
 assertEquals(44, TypeUtil.toByte(300));                          // wraps
 
-// Big targets map NaN to zero and infinities to the largest finite value
-assertEquals(BigDecimal.ZERO, TypeUtil.toBigDecimal(Double.NaN));
-assertEquals(BigDecimal.valueOf(Double.MAX_VALUE), TypeUtil.toBigDecimal(Double.POSITIVE_INFINITY));
-assertEquals(BigInteger.valueOf(Long.MIN_VALUE), TypeUtil.toBigInteger(Double.NEGATIVE_INFINITY));
+// Big targets have no value for NaN and the infinities
+assertThrows(ArithmeticException.class, () -> TypeUtil.toBigDecimal(Double.NaN));
+assertThrows(ArithmeticException.class, () -> TypeUtil.toBigInteger(Double.NEGATIVE_INFINITY));
 
 assertEquals(new BigDecimal("0.1"), TypeUtil.toBigDecimal(0.1));   // via Double.toString, not the binary value
 assertEquals(BigInteger.valueOf(1900), TypeUtil.toBigInteger(1.9e3));

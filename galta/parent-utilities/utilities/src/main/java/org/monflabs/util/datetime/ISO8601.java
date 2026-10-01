@@ -295,7 +295,8 @@ public final class ISO8601 {
                 	} catch(java.time.DateTimeException e) {
                 		throw new ParseException(StringFormat.format("Invalid timezone {0} at position {1}",id,start),start);
                 	}
-                } else if (timezoneIndicator == 'Z') {
+                } else if (timezoneIndicator == 'Z' || timezoneIndicator == 'z') {
+                	// RFC 3339 allows a lowercase 'z'
                 	pos += 1;
                     return ZoneOffset.UTC;
                 }
@@ -306,7 +307,8 @@ public final class ISO8601 {
         boolean matchMillisSep() throws ParseException {
     		if(pos<date.length()) {
     			char c = date.charAt(pos);
-    			if(c=='.') {
+    			// ISO 8601 allows a comma as the decimal sign
+    			if(c=='.' || c==',') {
     				pos++;
     				return true;
     			}
@@ -358,7 +360,8 @@ public final class ISO8601 {
         void skipSep() throws ParseException {
     		if(pos<date.length()) {
     			char c = date.charAt(pos);
-    			if(c=='T' || c==' ') {
+    			// RFC 3339 allows a lowercase 't'
+    			if(c=='T' || c=='t' || c==' ') {
     				pos++;
     				return;
     			}
