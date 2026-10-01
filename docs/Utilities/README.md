@@ -31,7 +31,7 @@ All artifacts use the group `org.monflabs.galta`.
 | [Strings](/Utilities/Strings) | `StringUtil`, `StringFormat`, `StringMatcher`, `TextBuilder` |
 | [Numbers, Types & Versions](/Utilities/NumbersAndTypes) | `DtoA` number formatting, `TypeUtil` conversions, `Version` |
 | [Date & Time](/Utilities/DateTime) | ISO 8601 parsing and formatting |
-| [Iterators, Caches & Sorting](/Utilities/Collections) | `Iterators`, `Iterables`, `LRUCache`, sorting, dependency ordering |
+| [Iterators, Caches & Sorting](/Utilities/Collections) | `Iterators`, `Iterables`, `LRUCache`, dependency ordering |
 | [I/O & Paths](/Utilities/IO) | Stream and file helpers, `PathUtil`, readers and writers |
 | [File Systems](/Utilities/FileSystems) | The memory, sandboxed, ZIP and resource filesystems |
 | [Reflection](/Utilities/Reflection) | `ClassMetadata` and `PojoAccessor` |

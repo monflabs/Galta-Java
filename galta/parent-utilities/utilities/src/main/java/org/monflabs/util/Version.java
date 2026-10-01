@@ -16,12 +16,10 @@
 package org.monflabs.util;
 
 import java.io.Serializable;
-import java.util.regex.Pattern;
 
 public class Version implements Serializable, Comparable<Version> {
 
 	public static final Version EMPTY = new Version(0, 0, 0);
-	public static final Pattern VERSION_PATTERN = Pattern.compile("[0-9]+(\\.[0-9]+){0,2}(-.*)?");
 	
 	private final int major;
 	private final int minor;

@@ -1,6 +1,6 @@
 # I/O & Paths
 
-`org.monflabs.util` has three static helper classes for everyday I/O: `IOStreamUtil` (streams, readers, writers), `FileUtil` (`java.io.File`) and `PathUtil` (path strings, with a configurable separator). The `org.monflabs.util.io` package adds a few stream classes: bridges between byte and character streams, unsynchronized buffers, a rolling character buffer and null streams.
+`org.monflabs.util` has three static helper classes for everyday I/O: `IOStreamUtil` (streams, readers, writers), `FileUtil` (`java.io.File`) and `PathUtil` (path strings, with a configurable separator). The `org.monflabs.util.io` package adds a few stream classes: bridges between byte and character streams, unsynchronized buffers, a rolling character buffer.
 
 For virtual file systems (in-memory, zip, sandboxed directories) see [File Systems](/Utilities/FileSystems).
 
@@ -23,7 +23,6 @@ Methods that take a `Charset` use it. Their overloads without one use UTF-8, exc
 | Method | Does |
 |---|---|
 | `readContent(InputStream[, Charset])`, `readContent(Reader)` | reads everything into a `String` |
-| `readBytes(InputStream)` | reads everything into a `byte[]` |
 | `setContent(OutputStream, String[, Charset])` | writes the string and flushes |
 | `setContent(Writer, String)` | writes the string |
 | `close(AutoCloseable)` | closes; ignores `null`; wraps an exception in a `ForwardRuntimeException` |
@@ -39,7 +38,7 @@ assertEquals("h\u00e9llo", IOStreamUtil.readContent(in, StandardCharsets.UTF_8))
 ByteArrayOutputStream out = new ByteArrayOutputStream();
 IOStreamUtil.setContent(out, "h\u00e9llo", StandardCharsets.UTF_8);   // flushed, not closed
 assertEquals(6, out.size());
-assertArrayEquals(out.toByteArray(), IOStreamUtil.readBytes(new ByteArrayInputStream(out.toByteArray())));
+assertArrayEquals(out.toByteArray(), new ByteArrayInputStream(out.toByteArray()).readAllBytes());
 
 IOStreamUtil.close(null);   // null is ignored
 ForwardRuntimeException e = assertThrows(ForwardRuntimeException.class,
@@ -167,14 +166,14 @@ assertEquals("java.util", PathUtil.DOT.getParentPath("java.util.List"));
 | `FastBufferedInputStream`, `FastBufferedOutputStream`, `FastBufferedReader`, `FastBufferedWriter` | unsynchronized buffered streams (8 KB for input, 16 KB for output by default); `get(stream)` (except on the reader) wraps a stream unless it already is one |
 | `LRUCharBuffer.MemoryCharBuffer` | a bounded buffer that keeps the most recent characters |
 | `LRUCachedOutputStream` | forwards bytes to an optional stream and keeps their decoded tail in an `LRUCharBuffer` |
-| `NullInputStream`, `NullOutputStream`, `NullReader`, `NullWriter` | empty sources and discarding sinks, each with a shared `instance` |
+| `NullOutputStream` | a discarding sink, with a shared `instance`; for the others use the JDK's `InputStream.nullInputStream()`, `Reader.nullReader()` and `Writer.nullWriter()` |
 | `StreamSuppliers` | `Supplier`s that open a file input or output stream |
 
 Sample: `doc_examples/util/IOExamples.java` (`testReaderAndWriterBridges`, `testFastStringReader`)
 
 ```java
 InputStream in = new ReaderInputStream(new StringReader("\u00e9t\u00e9"), StandardCharsets.UTF_8);
-assertEquals(5, IOStreamUtil.readBytes(in).length);             // chars encoded to bytes
+assertEquals(5, in.readAllBytes().length);                      // chars encoded to bytes
 
 StringWriter w = new StringWriter();
 WriterOutputStream os = new WriterOutputStream(w, StandardCharsets.UTF_8);

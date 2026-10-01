@@ -1,6 +1,6 @@
 # Iterators, Caches & Sorting
 
-This page covers the collection helpers of `org.monflabs.util`: lazy iterator pipelines (`iterators`), two caches (`cache`), an index-based quicksort (`sort`) and a topological sorter for items with dependencies (`dependencies`).
+This page covers the collection helpers of `org.monflabs.util`: lazy iterator pipelines (`iterators`), two caches (`cache`) and a topological sorter for items with dependencies (`dependencies`).
 
 ## Iterators and Iterables
 
@@ -8,7 +8,7 @@ This page covers the collection helpers of `org.monflabs.util`: lazy iterator pi
 
 | Group | `Iterators` | `Iterables` |
 |---|---|---|
-| Sources | `empty()`, `single(v)`, `staticValues(v...)`, `array(v...)`, `arrayReflection(array)`, `enumeration(e)`, `readOnlyList(list)`, `intSequence(start, end)`, `longSequence(start, end)`, `charSequence(cs[, start, end])` | `empty()`, `single(v)`, `staticValues(v...)`, `intSequence`, `longSequence` |
+| Sources | `empty()`, `single(v)`, `staticValues(v...)`, `array(v...)`, `arrayReflection(array)`, `enumeration(e)` (the same as `e.asIterator()`), `readOnlyList(list)`, `intSequence(start, end)`, `longSequence(start, end)` | `empty()`, `single(v)`, `staticValues(v...)` |
 | Transform | `filter(it, predicate)`, `map(it, function)`, `skip(it, n)`, `limit(it, n)`, `concat(...)`, `nested(it, f1[, f2])`, `flatten(it, factory)`, `readOnly(it)` | `filter`, `map`, `concat` |
 | Consume | `size`, `first`, `last`, `get(it, index)`, `collect(it[, list])`, `collectArray(it[, class])`, `forEach`, `find`, `every`, `some`, `reduce` | |
 
@@ -126,36 +126,6 @@ assertEquals(1, calls[0]);   // computed once, then cached
 
 cache.get("missing", k -> null);
 assertTrue(cache.contains("missing"));   // a null result is cached too
-```
-
-## QuickSort
-
-`QuickSort` sorts anything that can compare and swap by index, which lets it sort parallel arrays or a custom structure in place without building a list of objects. You supply a `QuickSort.Accessor` (`size()`, `compare(i, j)`, `exchange(i, j)`) and call `QuickSort.sort(accessor)`, or `QuickSort.sort(accessor, offset, length)` for a range. The algorithm is a median-of-three quicksort with a simple exchange sort for ranges of up to 7 elements. It is not stable.
-
-Sample: `doc_examples/util/CollectionsExamples.java` (`testQuickSort`)
-
-```java
-String[] names = {"dan", "ann", "cid", "bob"};
-int[] ages = {40, 25, 31, 25};
-// Sort two parallel arrays by age, then name: QuickSort only sees indexes
-QuickSort.sort(new QuickSort.Accessor() {
-    @Override
-    public int size() {
-        return ages.length;
-    }
-    @Override
-    public int compare(int i, int j) {
-        int c = Integer.compare(ages[i], ages[j]);
-        return c != 0 ? c : names[i].compareTo(names[j]);
-    }
-    @Override
-    public void exchange(int i, int j) {
-        String n = names[i]; names[i] = names[j]; names[j] = n;
-        int a = ages[i]; ages[i] = ages[j]; ages[j] = a;
-    }
-});
-assertArrayEquals(new String[] {"ann", "bob", "cid", "dan"}, names);
-assertArrayEquals(new int[] {25, 25, 31, 40}, ages);
 ```
 
 ## DependencyEngine

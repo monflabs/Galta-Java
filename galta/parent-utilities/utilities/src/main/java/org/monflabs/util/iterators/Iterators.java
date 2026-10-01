@@ -672,49 +672,11 @@ public final class Iterators {
 	//
 	// Enumeration iterator
 	//
+	/**
+	 * The same as {@link Enumeration#asIterator()}.
+	 */
 	public static <T> Iterator<T> enumeration(Enumeration<T> en) {
-        return new Iterator<T>() {
-    	    @Override
-    		public boolean hasNext() {
-    	        return en.hasMoreElements();
-    	    }
-    	    @Override
-    		public T next() {
-    	        return en.nextElement();
-    	    }
-
-    	    @Override
-    		public void remove() {
-    	        throw new UnsupportedOperationException();
-    	    }
-        };
-	}
-	
-	//
-	// CharSequence Iterator
-	//
-	public static CharIterator charSequence(CharSequence cs) {
-		return charSequence(cs,0,cs.length());
-	}
-	public static CharIterator charSequence(CharSequence cs, int start, int end) {
-		return new CharIterator() {
-			private int current = start;
-			@Override
-			public boolean hasNext() {
-				return current<end;
-			}
-			@Override
-			public char next() {
-				if (current<end) {
-					return cs.charAt(current++);
-				}
-				throw new NoSuchElementException();
-			}
-			@Override
-			public void remove() {
-				throw new UnsupportedOperationException();
-			}
-		};
+        return en.asIterator();
 	}
 	
 	//
@@ -817,10 +779,11 @@ public final class Iterators {
 		private T next;
 		private boolean hasNextValue;
 
+		// Lazy: nothing is read from the source (and no factory called) before the
+		// first hasNext()/next() - it used to be probed by the constructor
 		NestedIterator(Iterator<?> it, Function<Object, Iterator<?>>[] factories) {
 			this.iteratorStack.add(it);
 			this.factories = factories;
-			hasNextValue = moveToNext();
 		}
 
 		@SuppressWarnings("unchecked")

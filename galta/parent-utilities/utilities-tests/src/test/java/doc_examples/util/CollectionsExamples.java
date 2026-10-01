@@ -17,7 +17,6 @@ import org.monflabs.util.dependencies.DependencyEngine.DependencyFinder;
 import org.monflabs.util.dependencies.DependencyException;
 import org.monflabs.util.iterators.Iterables;
 import org.monflabs.util.iterators.Iterators;
-import org.monflabs.util.sort.QuickSort;
 
 import tests.ProjectTestCase;
 
@@ -104,30 +103,6 @@ public class CollectionsExamples extends ProjectTestCase {
 
 		cache.get("missing", k -> null);
 		assertTrue(cache.contains("missing"));   // a null result is cached too
-	}
-
-	public void testQuickSort() throws Exception {
-		String[] names = {"dan", "ann", "cid", "bob"};
-		int[] ages = {40, 25, 31, 25};
-		// Sort two parallel arrays by age, then name: QuickSort only sees indexes
-		QuickSort.sort(new QuickSort.Accessor() {
-			@Override
-			public int size() {
-				return ages.length;
-			}
-			@Override
-			public int compare(int i, int j) {
-				int c = Integer.compare(ages[i], ages[j]);
-				return c != 0 ? c : names[i].compareTo(names[j]);
-			}
-			@Override
-			public void exchange(int i, int j) {
-				String n = names[i]; names[i] = names[j]; names[j] = n;
-				int a = ages[i]; ages[i] = ages[j]; ages[j] = a;
-			}
-		});
-		assertArrayEquals(new String[] {"ann", "bob", "cid", "dan"}, names);
-		assertArrayEquals(new int[] {25, 25, 31, 40}, ages);
 	}
 
 	/** Items are module names; the finder reports what each one requires. */

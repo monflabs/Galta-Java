@@ -260,11 +260,6 @@ public final class VersionTest extends ProjectTestCase {
     	assertTrue(Version.parse("1.0.0-alpha").compareTo(Version.parse("1.0.0-beta"))<0);
     	assertTrue(Version.parse("1.0.1-SNAPSHOT").greaterThan(Version.parse("1.0.0")));
     	assertEquals(0, Version.parse("1.0.0").compareTo(Version.parse("1.0.0")));
-
-    	assertTrue(Version.VERSION_PATTERN.matcher("1.2.3-SNAPSHOT").matches());
-    	assertTrue(Version.VERSION_PATTERN.matcher("1.2").matches());
-    	assertFalse(Version.VERSION_PATTERN.matcher("1.2.3.4").matches());
-    	assertFalse(Version.VERSION_PATTERN.matcher("a.b").matches());
     }
 
     public void testQualifierSemantics() throws Exception {

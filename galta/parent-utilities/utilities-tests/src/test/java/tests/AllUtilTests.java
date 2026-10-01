@@ -59,7 +59,6 @@ import tests.util.TypeUtilTest;
 import tests.util.VersionTest;
 import tests.util._DtoALibraryTest;
 import tests.util._DtoAPerformanceTest;
-import tests.util.sort.QuickSortTest;
 
 public class AllUtilTests extends TestSuite {
 
@@ -120,7 +119,6 @@ public class AllUtilTests extends TestSuite {
 		suite.addTestSuite(_DtoAPerformanceTest.class);
 		suite.addTestSuite(DtoATest.class);
 
-		suite.addTestSuite(QuickSortTest.class);
 
 		return suite;
 	}

@@ -142,42 +142,6 @@ public final class Iterables {
 	//
 	
 	//
-	// CharSequence Iterable
-	//
-//	public static IntIterable intSequenceIterable(int start, int end) {
-//		return () -> intSequence(start,end);
-//	}
-	
-	//
-	// Integer sequence Iterable
-	//
-	public static IntIterable intSequence(int start, int end) {
-		return () -> Iterators.intSequence(start,end);
-	}
-	public static <R> Iterable<R> map(IntIterable it, IntFunction<R> mapper) {
-		return new Iterable<R>() {
-			@Override
-			public Iterator<R> iterator() {
-				return Iterators.map(it.iterator(),mapper);
-			}
-		};
-	}
-	
-	
-	public static LongIterable longSequence(long start, long end) {
-		return () -> Iterators.longSequence(start,end);
-	}
-	public static <R> Iterable<R> map(LongIterable it, LongFunction<R> mapper) {
-		return new Iterable<R>() {
-			@Override
-			public Iterator<R> iterator() {
-				return Iterators.map(it.iterator(),mapper);
-			}
-		};
-	}
-
-	
-	//
 	// Nested iterable
 	//
 	

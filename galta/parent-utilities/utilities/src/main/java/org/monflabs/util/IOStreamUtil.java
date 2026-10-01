@@ -50,9 +50,6 @@ public class IOStreamUtil {
 	
 	// renamne methods here!!
     
-    public static byte[] readBytes(InputStream in) throws IOException {
-        return in.readAllBytes();
-    }
 	
 	
 	public static String readContent(InputStream is) throws IOException {

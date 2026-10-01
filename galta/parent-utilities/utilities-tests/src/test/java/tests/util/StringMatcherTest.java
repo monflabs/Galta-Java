@@ -417,4 +417,23 @@ public class StringMatcherTest extends ProjectTestCase {
 		// A positive zero stays an Integer
 		assertEquals(Integer.valueOf(0), new StringMatcher("0.0").readNumber());
 	}
+
+	public void testErrorMarker() throws Exception {
+		// The marker used to start 2 columns before the position, counted from the start of
+		// the whole (multi-line) input
+		Exception e = assertThrows(org.monflabs.util.BaseException.class, () -> new StringMatcher("ab\ncd 'xy", 6).readQuotedString());
+		String[] lines = e.getMessage().split("\n");
+		assertEquals(3, lines.length);
+		assertEquals("Unterminated string", lines[0]);
+		assertEquals("cd 'xy", lines[1]);
+		assertEquals("    ^^^", lines[2]);           // under the first character of the string
+		// A tab is kept for the alignment
+		e = assertThrows(org.monflabs.util.BaseException.class, () -> new StringMatcher("a\n\t'xy\nz", 3).readQuotedString());
+		lines = e.getMessage().split("\n");
+		assertEquals("\t'xy", lines[1]);
+		assertEquals("\t ^^^", lines[2]);
+		// At the very start
+		e = assertThrows(org.monflabs.util.BaseException.class, () -> new StringMatcher("x").readInteger());
+		assertTrue(e.getMessage(), e.getMessage().endsWith("\nx\n^^^"));
+	}
 }

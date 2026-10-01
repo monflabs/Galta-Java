@@ -23,12 +23,9 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Vector;
 
-import org.monflabs.util.iterators.CharIterator;
-import org.monflabs.util.iterators.IntIterable;
 import org.monflabs.util.iterators.IntIterator;
 import org.monflabs.util.iterators.Iterables;
 import org.monflabs.util.iterators.Iterators;
-import org.monflabs.util.iterators.LongIterable;
 import org.monflabs.util.iterators.LongIterator;
 
 import tests.ProjectTestCase;
@@ -393,19 +390,6 @@ public class IteratorsTest extends ProjectTestCase {
 		} catch(NoSuchElementException ex) {}
 	}
 
-	public void testCharSequenceIterator() throws Exception {
-		CharIterator it1 = Iterators.charSequence("ABC");
-
-		String s = toString(it1.objectIterator());
-		assertEquals("A,B,C", s);
-
-		assertFalse(it1.hasNext());
-		try {
-			assertNull(it1.next());
-			fail();
-		} catch(NoSuchElementException ex) {}
-	}
-
 	public void testIntegerSequenceIterator() throws Exception {
 		IntIterator it1 = Iterators.intSequence(3,6);
 
@@ -418,13 +402,6 @@ public class IteratorsTest extends ProjectTestCase {
 			fail();
 		} catch(NoSuchElementException ex) {}
 	}
-	public void testIntegerSequenceIterable() throws Exception {
-		IntIterable it1 = Iterables.intSequence(3,6);
-
-		String s = toString(Iterables.<String>map(it1,(v)->Integer.toString(v)));
-		assertEquals("3,4,5", s);
-	}
-	
 	public void testLongSequenceIterator() throws Exception {
 		LongIterator it1 = Iterators.longSequence(3,6);
 
@@ -437,13 +414,34 @@ public class IteratorsTest extends ProjectTestCase {
 			fail();
 		} catch(NoSuchElementException ex) {}
 	}
-	public void testLongSequenceIterable() throws Exception {
-		LongIterable it1 = Iterables.longSequence(3,6);
-
-		String s = toString(Iterables.<String>map(it1,(v)->Long.toString(v)));
-		assertEquals("3,4,5", s);
+	public void testNestedIteratorIsLazy() throws Exception {
+		// The constructor used to read the first element (and call the factory) eagerly
+		java.util.List<String> log = new java.util.ArrayList<>();
+		Iterator<Integer> source = new Iterator<Integer>() {
+			int i = 0;
+			@Override
+			public boolean hasNext() {
+				log.add("hasNext");
+				return i < 2;
+			}
+			@Override
+			public Integer next() {
+				log.add("next");
+				return i++;
+			}
+		};
+		Iterator<String> it = Iterators.nested(source, (o) -> {
+			log.add("factory " + o);
+			return Arrays.asList("A" + o).iterator();
+		});
+		assertTrue(log.isEmpty());
+		assertTrue(it.hasNext());
+		assertEquals(Arrays.asList("hasNext", "next", "factory 0"), log);
+		assertEquals("A0", it.next());
+		assertEquals("A1", it.next());
+		assertFalse(it.hasNext());
 	}
-	
+
 	public void testNestedIterator1() throws Exception {
 		Iterator<Integer> it1 = Arrays.asList(1,2,3).iterator();
 		

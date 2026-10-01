@@ -37,7 +37,7 @@ public class IOExamples extends ProjectTestCase {
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		IOStreamUtil.setContent(out, "h\u00e9llo", StandardCharsets.UTF_8);   // flushed, not closed
 		assertEquals(6, out.size());
-		assertArrayEquals(out.toByteArray(), IOStreamUtil.readBytes(new ByteArrayInputStream(out.toByteArray())));
+		assertArrayEquals(out.toByteArray(), new ByteArrayInputStream(out.toByteArray()).readAllBytes());
 
 		IOStreamUtil.close(null);   // null is ignored
 		ForwardRuntimeException e = assertThrows(ForwardRuntimeException.class,
@@ -102,7 +102,7 @@ public class IOExamples extends ProjectTestCase {
 
 	public void testReaderAndWriterBridges() throws Exception {
 		InputStream in = new ReaderInputStream(new StringReader("\u00e9t\u00e9"), StandardCharsets.UTF_8);
-		assertEquals(5, IOStreamUtil.readBytes(in).length);             // chars encoded to bytes
+		assertEquals(5, in.readAllBytes().length);                      // chars encoded to bytes
 
 		StringWriter w = new StringWriter();
 		WriterOutputStream os = new WriterOutputStream(w, StandardCharsets.UTF_8);

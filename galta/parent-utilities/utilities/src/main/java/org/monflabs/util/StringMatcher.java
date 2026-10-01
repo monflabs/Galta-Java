@@ -502,10 +502,23 @@ public class StringMatcher {
 		StringBuilder b = new StringBuilder();
 		b.append(StringFormat.format(message, params));
 		b.append('\n');
-		b.append(seq);
+		// The line holding the position, with the marker starting right under it (the
+		// whole input used to be printed, with the marker 2 columns too far left and
+		// counted from the start of the input rather than of the line)
+		int pos = Math.max(0, Math.min(position, seq.length()));
+		int lineStart = pos;
+		while(lineStart>0 && seq.charAt(lineStart-1)!='\n' && seq.charAt(lineStart-1)!='\r') {
+			lineStart--;
+		}
+		int lineEnd = pos;
+		while(lineEnd<seq.length() && seq.charAt(lineEnd)!='\n' && seq.charAt(lineEnd)!='\r') {
+			lineEnd++;
+		}
+		b.append(seq, lineStart, lineEnd);
 		b.append('\n');
-        for(int i=0; i<position-2; i++) {
-        	b.append(' ');
+        for(int i=lineStart; i<pos; i++) {
+        	// A tab is kept so that the marker stays aligned
+        	b.append(seq.charAt(i)=='\t' ? '\t' : ' ');
         }
         b.append("^^^");
 		return _createException(cause, b.toString());
