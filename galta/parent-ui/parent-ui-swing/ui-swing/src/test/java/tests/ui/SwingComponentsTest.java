@@ -20,28 +20,22 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
-import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import javax.swing.Icon;
 import javax.swing.JPanel;
-import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 
 import org.monflabs.ui.lookup.StringArrayLookup;
 import org.monflabs.ui.swing.components.image.ImageUtil;
 import org.monflabs.ui.swing.components.models.LookupListModel;
-import org.monflabs.ui.swing.ide.components.TextAreaOutputStream;
 import org.monflabs.ui.swing.layouts.VerticalFlowLayout;
-import org.monflabs.ui.swing.settings.MultipartTextFile;
 
 import tests.ProjectTestCase;
 
 /**
- * Headless tests of the Swing helpers (ui-swing and ui-swing-ide have no test module of their own).
+ * Headless tests of the Swing components and layouts.
  */
 public class SwingComponentsTest extends ProjectTestCase {
 
@@ -132,101 +126,4 @@ public class SwingComponentsTest extends ProjectTestCase {
 		assertEquals(10, panel.getPreferredSize().width);
 	}
 
-	public void testMultipartTextFile() {
-		MultipartTextFile f = new MultipartTextFile();
-		String s = f.serialize(ser -> { ser.serialize("a", "one\n"); ser.serialize("b", "two\n"); });
-		Map<String,String> parts = new LinkedHashMap<>();
-		f.deserialize(s, parts::put);
-		assertEquals(Map.of("a", "one\n", "b", "two\n"), parts);
-		// A truncated file (header without its end) must not throw
-		Map<String,String> partial = new LinkedHashMap<>();
-		f.deserialize("---------- PART: [a]\none\n---------- PART: [trunc", partial::put);
-		assertEquals("one\n", partial.get("a"));
-	}
-
-	public void testTextAreaOutputStreamFromTheEdt() throws Exception {
-		JTextArea ta = new JTextArea();
-		PrintStream ps = TextAreaOutputStream.getPrintStream(ta);
-		// From the event dispatch thread (e.g. a Swing callback printing): used to throw an
-		// Error from invokeAndWait() and then buffer every later output forever
-		SwingUtilities.invokeAndWait(() -> ps.print("edt;"));
-		ps.print("worker;");
-		ps.flush();
-		String[] text = new String[1];
-		SwingUtilities.invokeAndWait(() -> text[0] = ta.getText());
-		assertEquals("edt;worker;", text[0]);
-	}
-
-	enum Color { RED }
-	record Point(int x, int y) {}
-	static class Node {
-		String name;
-		Node next;
-		Color color = Color.RED;
-		Point point = new Point(1, 2);
-		java.util.concurrent.atomic.AtomicInteger counter = new java.util.concurrent.atomic.AtomicInteger(5);
-		Node(String name) { this.name = name; }
-	}
-
-	public void testAstDescriptionCyclesAndOpaqueTypes() {
-		Node a = new Node("a"), b = new Node("b");
-		a.next = b;
-		b.next = a;	// a cycle: used to recurse until a StackOverflowError
-		org.monflabs.util.TextBuilder tb = new org.monflabs.util.TextBuilder();
-		playground.impl.GaltaJSPlaygroundFrame.readObject(tb, a);
-		String s = tb.toString();
-		assertTrue(s, s.contains("<cycle>"));
-		// enums, records and JDK types print themselves (no reflective access to JDK internals)
-		assertTrue(s, s.contains("color=RED"));
-		assertTrue(s, s.contains("point=Point[x=1, y=2]"));
-		assertTrue(s, s.contains("counter=5"));
-	}
-
-	public void testJdkLibraryInfos() throws Exception {
-		java.io.File home = new java.io.File(System.getProperty("java.home"));
-		java.util.List<org.fife.rsta.ac.java.buildpath.LibraryInfo> infos = new java.util.ArrayList<>();
-		infos.add(new com.monflabs.swing.rtsyntax.JrtLibraryInfo());
-		org.fife.rsta.ac.java.buildpath.LibraryInfo main = com.monflabs.swing.rtsyntax.LibraryInfo2.getJreJarInfo(home);
-		assertNotNull(main);	// jmods when present, else jrt:/
-		infos.add(main);
-		for(org.fife.rsta.ac.java.buildpath.LibraryInfo info: infos) {
-			assertNotNull(info.createPackageMap());
-			assertSame("built once", info.createPackageMap(), info.createPackageMap());
-			org.fife.rsta.ac.java.classreader.ClassFile string = info.createClassFile("java/lang/String.class");
-			assertNotNull(info.toString(), string);
-			assertEquals("java.lang.String", string.getClassName(true));
-			assertNotNull(info.createClassFile("java/util/concurrent/ConcurrentHashMap.class"));
-			assertNull(info.createClassFile("no/such/Clazz.class"));
-		}
-	}
-
-	public void testTextAreaOutputStreamDoesNotWaitForTheEdt() throws Exception {
-		JTextArea ta = new JTextArea();
-		PrintStream ps = TextAreaOutputStream.getPrintStream(ta);
-		// Keep the event dispatch thread busy: a print must not wait for it
-		java.util.concurrent.CountDownLatch edtBusy = new java.util.concurrent.CountDownLatch(1);
-		java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
-		SwingUtilities.invokeLater(() -> {
-			edtBusy.countDown();
-			try {
-				release.await(10, java.util.concurrent.TimeUnit.SECONDS);
-			} catch(InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
-		});
-		assertTrue(edtBusy.await(10, java.util.concurrent.TimeUnit.SECONDS));
-		long start = System.nanoTime();
-		for(int i=0; i<1000; i++) {
-			ps.print("x");
-		}
-		ps.println();
-		long elapsedMs = (System.nanoTime()-start)/1_000_000;
-		release.countDown();
-		assertTrue("printing waited for the EDT: "+elapsedMs+"ms", elapsedMs<5_000);
-		// flush() is the synchronization point: everything is visible afterwards
-		ps.flush();
-		String[] text = new String[1];
-		SwingUtilities.invokeAndWait(() -> text[0] = ta.getText());
-		assertEquals("x".repeat(1000)+System.lineSeparator(), text[0]);
-	}
 }

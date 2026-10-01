@@ -15,21 +15,10 @@
  */
 package tests;
 
-import junit.framework.TestSuite;
-import tests.galtajs.AllSnippetsExecutionTest;
-import tests.galtajs.ExecuteGaltaJSTest;
+import org.monflabs.tests.__BaseTestCase;
 
-public class AllLangGaltaJSTests extends TestSuite {
+public abstract class ProjectTestCase extends __BaseTestCase {
 
-	public static TestSuite suite() throws Exception {
-		TestSuite suite = new TestSuite();
-
-		suite.addTestSuite(ExecuteGaltaJSTest.class);
-		suite.addTestSuite(tests.galtajs.PlaygroundEngineTest.class);
-		suite.addTestSuite(tests.ui.AstDescriptionTest.class);
-		suite.addTest(AllSnippetsExecutionTest.suite());
-
-		return suite;
+	protected ProjectTestCase() {
 	}
-
 }

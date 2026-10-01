@@ -46,6 +46,36 @@
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>utilities</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>test</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- The suite only: without includes every test class also runs on its own, twice in total -->
+					<includes>
+						<include>**/AllPlaygroundSwingTests.class</include>
+					</includes>
+					<!-- The tests use Swing components, never a window: no display needed -->
+					<systemPropertyVariables>
+						<java.awt.headless>true</java.awt.headless>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
 
 </project>

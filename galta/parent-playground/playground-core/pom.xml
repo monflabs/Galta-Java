@@ -7,7 +7,7 @@
 	</parent>
 	<artifactId>playground-core</artifactId>
 	<name>Galta Playground Core</name>
-	<description>Core of the interactive scripting playground: snippets, execution engines and markdown rendering.</description>
+	<description>Engine-agnostic core of the interactive scripting playground: snippets, execution engines and their lifecycle.</description>
 
 	<dependencies>
 		<dependency>

@@ -16,20 +16,13 @@
 package tests;
 
 import junit.framework.TestSuite;
-import tests.galtajs.AllSnippetsExecutionTest;
-import tests.galtajs.ExecuteGaltaJSTest;
 
-public class AllLangGaltaJSTests extends TestSuite {
+public class AllPlaygroundSwingTests extends TestSuite {
 
 	public static TestSuite suite() throws Exception {
 		TestSuite suite = new TestSuite();
-
-		suite.addTestSuite(ExecuteGaltaJSTest.class);
-		suite.addTestSuite(tests.galtajs.PlaygroundEngineTest.class);
-		suite.addTestSuite(tests.ui.AstDescriptionTest.class);
-		suite.addTest(AllSnippetsExecutionTest.suite());
+		suite.addTestSuite(tests.swing.PlaygroundSwingTest.class);
 
 		return suite;
 	}
-
 }
