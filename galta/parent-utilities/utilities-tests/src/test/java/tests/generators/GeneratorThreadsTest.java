@@ -138,6 +138,53 @@ public class GeneratorThreadsTest extends ProjectTestCase {
 		assertFalse(gen.hasNext());
 	}
 
+	public void testUnreachableGeneratorReleasesItsBody() throws Exception {
+		// A generator dropped without close() must not leave its body parked in yield()
+		// forever: once the handle is collected, the body unwinds (its finally runs)
+		CountDownLatch bodyDone = new CountDownLatch(1);
+		startAndDrop(bodyDone);
+		for(int i=0; i<100 && bodyDone.getCount()>0; i++) {
+			System.gc();
+			bodyDone.await(50, TimeUnit.MILLISECONDS);
+		}
+		assertEquals("the unreachable generator leaked its parked body", 0, bodyDone.getCount());
+	}
+
+	private static void startAndDrop(CountDownLatch bodyDone) {
+		GeneratorImpl<Integer,Void> gen = GeneratorImpl.create( (g) -> {
+			try {
+				for(int i=0; ; i++) {
+					g.yield(i);
+				}
+			} finally {
+				bodyDone.countDown();
+			}
+		});
+		assertEquals(Integer.valueOf(0), gen.next());
+	}
+
+	public void testExecutorShutdownNowReleasesParkedBody() throws Exception {
+		ExecutorService executor = GeneratorScheduler.createExecutor();
+		CountDownLatch bodyDone = new CountDownLatch(1);
+		GeneratorImpl<Integer,Void> gen = GeneratorImpl.create(executor, (g) -> {
+			try {
+				g.yield(1);
+				g.yield(2);
+				return null;
+			} finally {
+				bodyDone.countDown();
+			}
+		});
+		assertEquals(Integer.valueOf(1), gen.next());
+		executor.shutdownNow();
+		assertTrue("the body ignored the executor shutdown", bodyDone.await(5, TimeUnit.SECONDS));
+		assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+		// The consumer is not left waiting for a handoff that will never come
+		assertThrows(java.util.concurrent.CancellationException.class, () -> gen.next());
+		assertFalse(gen.hasNext());
+		gen.close();
+	}
+
 	private static void assertThrows(Class<? extends Throwable> c, org.junit.function.ThrowingRunnable r) {
 		org.junit.Assert.assertThrows(c, r);
 	}

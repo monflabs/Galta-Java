@@ -24,9 +24,10 @@ public class GeneratorScheduler {
 	private static ExecutorService executor;
 
 	/**
-	 * Generator bodies run on virtual threads: a generator that is abandoned without
-	 * being closed leaves its body parked in yield(), and a virtual thread neither
-	 * costs a platform thread nor keeps the JVM alive.
+	 * Generator bodies run on virtual threads, which neither cost a platform thread nor
+	 * keep the JVM alive. A generator abandoned without being closed still releases its
+	 * body once it is garbage collected, or when this executor is shut down with
+	 * {@code shutdownNow()} (see GeneratorImpl).
 	 */
 	public static ExecutorService createExecutor() {
 		return Executors.newVirtualThreadPerTaskExecutor();
