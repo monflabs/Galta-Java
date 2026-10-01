@@ -126,4 +126,26 @@ public class JsonSchemaFactoryTest extends ProjectTestCase {
 			pool.shutdownNow();
 		}
 	}
+
+	public void testRestrictedLoader() throws Exception {
+		java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("schema");
+		try {
+			java.nio.file.Path ref = dir.resolve("name.json");
+			java.nio.file.Files.writeString(ref, "{ \"type\": \"string\", \"minLength\": 5 }");
+			String schema = "{ \"$schema\": \"https://json-schema.org/draft/2020-12/schema\", \"type\": \"object\", \"properties\": { \"name\": { \"$ref\": \""+ref.toUri()+"\" } } }";
+			// The default factory loads the referenced file
+			JsonSchema open = new JsonSchemaFactory().getJsonSchema(JsonObject.parse(schema));
+			org.junit.Assert.assertThrows(JsonException.class, () -> open.validate(JsonObject.parse("{\"name\":\"ab\"}")));
+			// A restricted factory does not read it
+			JsonSchemaFactory restricted = new JsonSchemaFactory(JsonSchemaFactory.NO_LOADING);
+			JsonSchema closed = restricted.getJsonSchema(JsonObject.parse(schema));
+			closed.validate(JsonObject.parse("{\"name\":\"ab\"}"));
+			// Local references still work
+			JsonSchema local = restricted.getJsonSchema(JsonObject.parse(SCHEMA));
+			local.validate(JsonObject.parse(VALID));
+			org.junit.Assert.assertThrows(JsonException.class, () -> local.validate(JsonObject.parse(INVALID)));
+		} finally {
+			org.monflabs.util.path.FilesUtil.deleteRecursively(dir);
+		}
+	}
 }

@@ -103,6 +103,7 @@ Because of the cache, a factory never sees later changes to a URI-addressed sche
 |---|---|
 | `$schema` | Declare it. Without `$schema` (and without `$id`), jsonschemafriend reads the schema as **draft-04**, where for instance `36.0` is not an `integer`; with draft 6 and later it is. |
 | Missing schema | A URI that cannot be loaded, including a `$ref` to one, only logs a warning and is replaced by a schema that **accepts everything**. Make sure the schema files exist. |
+| Trusted schemas only | A schema URI or a `$ref` is loaded whatever its scheme: `http(s):` makes a network request, `file:`/`jar:` read local files. Only use schemas from a trusted source, or create the factory with a restricted jsonschemafriend `Loader`: `new JsonSchemaFactory(JsonSchemaFactory.NO_LOADING)` only resolves the references inside the document (and the bundled meta-schemas). |
 | The schema itself | Is not validated against its meta-schema: an invalid keyword value such as `"type": 12` is silently ignored. |
 | Formats | `format` is asserted, e.g. `"format": "email"` rejects `not-an-email`. |
 | Numbers | GaltaJSON number types (`Integer`, `Long`, `Double`, `BigDecimal`...) are all accepted. |

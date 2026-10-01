@@ -15,11 +15,13 @@
  */
 package org.monflabs.json.jsonschema;
 
+import java.io.IOException;
 import java.net.URI;
 
 import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonObject;
 
+import net.jimblackler.jsonschemafriend.Loader;
 import net.jimblackler.jsonschemafriend.Schema;
 import net.jimblackler.jsonschemafriend.SchemaStore;
 
@@ -38,8 +40,25 @@ import net.jimblackler.jsonschemafriend.SchemaStore;
  * factory. The built {@link Schema} keeps a reference to its own store, so {@code $ref}s inside the
  * document still resolve, and since nothing is shared no locking is needed on that path.</li>
  * </ul>
+ * <p>
+ * <b>Schemas must be trusted.</b> jsonschemafriend resolves a <code>$ref</code> (and a schema
+ * URI) by loading it, whatever its scheme: <code>http:</code>/<code>https:</code> (a network
+ * request), <code>file:</code> or <code>jar:</code> (any readable local file). A schema coming
+ * from an untrusted source can then make the application read local files or reach internal
+ * hosts. To validate with such schemas, create the factory with a restricted {@link Loader},
+ * such as {@link #NO_LOADING} (only the local <code>#/...</code> references and the bundled
+ * meta-schemas are then available). Note that jsonschemafriend replaces a document it cannot
+ * load by a schema that accepts everything (it only logs a warning).
  */
 public class JsonSchemaFactory {
+
+	/**
+	 * A loader that refuses to load any document: only the references inside a schema
+	 * document and the bundled meta-schemas can be used.
+	 */
+	public static final Loader NO_LOADING = (uri, cacheSchema) -> {
+		throw new IOException("Loading the schema document "+uri+" is not allowed");
+	};
 	
 	private static final JsonSchemaFactory instance = new JsonSchemaFactory();
 	public static JsonSchemaFactory get() {
@@ -47,9 +66,29 @@ public class JsonSchemaFactory {
 	}
 
 	/** Store for URI-addressed schemas only; always accessed under its own monitor. */
-	private final SchemaStore schemaStore = new SchemaStore();
+	private final SchemaStore schemaStore;
+	// null: the default loader of jsonschemafriend (any URI)
+	private final Loader loader;
 
+	/**
+	 * A factory loading the documents with the default jsonschemafriend loader (any URI,
+	 * see the class comment).
+	 */
 	public JsonSchemaFactory() {
+		this(null);
+	}
+
+	/**
+	 * A factory loading the schema documents (URIs and <code>$ref</code>s to other
+	 * documents) with a specific loader, for example {@link #NO_LOADING}.
+	 */
+	public JsonSchemaFactory(Loader loader) {
+		this.loader = loader;
+		this.schemaStore = newStore();
+	}
+
+	private SchemaStore newStore() {
+		return loader!=null ? new SchemaStore(loader) : new SchemaStore();
 	}
 	
 	public JsonSchema getJsonSchema(JsonObject schema) {
@@ -57,7 +96,7 @@ public class JsonSchemaFactory {
 			// We don't validate the schema itself
 			// Else, it loads the schema's schema and this slows down the loading
 			// A private store: see the class comment - the shared one would retain the document forever.
-			Schema sc = new SchemaStore().loadSchema(schema,null);
+			Schema sc = newStore().loadSchema(schema,null);
 			return new JsonSchema(sc);
 		} catch(Exception ex) {
 			throw new JsonException(ex,ex.getLocalizedMessage());
