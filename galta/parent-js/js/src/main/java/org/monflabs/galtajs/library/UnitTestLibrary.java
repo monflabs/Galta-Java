@@ -16,7 +16,7 @@
 package org.monflabs.galtajs.library;
 
 import java.io.InputStream;
-import java.nio.charset.Charset;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.List;
@@ -371,12 +371,17 @@ public class UnitTestLibrary extends GlobalLibrary {
 				}
 				case assertParseError: {
 					String p0 = paramString(parameters, 0);
+					boolean parsed;
 					try {
 						getEnvironment().createScript(p0,"assertParseError");
+						parsed = true;
+					} catch(Exception ex) {
+						parsed = false;
+					}
+					if(parsed) {
 						JSRuntimeContext.get().dumpContext();
 						Console.log(title()+"assertParseError({0})",DebugUtil.jsLiteral(getEnvironment(),p0));
 						throw RuntimeUtil.uncatchable(title()+"Assertion error, assertParseError()\nExpression is compiling without error.\n{0}",DebugUtil.truncate(p0));
-					} catch(Exception ex) {
 					}
 					return true;
 				}
@@ -712,24 +717,15 @@ public class UnitTestLibrary extends GlobalLibrary {
 		private String loadText(String resourceName) {
 			try {
 				InputStream is = JSEnvironment.getEnvironment().getClassLoader().getResourceAsStream(resourceName);
-				try {
-					return readString(is,StandardCharsets.UTF_8);
-				} finally {
-					is.close();
+				if(is==null) {
+					throw RuntimeUtil.error("Resource '{0}' not found",resourceName);
 				}
-			} catch(Exception e) {
+				try(is) {
+					return new String(is.readAllBytes(),StandardCharsets.UTF_8);
+				}
+			} catch(IOException e) {
 				throw RuntimeUtil.error(e,"Error while loading resource '{0}'",resourceName);
 			}
-		}
-		private String readString(InputStream is, Charset encoding) throws Exception {
-			StringBuilder sb = new StringBuilder(8192);
-			byte[] b = new byte[8192];
-			int c;
-			while( (c=is.read(b)) >=0 ) {
-				String s = new String(b, 0, c, encoding);
-				sb.append(s);
-			}
-			return sb.toString();
 		}
 	}
 }

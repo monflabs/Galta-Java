@@ -457,6 +457,7 @@ public class GaltaJSTestSuite {
 		suite.addTestSuite(tests.javascript.compiler.IdentifierEscapeNoStrictTest.class);
 		suite.addTestSuite(tests.javascript.compiler.EmptyScriptNoNewLineTest.class);
 		suite.addTestSuite(tests.javascript.compiler.EmptyScriptTest.class);
+		suite.addTestSuite(tests.javascript.compiler.CompilerTest.class);
 		suite.addTestSuite(tests.javascript.compiler.MultiLineCommentAsiTest.class);
 		suite.addTestSuite(tests.javascript.compiler.ObjectAsExpressionTest.class);
 		suite.addTestSuite(tests.javascript.compiler.RestrictedProductionAsiTest.class);

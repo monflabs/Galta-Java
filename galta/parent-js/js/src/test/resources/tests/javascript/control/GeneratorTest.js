@@ -83,8 +83,15 @@ function* both() { yield* a(); yield* b(); }
 assertEquals( [1,2,3,4], [...both()] )
 
 
-// assertParseError: yield* outside a generator
+// yield* outside a generator: a SyntaxError in strict code only - in sloppy
+// code "yield" is a plain identifier and "yield* [1,2,3]" a multiplication
 assertParseError( `
+  "use strict";
+  function notAGenerator() {
+    yield* [1,2,3];
+  }
+` )
+assertParse( `
   function notAGenerator() {
     yield* [1,2,3];
   }
