@@ -21,10 +21,8 @@
 	</properties>
 
 	<modules>
-		<module>demo-airline</module>
 		<module>demo-northwind</module>
 		<module>demo-dvdrental</module>
-		<module>demo-retail</module>
 		<module>demo-tour-de-france</module>
 	</modules>
 

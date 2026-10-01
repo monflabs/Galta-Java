@@ -60,6 +60,44 @@ public class NorthWindImportTest extends ProjectTestCase {
 		}
 	}
 
+	public void testNullsAndLineBreaks() throws Exception {
+		NorthwindTables tables = new NorthwindTables();
+		_Table<org.monflabs.demodata.northwind.pojo.Employees.Record> employees = tables.getTable(NorthwindTables.employees);
+		org.monflabs.demodata.northwind.pojo.Employees.Record davolio = employees.getRecords().get(0);
+		// an empty CSV field is a SQL NULL, not an empty string
+		assertNull(davolio.photo);
+		// the address line break is exported escaped: read as a real one
+		assertEquals("507 - 20th Ave. E.\nApt. 2A", davolio.address);
+		org.monflabs.demodata.northwind.pojo.Employees.Record fuller = employees.getRecords().get(1);
+		assertNull("the top manager reports to no one", fuller.reports_to);
+		// no empty string anywhere
+		for(_Table<? extends _Record> tb: tables.getTables().values()) {
+			for(_Record r: tb.getRecords()) {
+				for(Object v: r.toJavaArray()) {
+					assertFalse(tb.getName(), "".equals(v));
+				}
+			}
+		}
+	}
+
+	public void testHeaderOnlyTablesAreEmpty() throws Exception {
+		NorthwindTables tables = new NorthwindTables();
+		assertTrue(tables.getTables().get(NorthwindTables.customer_customer_demo).getRecords().isEmpty());
+		assertTrue(tables.getTables().get(NorthwindTables.customer_demographics).getRecords().isEmpty());
+	}
+
+	public void testOpenResource() throws Exception {
+		try(java.io.BufferedReader r = new java.io.BufferedReader(NorthwindTables.openResource("csv/region.csv"))) {
+			assertEquals("region_id,region_description", r.readLine());
+		}
+		try {
+			NorthwindTables.openResource("csv/nope.csv");
+			fail();
+		} catch(java.io.UncheckedIOException e) {
+			// expected
+		}
+	}
+
 	public void testJavaArrayMatchesTheFields() throws Exception {
 		// toJavaArray() lists the record fields, in declaration order (Customers used to
 		// repeat postal_code, shifting the following columns)

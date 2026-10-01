@@ -1,1 +1,0 @@
-https://postgrespro.com/education/demodb

@@ -6,12 +6,12 @@
     "Purchasing Manager",
     "49 Gilbert St.",
     "London",
-    "",
+    null,
     "EC1 4SD",
     "UK",
     "(171) 555-2222",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "2",
@@ -24,7 +24,7 @@
     "70117",
     "USA",
     "(100) 555-4822",
-    "",
+    null,
     "#CAJUN.HTM#"
   ],
   [
@@ -39,7 +39,7 @@
     "USA",
     "(313) 555-5735",
     "(313) 555-3349",
-    ""
+    null
   ],
   [
     "4",
@@ -48,12 +48,12 @@
     "Marketing Manager",
     "9-8 Sekimai Musashino-shi",
     "Tokyo",
-    "",
+    null,
     "100",
     "Japan",
     "(03) 3555-5011",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "5",
@@ -66,8 +66,8 @@
     "33007",
     "Spain",
     "(98) 598 76 54",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "6",
@@ -76,11 +76,11 @@
     "Marketing Representative",
     "92 Setsuko Chuo-ku",
     "Osaka",
-    "",
+    null,
     "545",
     "Japan",
     "(06) 431-7877",
-    "",
+    null,
     "Mayumi's (on the World Wide Web)#http://www.microsoft.com/accessdev/sampleapps/mayumi.htm#"
   ],
   [
@@ -95,7 +95,7 @@
     "Australia",
     "(03) 444-2343",
     "(03) 444-6588",
-    ""
+    null
   ],
   [
     "8",
@@ -104,26 +104,26 @@
     "Sales Representative",
     "29 King's Way",
     "Manchester",
-    "",
+    null,
     "M14 GSD",
     "UK",
     "(161) 555-4448",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "9",
-    "PB Kn\u00e4ckebr\u00f6d AB",
+    "PB Knäckebröd AB",
     "Lars Peterson",
     "Sales Agent",
     "Kaloadagatan 13",
-    "G\u00f6teborg",
-    "",
+    "Göteborg",
+    null,
     "S-345 67",
     "Sweden",
     "031-987 65 43",
     "031-987 65 91",
-    ""
+    null
   ],
   [
     "10",
@@ -132,39 +132,39 @@
     "Marketing Manager",
     "Av. das Americanas 12.890",
     "Sao Paulo",
-    "",
+    null,
     "5442",
     "Brazil",
     "(11) 555 4640",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "11",
-    "Heli S\u00fc\u00dfwaren GmbH & Co. KG",
+    "Heli Süßwaren GmbH & Co. KG",
     "Petra Winkler",
     "Sales Manager",
-    "Tiergartenstra\u00dfe 5",
+    "Tiergartenstraße 5",
     "Berlin",
-    "",
+    null,
     "10785",
     "Germany",
     "(010) 9984510",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "12",
-    "Plutzer Lebensmittelgro\u00dfm\u00e4rkte AG",
+    "Plutzer Lebensmittelgroßmärkte AG",
     "Martin Bein",
     "International Marketing Mgr.",
     "Bogenallee 51",
     "Frankfurt",
-    "",
+    null,
     "60439",
     "Germany",
     "(069) 992755",
-    "",
+    null,
     "Plutzer (on the World Wide Web)#http://www.microsoft.com/accessdev/sampleapps/plutzer.htm#"
   ],
   [
@@ -174,12 +174,12 @@
     "Coordinator Foreign Markets",
     "Frahmredder 112a",
     "Cuxhaven",
-    "",
+    null,
     "27478",
     "Germany",
     "(04721) 8713",
     "(04721) 8714",
-    ""
+    null
   ],
   [
     "14",
@@ -188,7 +188,7 @@
     "Sales Representative",
     "Viale Dante, 75",
     "Ravenna",
-    "",
+    null,
     "48100",
     "Italy",
     "(0544) 60323",
@@ -202,12 +202,12 @@
     "Marketing Manager",
     "Hatlevegen 5",
     "Sandvika",
-    "",
+    null,
     "1320",
     "Norway",
     "(0)2-953010",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "16",
@@ -220,36 +220,36 @@
     "97101",
     "USA",
     "(503) 555-9931",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "17",
-    "Svensk Sj\u00f6f\u00f6da AB",
-    "Michael Bj\u00f6rn",
+    "Svensk Sjöföda AB",
+    "Michael Björn",
     "Sales Representative",
-    "Brovallav\u00e4gen 231",
+    "Brovallavägen 231",
     "Stockholm",
-    "",
+    null,
     "S-123 45",
     "Sweden",
     "08-123 45 67",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "18",
-    "Aux joyeux eccl\u00e9siastiques",
-    "Guyl\u00e8ne Nodier",
+    "Aux joyeux ecclésiastiques",
+    "Guylène Nodier",
     "Sales Manager",
     "203, Rue des Francs-Bourgeois",
     "Paris",
-    "",
+    null,
     "75004",
     "France",
     "(1) 03.83.00.68",
     "(1) 03.83.00.62",
-    ""
+    null
   ],
   [
     "19",
@@ -263,7 +263,7 @@
     "USA",
     "(617) 555-3267",
     "(617) 555-3389",
-    ""
+    null
   ],
   [
     "20",
@@ -272,12 +272,12 @@
     "Owner",
     "471 Serangoon Loop, Suite #402",
     "Singapore",
-    "",
+    null,
     "0512",
     "Singapore",
     "555-8787",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "21",
@@ -286,12 +286,12 @@
     "Sales Manager",
     "Lyngbysild Fiskebakken 10",
     "Lyngby",
-    "",
+    null,
     "2800",
     "Denmark",
     "43844108",
     "43844115",
-    ""
+    null
   ],
   [
     "22",
@@ -300,12 +300,12 @@
     "Accounting Manager",
     "Verkoop Rijnweg 22",
     "Zaandam",
-    "",
+    null,
     "9999 ZZ",
     "Netherlands",
     "(12345) 1212",
     "(12345) 1210",
-    ""
+    null
   ],
   [
     "23",
@@ -314,12 +314,12 @@
     "Product Manager",
     "Valtakatu 12",
     "Lappeenranta",
-    "",
+    null,
     "53120",
     "Finland",
     "(953) 10956",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "24",
@@ -341,13 +341,13 @@
     "Jean-Guy Lauzon",
     "Marketing Manager",
     "2960 Rue St. Laurent",
-    "Montr\u00e9al",
-    "Qu\u00e9bec",
+    "Montréal",
+    "Québec",
     "H1J 1C3",
     "Canada",
     "(514) 555-9022",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "26",
@@ -356,12 +356,12 @@
     "Order Administrator",
     "Via dei Gelsomini, 153",
     "Salerno",
-    "",
+    null,
     "84100",
     "Italy",
     "(089) 6547665",
     "(089) 6547667",
-    ""
+    null
   ],
   [
     "27",
@@ -370,39 +370,39 @@
     "Sales Manager",
     "22, rue H. Voiron",
     "Montceau",
-    "",
+    null,
     "71300",
     "France",
     "85.57.00.07",
-    "",
-    ""
+    null,
+    null
   ],
   [
     "28",
-    "Gai p\u00e2turage",
+    "Gai pâturage",
     "Eliane Noz",
     "Sales Representative",
     "Bat. B 3, rue des Alpes",
     "Annecy",
-    "",
+    null,
     "74000",
     "France",
     "38.76.98.06",
     "38.76.98.58",
-    ""
+    null
   ],
   [
     "29",
-    "For\u00eats d'\u00e9rables",
+    "Forêts d'érables",
     "Chantal Goulet",
     "Accounting Manager",
     "148 rue Chasseur",
     "Ste-Hyacinthe",
-    "Qu\u00e9bec",
+    "Québec",
     "J2S 7S8",
     "Canada",
     "(514) 555-2955",
     "(514) 555-2921",
-    ""
+    null
   ]
 ]

@@ -15,15 +15,40 @@
  */
 package org.monflabs.demodata.northwind.pojo;
 
-import java.io.StringReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.impexp.csv.CsvSource;
 import org.monflabs.json.impexp.pojo.PojoTarget;
-import org.monflabs.util.ResourceLoader;
 
+/**
+ * The Northwind tables, loaded from the CSV files bundled in
+ * {@code northwind/csv/} (one file per table, header row first).
+ * <p>
+ * How the values are read:
+ * <ul>
+ * <li>an empty field is a SQL {@code NULL} and is read as {@code null} (a CSV
+ * export cannot tell an empty string from a NULL, and Northwind has no empty
+ * strings);</li>
+ * <li>the line breaks exported as the two characters backslash and {@code n}
+ * (employee addresses) are read as real line breaks;</li>
+ * <li>the identifiers keep the types of the record classes: most are
+ * {@code String}, including the numeric ones like {@code order_id}; the
+ * shipper ({@code Shippers.shipper_id}, {@code Orders.ship_via}) is an
+ * {@code int}. The record classes are shared with other projects, so these
+ * types are kept as they are;</li>
+ * <li>the dates stay ISO-8601 strings ({@code yyyy-MM-dd});</li>
+ * <li>a table whose file only has its header row
+ * ({@code customer_customer_demo}, {@code customer_demographics}) is empty.</li>
+ * </ul>
+ */
 public class NorthwindTables extends _Tables {
 
 	public static final String categories = "categories";
@@ -72,7 +97,7 @@ public class NorthwindTables extends _Tables {
 		if(importData) {
 			CsvSource source = CsvSource.newBuilder()
 					.firstRowAsHeader(true)
-					.reader(() -> new StringReader(ResourceLoader.loadTextResource("northwind/csv/"+tableName+".csv")))
+					.reader(() -> openResource("csv/"+tableName+".csv"))
 					.build();
 			
 			
@@ -83,13 +108,44 @@ public class NorthwindTables extends _Tables {
 					JsonObject o = (JsonObject)content.getJson();
 					Object r = table.createRecord();
 					for(Map.Entry<String, Object> e: o.entrySet()) {
-						getAccessor().putMember(r, e.getKey(), e.getValue());
+						getAccessor().putMember(r, e.getKey(), readValue(e.getValue()));
 					}
 					((List)table.getRecords()).add(r);
 				})
 				.build();
-					
+
 			source.exportTo(target);
 		}
+	}
+
+	/**
+	 * A CSV value as stored in a record: an empty field is a NULL, an escaped
+	 * line break is a real one.
+	 */
+	static Object readValue(Object value) {
+		if(value instanceof String s) {
+			if(s.isEmpty()) {
+				return null;
+			}
+			return s.indexOf('\\')>=0 ? s.replace("\\n", "\n") : s;
+		}
+		return value;
+	}
+
+	/**
+	 * Opens one of the bundled files, read as UTF-8 through this module's own
+	 * class loader.
+	 *
+	 * @param path a path relative to the {@code northwind/} folder, e.g.
+	 * {@code csv/orders.csv} or {@code postgresql/create-schema.sql}
+	 * @throws UncheckedIOException when there is no such file
+	 */
+	public static Reader openResource(String path) {
+		String resource = "northwind/"+path;
+		InputStream is = NorthwindTables.class.getClassLoader().getResourceAsStream(resource);
+		if(is==null) {
+			throw new UncheckedIOException(new IOException("Missing resource "+resource));
+		}
+		return new InputStreamReader(is, StandardCharsets.UTF_8);
 	}
 }

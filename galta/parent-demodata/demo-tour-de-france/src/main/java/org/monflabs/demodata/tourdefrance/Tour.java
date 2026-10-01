@@ -17,31 +17,85 @@ package org.monflabs.demodata.tourdefrance;
 
 import org.monflabs.json.JsonArray;
 
+/**
+ * One edition of the Tour de France, as read from {@code tourdefrance/tdf_tours.csv}.
+ */
 public class Tour {
-	
+
+	/**
+	 * The editions before this year are flagged as archived by {@link TDFDataLoader}.
+	 */
+	public static final int ARCHIVE_YEAR = 1910;
+
 	private int year;
 	private String distance;
 	private int starters;
 	private int finishers;
-	
+
 	private boolean archived;
-	
+
 	public Tour() {
 	}
 
 	public int getYear() {
 		return year;
 	}
+	/**
+	 * Sets the year only: the archived flag is a separate property (it used
+	 * to be recomputed here, silently overwriting a value set before).
+	 */
 	public void setYear(int year) {
 		this.year = year;
-		this.archived = year<1910;
 	}
 
+	/**
+	 * The distance as published, e.g. {@code "2,428 km (1,509 mi)"} - the
+	 * separators between the numbers and the units are non-breaking spaces.
+	 *
+	 * @see #getDistanceKm()
+	 */
 	public String getDistance() {
 		return distance;
 	}
 	public void setDistance(String distance) {
 		this.distance = distance;
+	}
+
+	/**
+	 * The distance in kilometers, parsed from {@link #getDistance()}, or
+	 * {@code Double.NaN} when there is none or it cannot be read.
+	 */
+	public double getDistanceKm() {
+		return parseKm(distance);
+	}
+
+	/**
+	 * Reads the leading number of a distance like {@code "2,428.5 km (1,509 mi)"},
+	 * ignoring the thousands separators.
+	 */
+	static double parseKm(String distance) {
+		if(distance==null) {
+			return Double.NaN;
+		}
+		StringBuilder b = new StringBuilder();
+		for(int i=0; i<distance.length(); i++) {
+			char c = distance.charAt(i);
+			if((c>='0' && c<='9') || c=='.') {
+				b.append(c);
+			} else if(c==',' && b.length()>0) {
+				// thousands separator
+			} else if(b.length()>0 || !Character.isSpaceChar(c)) {
+				break;
+			}
+		}
+		if(b.length()==0) {
+			return Double.NaN;
+		}
+		try {
+			return Double.parseDouble(b.toString());
+		} catch(NumberFormatException e) {
+			return Double.NaN;
+		}
 	}
 
 	public int getStarters() {
@@ -58,6 +112,10 @@ public class Tour {
 		this.finishers = finishers;
 	}
 
+	/**
+	 * Whether this is an old edition (before {@link #ARCHIVE_YEAR}): set by
+	 * the loader, a plain property otherwise.
+	 */
 	public boolean isArchived() {
 		return archived;
 	}

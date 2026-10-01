@@ -35,6 +35,44 @@ public class TDFDataLoaderTest extends TestCase {
 		assertTrue(first.isArchived());
 		// The CSV files are UTF-8: the distance keeps its non-breaking spaces
 		assertEquals("2,428 km (1,509 mi)", first.getDistance());
+		assertEquals(2428.0, first.getDistanceKm());
+		for(Tour t: tours) {
+			assertFalse(t.getYear()+": "+t.getDistance(), Double.isNaN(t.getDistanceKm()));
+			assertEquals(t.getYear()<Tour.ARCHIVE_YEAR, t.isArchived());
+		}
+	}
+
+	public void testDistanceKm() {
+		Tour t = new Tour();
+		assertTrue(Double.isNaN(t.getDistanceKm()));
+		t.setDistance("3,349.5\u00a0km (2,081\u00a0mi)");
+		assertEquals(3349.5, t.getDistanceKm());
+		t.setDistance("467 km (290 mi)");
+		assertEquals(467.0, t.getDistanceKm());
+		t.setDistance("unknown");
+		assertTrue(Double.isNaN(t.getDistanceKm()));
+	}
+
+	public void testSetYearHasNoSideEffect() {
+		Tour t = new Tour();
+		t.setArchived(true);
+		t.setYear(2000);
+		assertTrue("setYear() must not reset the archived flag", t.isArchived());
+		t.setArchived(false);
+		t.setYear(1900);
+		assertFalse(t.isArchived());
+	}
+
+	public void testOpenResource() throws Exception {
+		try(java.io.BufferedReader r = new java.io.BufferedReader(TDFDataLoader.openResource("data_dictionary.csv"))) {
+			assertTrue(r.readLine().startsWith("Table"));
+		}
+		try {
+			TDFDataLoader.openResource("nope.csv");
+			fail();
+		} catch(java.io.UncheckedIOException e) {
+			// expected
+		}
 	}
 
 	public void testResourcesAreUtf8() {
