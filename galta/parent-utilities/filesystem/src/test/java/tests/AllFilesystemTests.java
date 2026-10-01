@@ -27,6 +27,7 @@ import tests.filesystem.SandboxTest;
 import tests.filesystem.UnsandboxedFileFileSystemTest;
 import tests.filesystem.ResourceFileSystemTest;
 import tests.filesystem.ZipFileSystemTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllFilesystemTests extends TestSuite {
 
@@ -46,6 +47,9 @@ public class AllFilesystemTests extends TestSuite {
 
 		// Samples of docs/Utilities/FileSystems.md
 		suite.addTestSuite(FileSystemsExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllFilesystemTests.class));
 
 		return suite;
 	}

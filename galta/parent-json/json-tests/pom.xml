@@ -18,6 +18,9 @@
 		<gpg.skip>true</gpg.skip>
 	</properties>
 
+	<!-- The tested libraries are compile dependencies (this module has no main code and is
+	     not published) so the JaCoCo aggregate report covers them: report-aggregate ignores
+	     the test-scoped dependencies -->
 	<dependencies>
 		<dependency>
 			<groupId>junit</groupId>
@@ -33,32 +36,26 @@
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>utilities</artifactId>
-			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>json</artifactId>
-			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>json-jsonpath-jayway</artifactId>
-			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>json-yaml-snakeyaml</artifactId>
-			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>json-serialization</artifactId>
-			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>json-jsonschema-jsonschemafriend</artifactId>
-			<scope>test</scope>
 		</dependency>
 	</dependencies>
 	
@@ -73,6 +70,29 @@
 						<include>**/AllJsonDocExamplesTests.class</include>
 					</includes>
 				</configuration>
+			</plugin>
+			<!-- This module only has tests: its own JaCoCo report would be empty ("No class
+			     files specified"). Report the coverage of the library modules it tests instead,
+			     in target/site/jacoco-aggregate (needs them in the reactor: -am or a full build). -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>report</id>
+						<phase>none</phase>
+					</execution>
+					<execution>
+						<id>report-aggregate</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report-aggregate</goal>
+						</goals>
+						<configuration>
+							<includeCurrentProject>true</includeCurrentProject>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>

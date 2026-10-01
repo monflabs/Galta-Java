@@ -20,6 +20,7 @@ import junit.framework.TestSuite;
 import tests.javac.FileHelloWorldTest;
 import tests.javac.JavaCompilerRegressionTest;
 import tests.javac.SimpleHelloWorldTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllJavaCompilerTests extends TestSuite {
 
@@ -32,6 +33,9 @@ public class AllJavaCompilerTests extends TestSuite {
 
 		// Samples of docs/Utilities/JavaCompiler.md
 		suite.addTestSuite(JavaCompilerExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllJavaCompilerTests.class));
 
 		return suite;
 	}

@@ -35,6 +35,7 @@ import tests.impexp.StreamSourceTest;
 import tests.impexp.ZipFileSourceTest;
 import tests.impexp.ZipFileTargetTest;
 import tests.impexp.ZipInputStreamSourceTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllJsonImpExpTests extends TestSuite {
 
@@ -62,6 +63,9 @@ public class AllJsonImpExpTests extends TestSuite {
 		suite.addTestSuite(ZipFileTargetTest.class);
 
 		suite.addTestSuite(ImportExportExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllJsonImpExpTests.class));
 
 		return suite;
 	}

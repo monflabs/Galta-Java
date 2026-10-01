@@ -93,6 +93,17 @@
 		<jmh.version>1.37</jmh.version>
 		<graalvm.version>25.0.1</graalvm.version>
 		<javacc.version>7.0.13</javacc.version>
+
+		<!-- Set by jacoco:prepare-agent; empty when JaCoCo does not run, so the surefire
+		     argLine below (@{argLine}) always resolves -->
+		<argLine></argLine>
+
+		<!-- Resource leak detection of the Galta test library (__BaseTestCase): a module
+		     turns it on by setting this property to true (passed to the tests below) -->
+		<monflabs.tests.trackLeaks>false</monflabs.tests.trackLeaks>
+		<!-- Extra JVM options for the test forks, e.g. to run the tests under another locale:
+		     mvn test -Dmonflabs.tests.jvmArgs="-Duser.language=tr -Duser.country=TR" -->
+		<monflabs.tests.jvmArgs></monflabs.tests.jvmArgs>
 	</properties>
 
 	<dependencyManagement>
@@ -574,6 +585,17 @@
 							900 s is headroom: a slow machine or a JDK regression degrades
 							into a slow build rather than a mystery hang.
 						-->
+						<!--
+							@{argLine} keeps the JaCoCo agent (late replacement, after
+							jacoco:prepare-agent). EnableDynamicAgentLoading: the resource leak
+							detector of the test library attaches ByteBuddy's agent at runtime,
+							which JDK 21+ only allows with a warning otherwise (JEP 451). A
+							module that sets its own argLine must keep @{argLine}.
+						-->
+						<argLine>@{argLine} -XX:+EnableDynamicAgentLoading ${monflabs.tests.jvmArgs}</argLine>
+						<systemPropertyVariables>
+							<monflabs.tests.trackLeaks>${monflabs.tests.trackLeaks}</monflabs.tests.trackLeaks>
+						</systemPropertyVariables>
 						<forkedProcessTimeoutInSeconds>900</forkedProcessTimeoutInSeconds>
 						<forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
 						<forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>

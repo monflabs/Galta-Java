@@ -48,6 +48,29 @@
 					</includes>
 				</configuration>
 			</plugin>
+			<!-- This module only has tests: its own JaCoCo report would be empty ("No class
+			     files specified"). Report the coverage of the library modules it tests instead,
+			     in target/site/jacoco-aggregate (needs them in the reactor: -am or a full build). -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>report</id>
+						<phase>none</phase>
+					</execution>
+					<execution>
+						<id>report-aggregate</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report-aggregate</goal>
+						</goals>
+						<configuration>
+							<includeCurrentProject>true</includeCurrentProject>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 	</build>
 </project>

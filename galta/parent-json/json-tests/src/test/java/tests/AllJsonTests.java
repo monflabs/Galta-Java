@@ -16,6 +16,7 @@
 package tests;
 
 import junit.framework.TestSuite;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllJsonTests extends TestSuite {
 
@@ -37,6 +38,9 @@ public class AllJsonTests extends TestSuite {
 			suite.addTest(javaSuite);
 		}
 		
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllJsonTests.class, doc_examples.AllJsonDocExamplesTests.class));
+
 		return suite;
 	}
 

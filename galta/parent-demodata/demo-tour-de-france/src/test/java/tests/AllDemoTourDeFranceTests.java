@@ -16,6 +16,7 @@
 package tests;
 
 import junit.framework.TestSuite;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllDemoTourDeFranceTests extends TestSuite {
 
@@ -23,6 +24,9 @@ public class AllDemoTourDeFranceTests extends TestSuite {
 		TestSuite suite = new TestSuite();
 		
 suite.addTestSuite(tests.tdf.TDFDataLoaderTest.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllDemoTourDeFranceTests.class));
 
 		return suite;
 	}

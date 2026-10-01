@@ -59,6 +59,7 @@ import tests.util.TypeUtilTest;
 import tests.util.VersionTest;
 import tests.util._DtoALibraryTest;
 import tests.util._DtoAPerformanceTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllUtilTests extends TestSuite {
 
@@ -119,6 +120,9 @@ public class AllUtilTests extends TestSuite {
 		suite.addTestSuite(_DtoAPerformanceTest.class);
 		suite.addTestSuite(DtoATest.class);
 
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllUtilTests.class, doc_examples.AllUtilDocExamplesTests.class));
 
 		return suite;
 	}

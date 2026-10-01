@@ -13,6 +13,12 @@
 	<name>Galta JSON Parent</name>
 	<description>Parent of the Galta JSON modules.</description>
 
+	<properties>
+		<!-- Fail the tests that leave files, channels or zip files open (see
+		     docs/Utilities/Testing.md, "Resource leak detection") -->
+		<monflabs.tests.trackLeaks>true</monflabs.tests.trackLeaks>
+	</properties>
+
 	<modules>
 		<module>json</module>
 		<module>json-performance</module>

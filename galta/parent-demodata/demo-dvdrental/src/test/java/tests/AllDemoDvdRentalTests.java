@@ -16,6 +16,7 @@
 package tests;
 
 import junit.framework.TestSuite;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllDemoDvdRentalTests extends TestSuite {
 
@@ -23,6 +24,9 @@ public class AllDemoDvdRentalTests extends TestSuite {
 		TestSuite suite = new TestSuite();
 		
 suite.addTestSuite(tests.dvdrental.MiniJsonDataSetTest.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllDemoDvdRentalTests.class));
 
 		return suite;
 	}

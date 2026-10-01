@@ -27,6 +27,7 @@ import tests.serialization.ReflectionFieldsTest;
 import tests.serialization.RegistryWriterTest;
 import tests.serialization.SerializationHardeningTest;
 import tests.serialization.SerializationRegressionTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllJsonSerializationTests extends TestSuite {
 
@@ -45,6 +46,9 @@ public class AllJsonSerializationTests extends TestSuite {
 		suite.addTestSuite(SerializationHardeningTest.class);
 
 		suite.addTestSuite(SerializationExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllJsonSerializationTests.class));
 
 		return suite;
 	}

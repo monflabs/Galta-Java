@@ -17,6 +17,7 @@ package tests;
 
 import junit.framework.TestSuite;
 import tests.csv.NorthWindImportTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllDemoNorthwindTests extends TestSuite {
 
@@ -24,6 +25,9 @@ public class AllDemoNorthwindTests extends TestSuite {
 		TestSuite suite = new TestSuite();
 		
 		suite.addTestSuite(NorthWindImportTest.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllDemoNorthwindTests.class));
 
 		return suite;
 	}

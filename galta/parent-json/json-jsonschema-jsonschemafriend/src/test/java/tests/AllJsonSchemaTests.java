@@ -20,6 +20,7 @@ import junit.framework.TestSuite;
 import tests.schema.JsonSchemaFactoryTest;
 import tests.schema.JsonSchemaTest;
 import tests.schema.JsonSchemaValuesTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllJsonSchemaTests extends TestSuite {
 
@@ -31,6 +32,9 @@ public class AllJsonSchemaTests extends TestSuite {
 		suite.addTestSuite(JsonSchemaValuesTest.class);
 
 		suite.addTestSuite(JsonSchemaExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllJsonSchemaTests.class));
 
 		return suite;
 	}

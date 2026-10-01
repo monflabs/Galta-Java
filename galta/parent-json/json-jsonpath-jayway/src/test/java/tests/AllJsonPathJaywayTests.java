@@ -19,6 +19,7 @@ import doc_examples.jsonpath.JaywayExamples;
 import junit.framework.TestSuite;
 import tests.jsonpath.MonfLabsJsonProviderTest;
 import tests.jsonpath.MonfLabsMappingProviderTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllJsonPathJaywayTests extends TestSuite {
 
@@ -29,6 +30,9 @@ public class AllJsonPathJaywayTests extends TestSuite {
 		suite.addTestSuite(MonfLabsMappingProviderTest.class);
 
 		suite.addTestSuite(JaywayExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllJsonPathJaywayTests.class));
 
 		return suite;
 	}

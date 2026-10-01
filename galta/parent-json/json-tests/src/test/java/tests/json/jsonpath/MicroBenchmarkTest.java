@@ -18,11 +18,13 @@ package tests.json.jsonpath;
 import org.monflabs.json.JsonObject;
 import org.monflabs.json.jsonpath.JsonPath;
 import org.monflabs.json.jsonpath.JsonPathFactory;
+import org.monflabs.tests.SuiteGuard;
 import org.monflabs.util.Console;
 import org.monflabs.util.datetime.PeriodFormatter;
 
 import tests.ProjectTestCase;
 
+@SuiteGuard.NotInSuite("benchmark, run manually: it prints timings and asserts nothing")
 public class MicroBenchmarkTest extends ProjectTestCase {
 	
 	private static final Object JSON = JsonObject.parse(

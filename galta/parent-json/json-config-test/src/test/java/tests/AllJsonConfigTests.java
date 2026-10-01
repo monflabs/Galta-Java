@@ -22,6 +22,7 @@ import tests.config.ConfigRegressionTest;
 import tests.config.CustomJsonConfigTest;
 import tests.config.JsonFileConfigTest;
 import tests.config.KeyEncryptorTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllJsonConfigTests extends TestSuite {
 
@@ -35,6 +36,9 @@ public class AllJsonConfigTests extends TestSuite {
 		suite.addTestSuite(ConfigHardeningTest.class);
 
 		suite.addTestSuite(ConfigExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllJsonConfigTests.class));
 
 		return suite;
 	}

@@ -19,6 +19,7 @@ import doc_examples.yaml.YamlExamples;
 import junit.framework.TestSuite;
 import tests.yaml.SnakeYamlKeysTest;
 import tests.yaml.SnakeYamlValuesTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllYamlSnakeYamlTests extends TestSuite {
 
@@ -30,6 +31,9 @@ public class AllYamlSnakeYamlTests extends TestSuite {
 		suite.addTestSuite(tests.yaml.SnakeYamlSafetyTest.class);
 
 		suite.addTestSuite(YamlExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllYamlSnakeYamlTests.class));
 
 		return suite;
 	}

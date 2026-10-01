@@ -21,6 +21,7 @@ import tests.impexp.CsvRobustnessTest;
 import tests.impexp.CsvRoundTripTest;
 import tests.impexp.CsvSourceTest;
 import tests.impexp.CsvTargetTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllJsonImpExpCsvTests extends TestSuite {
 
@@ -32,6 +33,9 @@ public class AllJsonImpExpCsvTests extends TestSuite {
 		suite.addTestSuite(CsvRoundTripTest.class);
 		suite.addTestSuite(CsvRobustnessTest.class);
 		suite.addTestSuite(CsvExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllJsonImpExpCsvTests.class));
 
 		return suite;
 	}

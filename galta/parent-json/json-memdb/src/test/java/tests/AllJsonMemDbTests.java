@@ -24,6 +24,7 @@ import tests.db.MemoryDBTest;
 import tests.db.MemoryDbTransactionTest;
 import tests.replication.MemoryReplicationTableTest;
 import tests.replication.ReplicationTest;
+import org.monflabs.tests.SuiteGuard;
 
 public class AllJsonMemDbTests extends TestSuite {
 
@@ -40,6 +41,9 @@ public class AllJsonMemDbTests extends TestSuite {
 		suite.addTestSuite(ReplicationTest.class);
 
 		suite.addTestSuite(MemoryDbExamples.class);
+
+		// Fails when a test class of the module is missing from its suites
+		suite.addTest(SuiteGuard.newTest(AllJsonMemDbTests.class));
 
 		return suite;
 	}

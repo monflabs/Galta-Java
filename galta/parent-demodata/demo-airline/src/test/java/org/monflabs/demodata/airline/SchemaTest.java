@@ -13,24 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tests;
+package org.monflabs.demodata.airline;
 
-import org.monflabs.demodata.airline.SchemaTest;
-import org.monflabs.tests.SuiteGuard;
+import java.util.ArrayList;
+import java.util.List;
 
-import junit.framework.TestSuite;
+import org.monflabs.tests.__BaseTestCase;
 
-public class AllDemoAirlineTests extends TestSuite {
+/**
+ * The airline schema lists the collections of the demo database (see the module README).
+ */
+public class SchemaTest extends __BaseTestCase {
 
-	public static TestSuite suite() throws Exception {
-		TestSuite suite = new TestSuite();
-		
-		suite.addTestSuite(SchemaTest.class);
-
-		// Fails when a test class of the module is missing from its suites
-		suite.addTest(SuiteGuard.newTest(AllDemoAirlineTests.class));
-
-		return suite;
+	public void testCollections() {
+		List<String> names = new ArrayList<>();
+		for(Schema.COLLECTIONS c: Schema.COLLECTIONS.values()) {
+			names.add(c.name());
+		}
+		assertEquals(List.of("Bookings", "Tickets", "Tickets_flights", "Boarding_passes", "Airports", "Flights", "Aircrafts", "Seats"), names);
 	}
-
 }
