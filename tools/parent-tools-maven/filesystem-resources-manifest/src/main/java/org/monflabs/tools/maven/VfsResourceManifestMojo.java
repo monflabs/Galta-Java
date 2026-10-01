@@ -16,71 +16,69 @@
 package org.monflabs.tools.maven;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.text.MessageFormat;
 import java.time.Instant;
 import java.util.Arrays;
 
 import org.apache.maven.plugin.AbstractMojo;
+import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.plugins.annotations.LifecyclePhase;
+import org.apache.maven.plugins.annotations.Mojo;
+import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 
-
-
-// TODO
-// replace javadoc with java annotations
-// https://maven.apache.org/plugin-tools/maven-plugin-tools-java/index.html
-
 /**
- * @goal generate-sources
- * @phase generate-sources
+ * Generates the manifest listing the files of a resource directory, which the
+ * classpath-based ResourceFileSystem reads to list directories. The manifest
+ * is written into that directory, and only rewritten when its content changes.
  */
+@Mojo(
+		name = "generate-sources",
+		defaultPhase = LifecyclePhase.GENERATE_SOURCES,
+		threadSafe = true
+)
 public class VfsResourceManifestMojo extends AbstractMojo {
-	
-	/**
-	 * @parameter property="project"
-	 * @required
-	 * @readonly
-	 * @since 1.0
-	 */
+
+	@Parameter(defaultValue = "${project}", readonly = true, required = true)
 	MavenProject project;
 
 	/**
-	 * @parameter
-	 * @required
+	 * The resource directory to list, relative to the project's base directory.
 	 */
+	@Parameter(required = true)
 	String sourceDirectory;
 
 	/**
-	 * @parameter default-value="resources.manifest"
+	 * The name of the manifest file, written in the source directory.
 	 */
+	@Parameter(defaultValue = "resources.manifest")
 	String manifestName;
 
 	/**
-	 * @parameter
+	 * Whether the file lengths are recorded (otherwise -1).
 	 */
-	boolean length=false;
+	@Parameter(defaultValue = "false")
+	boolean length;
 
 	/**
-	 * @parameter
+	 * The date recorded for the files: a fixed date (default
+	 * 2020-01-01T00:00:00Z, keeping the manifest stable), "now", "file" (each
+	 * file's last modification) or "none".
 	 */
+	@Parameter
 	String date;
 
 	@Override
-	public void execute() {
+	public void execute() throws MojoExecutionException {
+		File baseDir = project.getFile().getParentFile(); // Parent of pom.xml
+		File vfsDir = new File(baseDir,sourceDirectory);
+		if(!vfsDir.isDirectory()) {
+			throw new MojoExecutionException("Invalid VFS directory " + vfsDir + ": not a directory");
+		}
 		try {
-			File baseDir = project.getFile().getParentFile(); // Parent of pom.xml
-			
-			File vfsDir = new File(baseDir,sourceDirectory);
-			if(!vfsDir.exists() || !vfsDir.isDirectory()) {
-				getLog().error(MessageFormat.format("Invalid VFS directory {0}", vfsDir));
-				return;
-			}
 
 			String fixedDateString = "2020-01-01T00:00:00Z";
 			if(date!=null && date.length()>0) {
@@ -100,19 +98,17 @@ public class VfsResourceManifestMojo extends AbstractMojo {
 			addFiles( sb, vfsDir.toPath(), vfsDir, fixedDateString);
 			String newContent = normalizeLineBreaks(sb.toString());
 			
-			File manifest = new File(vfsDir,manifestName);
-			
-			String oldContent = loadString(manifest);
-			if(oldContent!=null) {
-				oldContent = normalizeLineBreaks(oldContent);
+			Path manifest = vfsDir.toPath().resolve(manifestName);
+			if(Files.isRegularFile(manifest)) {
+				String oldContent = normalizeLineBreaks(Files.readString(manifest, StandardCharsets.UTF_8));
 				if(oldContent.equals(newContent)) {
 					// Ok, do not override it...
 					return;
 				}
 			}
-			writeString(manifest, newContent);
-		} catch (Exception e) {
-			getLog().error("Unexpected VFS manifest generation error", e);
+			Files.writeString(manifest, newContent, StandardCharsets.UTF_8);
+		} catch (IOException | RuntimeException e) {
+			throw new MojoExecutionException("VFS manifest generation failed for " + vfsDir + ": " + e.getMessage(), e);
 		}
 	}
 	
@@ -126,8 +122,11 @@ public class VfsResourceManifestMojo extends AbstractMojo {
 		return s;
 	}
 	
-	private void addFiles(StringBuilder sb, Path basePath, File dir, String fixedDateString) {
+	private void addFiles(StringBuilder sb, Path basePath, File dir, String fixedDateString) throws IOException {
 		File[] files = dir.listFiles();
+		if(files==null) {
+			throw new IOException("Cannot list the directory " + dir);
+		}
 		Arrays.sort(files, (f1,f2) -> {
 			boolean l1 = f1.isDirectory();
 			boolean l2 = f2.isDirectory();
@@ -181,30 +180,5 @@ public class VfsResourceManifestMojo extends AbstractMojo {
 			return false;
 		}
 		return true;
-	}
-
-	private String loadString(File f){
-		if(f.exists() && f.isFile()) {
-			StringBuilder sb = new StringBuilder(2048);
-			try (FileReader r = new FileReader(f)) {
-				char[] buf = new char[2048];
-				int c;
-				while( (c=r.read(buf))>=0 ) {
-					sb.append(buf, 0, c);
-				}
-				return sb.toString();
-			} catch(IOException ex) {
-				getLog().info(MessageFormat.format("Error reading manifest file {0}", f), ex);
-			}
-		}
-		return null;
-	}
-
-	private void writeString(File f, String s){
-		try (Writer w = new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8)) {
-			w.write(s);
-		} catch(IOException ex) {
-			getLog().error(MessageFormat.format("Error writing manifest file {0}", f), ex);
-		}
 	}
 }
