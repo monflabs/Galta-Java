@@ -87,4 +87,68 @@ public class StreamAdaptersTest extends ProjectTestCase {
 		}
 		assertEquals("€", sw.toString());
 	}
+
+	public void testLRUCachedOutputStreamSingleBytes() throws Exception {
+		org.monflabs.util.io.LRUCharBuffer buf = new org.monflabs.util.io.LRUCharBuffer.MemoryCharBuffer(100, 0);
+		java.io.ByteArrayOutputStream all = new java.io.ByteArrayOutputStream();
+		org.monflabs.util.io.LRUCachedOutputStream os = org.monflabs.util.io.LRUCachedOutputStream.of(all, buf);
+		// Byte by byte, a multi-byte character included: buffered, then decoded by runs
+		for(byte b: "\u00e9t\u00e9\nab".getBytes(java.nio.charset.StandardCharsets.UTF_8)) {
+			os.write(b);
+		}
+		// What is still pending is visible from the char buffer too
+		assertEquals("\u00e9t\u00e9\nab", os.getCharBuffer().toString());
+		os.write("cd".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		os.write('e');
+		os.flush();
+		assertEquals("\u00e9t\u00e9\nabcde", buf.toString());
+		assertEquals("\u00e9t\u00e9\nabcde", all.toString(java.nio.charset.StandardCharsets.UTF_8));
+	}
+
+	public void testFastBufferedLargeWritesGoThrough() throws Exception {
+		java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+		org.monflabs.util.io.FastBufferedOutputStream fos = new org.monflabs.util.io.FastBufferedOutputStream(bos, 8);
+		fos.write(new byte[] {1,2,3});
+		fos.write(new byte[20]);
+		// The small pending write is flushed first, then the large one goes straight through
+		assertEquals(23, bos.size());
+		fos.write(4);
+		fos.flush();
+		assertEquals(24, bos.size());
+		assertEquals(1, bos.toByteArray()[0]);
+		assertEquals(4, bos.toByteArray()[23]);
+
+		java.io.StringWriter sw = new java.io.StringWriter();
+		org.monflabs.util.io.FastBufferedWriter fw = new org.monflabs.util.io.FastBufferedWriter(sw, 8);
+		fw.write("abc");
+		fw.write("0123456789ABCDEF");
+		assertEquals("abc0123456789ABCDEF", sw.toString());
+		fw.write("xyz", 1, 2);
+		fw.write(new char[] {'!'});
+		fw.flush();
+		assertEquals("abc0123456789ABCDEFyz!", sw.toString());
+	}
+
+	public void testReaderInputStreamReusesBuffers() throws Exception {
+		StringBuilder sb = new StringBuilder();
+		for(int i=0; i<5000; i++) {
+			sb.append("x\u00e9\ud83d\ude00");
+		}
+		String s = sb.toString();
+		// Read in odd sizes so that chunks split characters and surrogate pairs
+		try(java.io.InputStream in = new org.monflabs.util.io.ReaderInputStream(new java.io.StringReader(s), java.nio.charset.StandardCharsets.UTF_8)) {
+			java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+			byte[] b = new byte[7];
+			int n;
+			while((n=in.read(b,0,b.length))>0) {
+				out.write(b,0,n);
+				int c = in.read();
+				if(c<0) {
+					break;
+				}
+				out.write(c);
+			}
+			assertEquals(s, out.toString(java.nio.charset.StandardCharsets.UTF_8));
+		}
+	}
 }

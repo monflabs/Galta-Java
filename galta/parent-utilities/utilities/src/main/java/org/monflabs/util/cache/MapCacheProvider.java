@@ -28,8 +28,13 @@ public class MapCacheProvider<K,V> implements CacheProvider<K,V> {
     	this.map = map;
     }
 	
-	public Map<K, V> getMap() {
-		return map;
+	/**
+	 * A snapshot of the cached entries, in the iteration order of the underlying map
+	 * (least-recently-used first for an LRUCache). The underlying map itself was
+	 * returned, which let callers read or change it without the cache lock.
+	 */
+	public synchronized Map<K, V> getMap() {
+		return java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(map));
 	}
 
     @Override

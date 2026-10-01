@@ -70,6 +70,14 @@ public class FastBufferedOutputStream extends OutputStream {
 
     @Override
 	public void write(byte b[], int off, int len) throws IOException {
+        if( len>=bufferLength ) {
+        	// Larger than the buffer: written through, rather than copied through the buffer
+        	if( pos>0 ) {
+        		flushBuffer();
+        	}
+        	os.write(b,off,len);
+        	return;
+        }
         while(len>0) {
             if( pos==bufferLength ) {
             	flushBuffer();

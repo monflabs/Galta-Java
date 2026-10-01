@@ -26,7 +26,8 @@ import org.monflabs.util.profiler.impl.JavaProfilerImpl;
  */
 public final class Profiler {
 	
-	private static JavaProfiler instance = new JavaProfilerImpl();
+	// Volatile: set() may be called from a thread other than the profiled ones
+	private static volatile JavaProfiler instance = new JavaProfilerImpl();
 
 	public static JavaProfiler get() {
 		return instance;

@@ -93,4 +93,32 @@ public class ProfilerTest extends ProjectTestCase {
 			Profiler.stop();
 		}
 	}
+
+	public void testCpuTimeNotAvailableOnVirtualThreads() throws Exception {
+		org.monflabs.util.profiler.JavaProfiler p = new org.monflabs.util.profiler.impl.JavaProfilerImpl();
+		p.start();
+		try {
+			Thread t = Thread.ofVirtual().start(() -> p.profile("virtual", () -> {
+				long s = System.nanoTime();
+				while(System.nanoTime()-s < 2_000_000L) {
+					// busy
+				}
+			}));
+			t.join();
+			org.monflabs.util.profiler.ProfilerSnapshot snap = p.createSnapshot("vt");
+			org.monflabs.util.profiler.Aggregator a = snap.getMainAggregator().getChildren().get(0);
+			assertEquals("virtual", a.getType());
+			assertEquals(1, a.getCount());
+			assertTrue(a.getTotalWallTime() > 0);
+			// The JVM has no CPU time for a virtual thread: reported as not available (-1),
+			// it used to be a bogus 0 (-1 minus -1)
+			assertEquals(-1, a.getTotalCpuTime());
+			assertEquals(-1, a.getAvgCpuTime());
+			java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+			snap.dump(new java.io.PrintStream(out, true, "UTF-8"));
+			assertTrue(out.toString("UTF-8"), out.toString("UTF-8").contains("n/a"));
+		} finally {
+			p.stop();
+		}
+	}
 }

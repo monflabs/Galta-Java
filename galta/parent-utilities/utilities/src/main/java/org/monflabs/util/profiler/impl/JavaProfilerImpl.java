@@ -44,6 +44,16 @@ public final class JavaProfilerImpl implements JavaProfiler {
 		this.aggregators = new ThreadLocal<RuntimeAggregator>();
 	}
 	
+	// The CPU time of the current thread, or -1 when it is not available: the JVM
+	// returns -1 for a virtual thread
+	private long cpuTime() {
+		try {
+			return threadMXBean.getCurrentThreadCpuTime();
+		} catch(UnsupportedOperationException ex) {
+			return -1;
+		}
+	}
+
 	RuntimeAggregator getCurrentAggregator() {
 		RuntimeAggregator agg = aggregators.get();
 		return agg!=null ? agg : mainAggregator;
@@ -103,7 +113,7 @@ public final class JavaProfilerImpl implements JavaProfiler {
 	        tl.set(child);
 
 	        long startWallTime = System.nanoTime();
-	        long startCpuTime = threadMXBean.getCurrentThreadCpuTime();
+	        long startCpuTime = cpuTime();
             try {
             	return callable.call();
             } catch(Exception e) {
@@ -112,7 +122,9 @@ public final class JavaProfilerImpl implements JavaProfiler {
             	}
             	throw new ProfilerException(e);
             } finally {
-	        	child.addInfo(System.nanoTime()-startWallTime, threadMXBean.getCurrentThreadCpuTime()-startCpuTime);
+	        	long endCpuTime = startCpuTime>=0 ? cpuTime() : -1;
+	        	// -1: not available (a virtual thread, or no CPU time support), not a zero
+	        	child.addInfo(System.nanoTime()-startWallTime, endCpuTime>=0 ? endCpuTime-startCpuTime : -1);
 	            if(current==null) {
 	                tl.remove();
 	            } else {

@@ -47,7 +47,12 @@ public class LRUCachedOutputStream extends OutputStream {
 
     private OutputStream os;
     private CacheWriter cw;
-    
+    // Single bytes are collected here and decoded into the cache by runs (at a new line,
+    // a bulk write, a flush, or when full): decoding and flushing the cache for every
+    // byte written with write(int) was very slow
+    private final byte[] pending = new byte[256];
+    private int pendingCount;
+
     private LRUCachedOutputStream( OutputStream os, LRUCharBuffer buffer ) {
         this.os = os;
         this.cw = new CacheWriter(buffer);
@@ -57,14 +62,30 @@ public class LRUCachedOutputStream extends OutputStream {
     	return os;
     }
     
-    public LRUCharBuffer getCharBuffer() {
+    public synchronized LRUCharBuffer getCharBuffer() {
+    	try {
+    		flushPending();
+    	} catch(IOException ex) {
+    		// The cache is in memory: nothing to report
+    	}
     	return cw.buffer;
     }
 
+    private void flushPending() throws IOException {
+    	if(pendingCount>0) {
+    		int n = pendingCount;
+    		pendingCount = 0;
+    		cw.write(pending,0,n);
+    	}
+    }
+
     @Override
-	public void write(int b) throws IOException {
+	public synchronized void write(int b) throws IOException {
     	if(cw!=null) {
-    		cw.write(b);
+    		pending[pendingCount++] = (byte)b;
+    		if(b=='\n' || pendingCount==pending.length) {
+    			flushPending();
+    		}
     	}
     	if(os!=null) {
     		os.write(b);
@@ -73,17 +94,13 @@ public class LRUCachedOutputStream extends OutputStream {
 
     @Override
 	public void write(byte b[]) throws IOException {
-    	if(cw!=null) {
-    		cw.write(b);
-    	}
-    	if(os!=null) {
-    		os.write(b);
-    	}
+    	write(b,0,b.length);
     }
 
     @Override
-	public void write(byte b[], int off, int len) throws IOException {
+	public synchronized void write(byte b[], int off, int len) throws IOException {
     	if(cw!=null) {
+    		flushPending();
         	cw.write(b,off,len);
     	}
     	if(os!=null) {
@@ -92,8 +109,9 @@ public class LRUCachedOutputStream extends OutputStream {
     }
 
     @Override
-	public void flush() throws IOException {
+	public synchronized void flush() throws IOException {
     	if(cw!=null) {
+    		flushPending();
             cw.flush();
     	}
     	if(os!=null) {
@@ -102,8 +120,9 @@ public class LRUCachedOutputStream extends OutputStream {
     }
 
     @Override
-	public void close() throws IOException {
+	public synchronized void close() throws IOException {
     	if(cw!=null) {
+    		flushPending();
             cw.close();
     	}
     	if(os!=null) {

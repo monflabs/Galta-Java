@@ -32,6 +32,10 @@ public final class SnapshotAggregator extends BaseAggregator<SnapshotAggregator>
 	
     public SnapshotAggregator(SnapshotAggregator parent, String type, String param) {
     	super(parent,type,param);
+    	// No CPU time until a measure that has one is merged
+    	this.avgCpuTime = -1;
+    	this.childrenCpuTime = -1;
+    	this.specificCpuTime = -1;
     }
     public SnapshotAggregator(SnapshotAggregator parent, int id, String type, String param, int count, long minWallTime, long maxWallTime, long totalWallTime, long avgWallTime, long childrenWallTime, long specificWallTime, long minCpuTime, long maxCpuTime, long totalCpuTime, long avgCpuTime, long childrenCpuTime, long specificCpuTime) {
     	super(parent,type,param);
@@ -50,6 +54,7 @@ public final class SnapshotAggregator extends BaseAggregator<SnapshotAggregator>
     	this.avgCpuTime = avgCpuTime;
     	this.childrenCpuTime = childrenCpuTime;
     	this.specificCpuTime = specificCpuTime;
+    	this.cpuCount = totalCpuTime>=0 ? count : 0;
     }
     SnapshotAggregator(SnapshotAggregator parent, Aggregator src) {
     	super(parent,src.getType(),src.getParam());
@@ -70,6 +75,7 @@ public final class SnapshotAggregator extends BaseAggregator<SnapshotAggregator>
     	this.avgCpuTime = src.getAvgCpuTime();
     	this.childrenCpuTime = src.getChildrenCpuTime();
     	this.specificCpuTime = src.getSpecificCpuTime();
+    	this.cpuCount = totalCpuTime>=0 ? count : 0;
     	}
     }
     
@@ -113,30 +119,40 @@ public final class SnapshotAggregator extends BaseAggregator<SnapshotAggregator>
                 if( aggregator.maxWallTime>maxWallTime ) {
                     this.maxWallTime = aggregator.maxWallTime;
                 }
-                if( aggregator.minCpuTime<minCpuTime ) {
-                    this.minCpuTime = aggregator.minCpuTime;
-                }
-                if( aggregator.maxCpuTime>maxCpuTime ) {
-                    this.maxCpuTime = aggregator.maxCpuTime;
-                }
             } else {
                 this.minWallTime = aggregator.minWallTime;
                 this.maxWallTime = aggregator.maxWallTime;
-                this.minCpuTime = aggregator.minCpuTime;
-                this.maxCpuTime = aggregator.maxCpuTime;
             }
-            
+
             this.count += aggregator.count;
-            
+
             this.totalWallTime += aggregator.totalWallTime;
         	this.childrenWallTime += aggregator.getChildrenWallTime();
         	this.specificWallTime += aggregator.getSpecificWallTime();
         	this.avgWallTime = totalWallTime/count;
 
-        	this.totalCpuTime += aggregator.totalCpuTime;
-        	this.childrenCpuTime += aggregator.getChildrenCpuTime();
-        	this.specificCpuTime += aggregator.getSpecificCpuTime();
-        	this.avgCpuTime = totalCpuTime/count;
+        	// The CPU times only merge the measures that have one (see BaseAggregator)
+        	if(aggregator.cpuCount>0) {
+        		if(this.cpuCount>0) {
+                    if( aggregator.minCpuTime<minCpuTime ) {
+                        this.minCpuTime = aggregator.minCpuTime;
+                    }
+                    if( aggregator.maxCpuTime>maxCpuTime ) {
+                        this.maxCpuTime = aggregator.maxCpuTime;
+                    }
+                	this.totalCpuTime += aggregator.totalCpuTime;
+                	this.childrenCpuTime += Math.max(0, aggregator.getChildrenCpuTime());
+                	this.specificCpuTime += Math.max(0, aggregator.getSpecificCpuTime());
+        		} else {
+                    this.minCpuTime = aggregator.minCpuTime;
+                    this.maxCpuTime = aggregator.maxCpuTime;
+                	this.totalCpuTime = aggregator.totalCpuTime;
+                	this.childrenCpuTime = Math.max(0, aggregator.getChildrenCpuTime());
+                	this.specificCpuTime = Math.max(0, aggregator.getSpecificCpuTime());
+        		}
+        		this.cpuCount += aggregator.cpuCount;
+        		this.avgCpuTime = totalCpuTime/cpuCount;
+        	}
         }
     }
 }

@@ -17,7 +17,9 @@ package org.monflabs.util.profiler.impl;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.monflabs.util.profiler.Aggregator;
 
@@ -32,6 +34,8 @@ public abstract class BaseAggregator<T extends BaseAggregator<?>> implements Agg
     protected String param;
     
     protected int count;
+    // The number of measures that had a CPU time: none means the CPU times are not available
+    protected int cpuCount;
     
     protected long minCpuTime;
     protected long maxCpuTime;
@@ -45,7 +49,6 @@ public abstract class BaseAggregator<T extends BaseAggregator<?>> implements Agg
         this.parent = parent;
         this.type = type;
         this.param = param;
-        this.hashCode = type.hashCode() + (param!=null ? param.hashCode() : 0);
     }
     
     @Override
@@ -65,115 +68,105 @@ public abstract class BaseAggregator<T extends BaseAggregator<?>> implements Agg
     
     
     //
-    // Children HashMap
+    // Children
     //
-    
-	private static final int SLOT_COUNT = 11;
-    private BaseAggregator<?> entries[] = new BaseAggregator[SLOT_COUNT]; 
 
-    // HashMap Entry fields
-    int hashCode;
-    BaseAggregator<?> next;
+    private record Key(String type, String param) {}
 
+    // Indexed by (type, param); the list keeps the insertion order
+    private Map<Key, BaseAggregator<?>> index = new HashMap<>();
+    private List<BaseAggregator<?>> children = new ArrayList<>();
 
 	@SuppressWarnings("unchecked")
 	public synchronized T getChild(RuntimeAggregator parent, String type, String param) {
-        int hashCode = type.hashCode() + (param!=null ? param.hashCode() : 0);
-        int slot = (hashCode & 0x7FFFFFFF) % SLOT_COUNT;
-        for(BaseAggregator<?> a = entries[slot]; a!=null; a=a.next) {
-        	if(a.hashCode==hashCode) {
-        		if(type.equals(a.getType())) {
-            		if(param==null) {
-            			if(a.getParam()==null) {
-            				return (T)a;
-            			}
-            		} else {
-            			if(param.equals(a.getParam())) {
-            				return (T)a;
-            			}
-            		}
-        		}
-        	}
+        Key key = new Key(type, param);
+        BaseAggregator<?> a = index.get(key);
+        if(a==null) {
+            a = new RuntimeAggregator(parent, type, param);
+            index.put(key, a);
+            children.add(a);
         }
-        RuntimeAggregator a = new RuntimeAggregator(parent, type, param);
-        a.next = entries[slot];
-        entries[slot] = a;
         return (T)a;
     }
     public synchronized void appendChild(T v) {
-        int slot = (v.hashCode & 0x7FFFFFFF) % SLOT_COUNT;
-        v.next = entries[slot];
-        entries[slot] = v;
+        index.putIfAbsent(new Key(v.getType(), v.getParam()), v);
+        children.add(v);
     }
-    
-    @SuppressWarnings("unchecked")
+
 	@Override
 	public synchronized List<Aggregator> getChildren(){
-        List<Aggregator> items = new ArrayList<Aggregator>();
-        for(BaseAggregator<?> a: entries) {
-        	if(a!=null) {
-                for(BaseAggregator<?> b=a; b!=null; b=b.next) {
-        			items.add((T)b);
-        		}
-        	}
-        }
-        return items;
+        return new ArrayList<Aggregator>(children);
     }
 
     public synchronized void clearChildren() {
-    	this.entries = new BaseAggregator[SLOT_COUNT];
-    }    
+    	this.index = new HashMap<>();
+    	this.children = new ArrayList<>();
+    }
 
-    
-    
+
+
     //
     // Execution 
     //
 	
+    // The counters are updated under the aggregator lock (RuntimeAggregator.addInfo()):
+    // they are read under it too, so a reader sees consistent and up to date values.
+    // The CPU times are -1 when they are not available (measured on virtual threads).
+
     @Override
-	public int getCount() {
+	public synchronized int getCount() {
         return count;
     }
 
     @Override
-	public long getMinCpuTime() {
-        return minCpuTime;
+	public synchronized long getMinCpuTime() {
+        return cpuCount>0 ? minCpuTime : -1;
     }
     @Override
-	public long getMaxCpuTime() {
-        return maxCpuTime;
+	public synchronized long getMaxCpuTime() {
+        return cpuCount>0 ? maxCpuTime : -1;
     }
     @Override
-	public long getTotalCpuTime() {
-        return totalCpuTime;
+	public synchronized long getTotalCpuTime() {
+        return cpuCount>0 ? totalCpuTime : -1;
     }
     @Override
 	public long getChildrenCpuTime() {
     	long ts = 0;
+    	boolean available = false;
     	for(Aggregator a: getChildren() ) {
-    		ts += a.getTotalCpuTime();
+    		long t = a.getTotalCpuTime();
+    		if(t>=0) {
+    			ts += t;
+    			available = true;
+    		}
     	}
-        return ts;
+        return available ? ts : -1;
     }
     @Override
 	public long getSpecificCpuTime() {
-        return getTotalCpuTime()-getChildrenCpuTime();
+    	long total = getTotalCpuTime();
+    	if(total<0) {
+    		return -1;
+    	}
+    	long children = getChildrenCpuTime();
+        return children>0 ? total-children : total;
     }
     @Override
-	public long getAvgCpuTime() {
-        return count>0 ? totalCpuTime/count : 0;
+	public synchronized long getAvgCpuTime() {
+        return cpuCount>0 ? totalCpuTime/cpuCount : -1;
     }
 
     @Override
-	public long getMinWallTime() {
+	public synchronized long getMinWallTime() {
         return minWallTime;
     }
     @Override
-	public long getMaxWallTime() {
+	public synchronized long getMaxWallTime() {
         return maxWallTime;
     }
     @Override
-	public long getTotalWallTime() {
+	public synchronized long getTotalWallTime() {
         return totalWallTime;
     }
     @Override
@@ -189,7 +182,7 @@ public abstract class BaseAggregator<T extends BaseAggregator<?>> implements Agg
         return getTotalWallTime()-getChildrenWallTime();
     }
     @Override
-	public long getAvgWallTime() {
+	public synchronized long getAvgWallTime() {
         return count>0 ? totalWallTime/count : 0;
     }
     
@@ -225,6 +218,7 @@ public abstract class BaseAggregator<T extends BaseAggregator<?>> implements Agg
     }
     
     protected static String formatTime(long nanos) {
-    	return nanos/1_000_000L + "ms";
+    	// A negative time is a CPU time that is not available
+    	return nanos<0 ? "n/a" : nanos/1_000_000L + "ms";
     }
 }

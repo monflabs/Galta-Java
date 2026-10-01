@@ -73,20 +73,28 @@ public final class RuntimeAggregator extends BaseAggregator<RuntimeAggregator> {
     }
 
     // Aggregators are shared by all the profiled threads
+    // A negative cpuTime means "not available" (e.g. measured on a virtual thread): it is
+    // left out of the CPU statistics instead of being counted as zero
     synchronized void addInfo( long wallTime , long cpuTime) {
         if( count>0 ) {
             if( wallTime<minWallTime ) minWallTime = wallTime;
             if( wallTime>maxWallTime ) maxWallTime = wallTime;
-            if( cpuTime<minCpuTime ) minCpuTime = cpuTime;
-            if( cpuTime>maxCpuTime ) maxCpuTime = cpuTime;
         } else {
         	minWallTime = wallTime;
         	maxWallTime = wallTime;
-        	minCpuTime = cpuTime;
-        	maxCpuTime = cpuTime;
         }
         count++;
         totalWallTime += wallTime;
-        totalCpuTime += cpuTime;
+        if( cpuTime>=0 ) {
+            if( cpuCount>0 ) {
+                if( cpuTime<minCpuTime ) minCpuTime = cpuTime;
+                if( cpuTime>maxCpuTime ) maxCpuTime = cpuTime;
+            } else {
+            	minCpuTime = cpuTime;
+            	maxCpuTime = cpuTime;
+            }
+            cpuCount++;
+            totalCpuTime += cpuTime;
+        }
     }
 }

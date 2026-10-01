@@ -32,13 +32,19 @@ import org.monflabs.util.StringUtil;
  */
 public class ReaderInputStream extends InputStream {
 
+    // The characters read at once from the reader
+    private static final int CHUNK = 1024;
+
     private Reader _in;
     private Charset _charset;
-    private byte[] _slack;
-    private int _begin;
     // A stateful encoder so a surrogate pair split across two reads is encoded correctly
     private CharsetEncoder _encoder;
-    private CharBuffer _pending;
+    // Both buffers are allocated once and reused by every fill(), which used to allocate
+    // new char and byte arrays for each chunk.
+    // The characters to encode, in write mode: a trailing high surrogate stays for the next chunk
+    private CharBuffer _chars;
+    // The encoded bytes not read yet, in read mode
+    private ByteBuffer _bytes;
     private boolean _eof;
 
 
@@ -63,17 +69,13 @@ public class ReaderInputStream extends InputStream {
     @Override
 	public int read() throws IOException {
         ensureOpen();
-        if (_slack != null && _begin < _slack.length) {
-            int result = _slack[_begin] & 0xFF;
-            if (++_begin == _slack.length) {
-                _slack = null;
+        while (_bytes == null || !_bytes.hasRemaining()) {
+            if (!fill()) {
+                return -1;
             }
-            return result;
         }
-        byte[] buf = new byte[1];
-        int n = read(buf, 0, 1);
         // Bytes are unsigned: 0xFF must not be mistaken for the -1 end-of-stream marker
-        return n <= 0 ? -1 : (buf[0] & 0xFF);
+        return _bytes.get() & 0xFF;
     }
 
     private CharsetEncoder encoder() {
@@ -81,56 +83,45 @@ public class ReaderInputStream extends InputStream {
             _encoder = _charset.newEncoder()
                 .onMalformedInput(CodingErrorAction.REPLACE)
                 .onUnmappableCharacter(CodingErrorAction.REPLACE);
+            _chars = CharBuffer.allocate(CHUNK);
+            // Room for a whole chunk, and what flush() may still emit
+            _bytes = ByteBuffer.allocate((int) Math.ceil(CHUNK * (double) _encoder.maxBytesPerChar()) + 16);
+            _bytes.limit(0);
         }
         return _encoder;
     }
 
     // Reads the next chunk of characters and encodes it; returns false at end of stream
-    private boolean fill(int hint) throws IOException {
+    private boolean fill() throws IOException {
         if (_eof) {
             return false;
         }
-        char[] buf = new char[Math.max(hint, 64)];
-        int n = _in.read(buf);
         CharsetEncoder enc = encoder();
+        CharBuffer in = _chars;
+        ByteBuffer out = _bytes;
+        out.clear();
+        int n = _in.read(in.array(), in.arrayOffset() + in.position(), in.remaining());
         if (n == -1) {
             _eof = true;
             // Flush whatever the encoder still holds (e.g. a dangling high surrogate)
-            CharBuffer in = _pending != null ? _pending : CharBuffer.allocate(0);
-            ByteBuffer out = ByteBuffer.allocate(16);
+            in.flip();
             enc.encode(in, out, true);
             enc.flush(out);
-            _pending = null;
-            if (out.position() == 0) {
-                return false;
-            }
-            _slack = new byte[out.position()];
+            in.clear();
             out.flip();
-            out.get(_slack);
-            _begin = 0;
-            return true;
+            return out.hasRemaining();
         }
-        if (n == 0) {
-            return true;
+        if (n > 0) {
+            in.position(in.position() + n);
+            in.flip();
+            CoderResult cr = enc.encode(in, out, false);
+            if (cr.isOverflow()) {
+                throw new IOException("Encoder buffer overflow");
+            }
+            // A trailing high surrogate is kept for the next chunk
+            in.compact();
         }
-        CharBuffer in;
-        if (_pending != null && _pending.hasRemaining()) {
-            in = CharBuffer.allocate(_pending.remaining() + n);
-            in.put(_pending).put(buf, 0, n).flip();
-        } else {
-            in = CharBuffer.wrap(buf, 0, n);
-        }
-        ByteBuffer out = ByteBuffer.allocate((int) Math.ceil(in.remaining() * (double) enc.maxBytesPerChar()) + 16);
-        CoderResult cr = enc.encode(in, out, false);
-        if (cr.isOverflow()) {
-            throw new IOException("Encoder buffer overflow");
-        }
-        // A trailing high surrogate is kept for the next chunk
-        _pending = in.hasRemaining() ? CharBuffer.wrap(in.toString()) : null;
-        _slack = new byte[out.position()];
         out.flip();
-        out.get(_slack);
-        _begin = 0;
         return true;
     }
 
@@ -141,23 +132,15 @@ public class ReaderInputStream extends InputStream {
         if (len == 0) {
             return 0;
         }
-        while (_slack == null || _begin >= _slack.length) {
-            _slack = null;
-            if (!fill(len)) {
+        while (_bytes == null || !_bytes.hasRemaining()) {
+            if (!fill()) {
                 return -1;
             }
         }
-
-        if (len > _slack.length - _begin) {
-            len = _slack.length - _begin;
+        if (len > _bytes.remaining()) {
+            len = _bytes.remaining();
         }
-
-        System.arraycopy(_slack, _begin, b, off, len);
-
-        if ((_begin += len) >= _slack.length) {
-            _slack = null;
-        }
-
+        _bytes.get(b, off, len);
         return len;
     }
 
@@ -169,8 +152,8 @@ public class ReaderInputStream extends InputStream {
     @Override
 	public int available() throws IOException {
         ensureOpen();
-        if (_slack != null) {
-            return _slack.length - _begin;
+        if (_bytes != null && _bytes.hasRemaining()) {
+            return _bytes.remaining();
         }
         if (_in.ready()) {
             return 1;
@@ -201,7 +184,8 @@ public class ReaderInputStream extends InputStream {
             return;
         }
         _in.close();
-        _slack = null;
+        _bytes = null;
+        _chars = null;
         _in = null;
     }
 }

@@ -67,6 +67,14 @@ public final class FastBufferedWriter extends Writer {
 
     @Override
 	public void write(char b[], int off, int len) throws IOException {
+        if( len>=bufferLength ) {
+        	// Larger than the buffer: written through, rather than copied through the buffer
+        	if( pos>0 ) {
+        		flushBuffer();
+        	}
+        	os.write(b,off,len);
+        	return;
+        }
         while(len>0) {
             if( pos==bufferLength ) {
             	flushBuffer();
@@ -78,6 +86,35 @@ public final class FastBufferedWriter extends Writer {
             off += toWrite;
             len -= toWrite;
         }
+    }
+
+    // Copies the characters straight into the buffer: Writer.write(String) went through
+    // a temporary char[] first
+    @Override
+	public void write(String s, int off, int len) throws IOException {
+        if( len>=bufferLength ) {
+        	if( pos>0 ) {
+        		flushBuffer();
+        	}
+        	os.write(s,off,len);
+        	return;
+        }
+        while(len>0) {
+            if( pos==bufferLength ) {
+            	flushBuffer();
+            }
+            int avail = bufferLength-pos;
+            int toWrite = len>avail ? avail : len;
+            s.getChars(off,off+toWrite,buffer,pos);
+            pos += toWrite;
+            off += toWrite;
+            len -= toWrite;
+        }
+    }
+
+    @Override
+	public void write(String s) throws IOException {
+        write(s,0,s.length());
     }
 
     @Override

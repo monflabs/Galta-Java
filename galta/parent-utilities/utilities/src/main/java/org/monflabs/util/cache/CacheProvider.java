@@ -76,10 +76,16 @@ final class CacheProviderSupport {
 			return System.identityHashCode(cache)*31 + java.util.Objects.hashCode(key);
 		}
 	}
-	private static final ThreadLocal<java.util.Set<Creating>> CREATING = ThreadLocal.withInitial(java.util.HashSet::new);
-	
+	// Only set while a factory runs: removed once the outermost creation is done, so a
+	// thread (a pooled one in particular) doesn't keep an empty set forever
+	private static final ThreadLocal<java.util.Set<Creating>> CREATING = new ThreadLocal<>();
+
 	static <K,V> V create(CacheProvider<K,V> cache, K key, Function<K,V> factory) {
 		java.util.Set<Creating> creating = CREATING.get();
+		if(creating==null) {
+			creating = new java.util.HashSet<>();
+			CREATING.set(creating);
+		}
 		Creating c = new Creating(cache,key);
 		if(!creating.add(c)) {
 			throw new IllegalStateException("Recursive creation of the cache entry "+key);
@@ -88,6 +94,9 @@ final class CacheProviderSupport {
 			return factory.apply(key);
 		} finally {
 			creating.remove(c);
+			if(creating.isEmpty()) {
+				CREATING.remove();
+			}
 		}
 	}
 }

@@ -61,7 +61,10 @@ public class WriterOutputStream extends OutputStream {
 
     @Override
     public void write(int b) throws IOException {
-        write(new byte[] { (byte)b }, 0, 1);
+        // No byte[] per call: decoderIn always has room after processInput() compacts it
+        decoderIn.put((byte)b);
+        processInput(false);
+        flush();
     }
 
     @Override

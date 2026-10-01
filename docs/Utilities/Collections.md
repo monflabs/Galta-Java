@@ -111,7 +111,7 @@ assertFalse(cache.contains("b"));
 assertEquals(List.of("a", "c"), new ArrayList<>(cache.getMap().keySet()));
 ```
 
-A `get` counts as a use; `contains` does not. `getMap()` exposes the underlying map, in least-recently-used-first order for an `LRUCache`; it is not synchronized.
+A `get` counts as a use; `contains` does not. `getMap()` returns an unmodifiable snapshot of the entries, in least-recently-used-first order for an `LRUCache`.
 
 `get(key, factory)` runs the factory outside the cache's lock, so a slow factory doesn't block the other accesses. When two threads compute the same key at the same time, the first value stored wins and both get it. The result is stored even when it is `null`, and a factory asking for the key it is computing gets an `IllegalStateException`:
 

@@ -124,4 +124,23 @@ public class CacheProviderTest extends ProjectTestCase {
 		assertTrue(cache.contains("b"));
 		assertFalse(cache.contains("c"));
 	}
+
+	public void testCreationTrackingIsReleased() throws Exception {
+		org.monflabs.util.cache.MapCacheProvider<String,String> c = new org.monflabs.util.cache.MapCacheProvider<>(new java.util.HashMap<>());
+		assertEquals("A", c.get("a", k -> k.toUpperCase()));
+		// The per-thread "being created" set used to stay behind, empty, after every creation
+		java.lang.reflect.Field f = Class.forName("org.monflabs.util.cache.CacheProviderSupport").getDeclaredField("CREATING");
+		f.setAccessible(true);
+		assertNull(((ThreadLocal<?>)f.get(null)).get());
+	}
+
+	public void testGetMapIsASnapshot() throws Exception {
+		org.monflabs.util.cache.MapCacheProvider<String,String> c = new org.monflabs.util.cache.MapCacheProvider<>(new java.util.HashMap<>());
+		c.put("a", "1");
+		java.util.Map<String,String> m = c.getMap();
+		org.junit.Assert.assertThrows(UnsupportedOperationException.class, () -> m.put("b", "2"));
+		c.put("b", "2");
+		assertEquals(1, m.size());
+		assertEquals(2, c.getMap().size());
+	}
 }
