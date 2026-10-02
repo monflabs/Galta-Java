@@ -11,7 +11,7 @@ Galta is a Java mono repo of reusable libraries organized as Maven modules under
 - **parent-ui** — Swing UI framework with common components and IDE-grade editing support
 - **parent-playground** — interactive scripting playground (Swing-based IDE for running code snippets)
 - **parent-js** — **GaltaJS**, a JavaScript-inspired scripting engine for the JVM
-- **parent-demodata** — sample datasets (airline, Northwind, DVD rental, retail, Tour de France)
+- **parent-demodata** — sample datasets (Northwind, DVD rental, Tour de France)
 
 Most parent modules have their own `CLAUDE.md` with details (for GaltaJS see `galta/parent-js/js/CLAUDE.md` and the test-suite modules next to it). This file covers only repo-wide concerns.
 

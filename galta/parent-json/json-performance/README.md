@@ -1,7 +1,6 @@
 # Galta JSON Performance
 
-Benchmarks of the Galta JSON library, compared with Jackson (tree model) and Gson
-(`JsonElement`). This module is not published.
+> Not published to Maven Central: benchmarks of the Galta JSON library, compared with Jackson (tree model) and Gson (`JsonElement`).
 
 ## JMH benchmarks
 
@@ -18,7 +17,8 @@ The datasets (`Datasets`) are generated deterministically: `small` (~200 B), `me
 `strings` (long strings, escapes, `\u` escapes, non-ASCII and surrogate pairs), `deep`
 (500 nested levels), `pretty` (the medium dataset, indented) and `worldcup` (a real document).
 
-Build and run, from `galta/`:
+The `benchmarks` profile builds an executable jar with the maven-shade-plugin. Build and
+run, from `galta/`:
 
 ```sh
 mvn -o -f parent-json/json-performance/pom.xml clean package -Pbenchmarks
@@ -27,6 +27,7 @@ java -jar parent-json/json-performance/target/benchmarks.jar "galta" -f 1       
 java -jar parent-json/json-performance/target/benchmarks.jar "ParseBenchmark" -p dataset=numbers -prof gc
 ```
 
+`-o` builds offline, against the Galta modules already installed in the local repository.
 `-prof gc` adds the allocation per operation, `-prof jfr` records a flight recording to
 find the hot methods (`jfr view hot-methods <file>`).
 
@@ -36,5 +37,6 @@ operation for each benchmark; run with `-rf json` to get the full JMH output).
 
 ## Legacy benchmarks
 
-`performance/parsing` and `performance/accessors` hold the older, JUnit based,
-micro-benchmarks (`AllJsonPerformanceTests`).
+`performance/parsing` and `performance/accessors` hold the older micro-benchmarks, which
+also compare with `org.json` and Gson. They are plain Java programs, not JUnit tests:
+`performance.AllJsonPerformanceTests` runs them all from its `main` method.

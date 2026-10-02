@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-`parent-utilities` provides low-level, general-purpose Java utilities used by all other Galta modules. It has no Galta-specific dependencies.
+`parent-utilities` provides low-level, general-purpose Java utilities used by all other Galta modules. The `utilities` module itself has no Galta dependency; `javacompiler` and `filesystem` build on it, and `test` (the JUnit support) also uses `json` and `json-config`.
 
 ## Sub-modules
 

@@ -1,14 +1,39 @@
-# Northwind Demo Database
+# Galta Demo Data - Northwind
+
+> Not published to Maven Central: the license of the dataset is still to be confirmed.
 
 The classic Northwind trading company database (customers, employees,
 orders, products, suppliers, ...): one CSV file per table in
 `northwind/csv/`, and the PostgreSQL scripts to create and fill the schema in
-`northwind/postgresql/`.
+`northwind/postgresql/`. The data model is pictured in
+[doc/datamodel.png](doc/datamodel.png).
+
+## Usage
+
+Within the repository, or after a local `mvn install`:
+
+```xml
+<dependency>
+  <groupId>org.monflabs.galta</groupId>
+  <artifactId>demo-northwind</artifactId>
+  <version>${project.version}</version>
+</dependency>
+```
 
 ```java
 NorthwindTables tables = new NorthwindTables();
 _Table<Orders.Record> orders = tables.getTable(NorthwindTables.orders);
 ```
+
+## Contents
+
+Package: `org.monflabs.demodata.northwind.pojo`.
+
+- `NorthwindTables` - reads the CSV files (through `json-impexp-fastcsv`) into
+  typed tables, one constant per table name; `openResource(path)` opens any
+  bundled file.
+- One `_Table` class per table (`Orders`, `Customers`, `Products`, ...), each
+  with its `Record` class.
 
 How the CSV values are read (see `NorthwindTables`):
 

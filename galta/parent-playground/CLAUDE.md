@@ -40,7 +40,7 @@ Swing IDE that hosts the playground (`PlaygroundFrame`, an `IDEFrame` from `ui-s
 - The editors' text is copied to the execution context when a run starts or the snippet is saved (`commitEditors()`), not on every keystroke; the editors are unregistered from the RSTA language supports when the snippet closes (only `.java`/`.jshell` editors register — the JavaScript support parses with Rhino, which the GaltaJS playground excludes)
 - Execute / Stop toolbar (Cmd/Ctrl+Enter, Cmd/Ctrl+., save Cmd/Ctrl+S), auto-execution 500 ms after an edit, all through an `ExecutionController`; the UI options are captured on the event dispatch thread when the run is requested (`collectExecutionOptions()`), `processExecutionResult()` is called on the event dispatch thread for the current run only, and the console (`TextAreaOutputStream`) is updated asynchronously — `flush()` is the point where the text area is up to date
 - Settings (toolbar options, window bounds, main divider, last snippet) are persisted under `playground/` when a `UiPersistentSettings` store is set (the GaltaJS launcher sets one)
-- Java code completion for `.java`/`.jshell` files reads the JDK's `jmods` (`com.monflabs.swing.rtsyntax`)
+- Java code completion for `.java`/`.jshell` files reads the JDK's `jmods`, or the running JVM's `jrt:/` image when the JDK has none (`com.monflabs.swing.rtsyntax`)
 
 ## Connecting an Engine
 

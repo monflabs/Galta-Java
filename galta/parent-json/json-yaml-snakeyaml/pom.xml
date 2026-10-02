@@ -16,7 +16,7 @@
 		</dependency>
 
 		<!-- https://mvnrepository.com/artifact/org.snakeyaml/snakeyaml-engine -->
-		<!-- Version managed by monflabs-bom -->
+		<!-- Version managed by monflabs-parent -->
 		<dependency>
 			<groupId>org.snakeyaml</groupId>
 			<artifactId>snakeyaml-engine</artifactId>

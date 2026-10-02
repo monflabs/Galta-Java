@@ -37,7 +37,7 @@ Package root: `org.monflabs.json`
 
 ### Design Notes
 
-- `JsonObject` and `JsonArray` are **interfaces**, not classes. The default implementation is in `json/java/` (`JsonObjectAsLinkedMap`, `JsonArrayAsArrayList`, created by `JavaJsonFactory`); `json/impl/` holds iterators and the schema-factory hook. Third-party adapters would wrap foreign types behind the same interfaces (`AbstractJsonObject` is the base for that; no such adapter module exists today).
+- `JsonObject` and `JsonArray` are **interfaces**, not classes. The default implementation is in `json/java/` (`JsonObjectAsLinkedMap`, `JsonArrayAsArrayList`, created by `JavaJsonFactory`). Third-party adapters would wrap foreign types behind the same interfaces (`AbstractJsonObject` is the base for that; no such adapter module exists today).
 - The GaltaJS engine uses `JsonObject`/`JsonArray` as its native Object/Array types, so changes to these interfaces affect the JS engine.
 
 ## `json-serialization`
@@ -46,7 +46,7 @@ Serializes plain Java objects and records to/from `JsonObject`. Constraints: cla
 
 ## `json-config`
 
-Provides typed, hierarchical configuration backed by JSON files. Supports defaults, overlays, and environment-variable substitution.
+Configuration backed by JSON files (`JsonFileConfig`) or held in memory: typed reads with defaults, updates saved back atomically, `$ref` to split it across resource files (fragment references are written back), encrypted values (`KeyEncryptor`, bound to their key path) and read-only configurations. User docs: `docs/GaltaJSON/Modules/Config.md`.
 
 ## Adapter Pattern
 

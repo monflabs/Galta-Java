@@ -1,6 +1,8 @@
-# Tour de France Demo Data
+# Galta Demo Data - Tour de France
 
-Every edition of the Tour de France since 1903, as CSV files in
+> Not published to Maven Central: the source and license of the dataset are still to be confirmed.
+
+Every edition of the Tour de France from 1903 to 2022, as CSV files in
 `tourdefrance/` (UTF-8):
 
 | File | Content |
@@ -11,10 +13,30 @@ Every edition of the Tour de France since 1903, as CSV files in
 | `tdf_finishers.csv` | the final ranking of each edition |
 | `data_dictionary.csv` | the description of every column |
 
-`TDFDataLoader.loadTours()` reads `tdf_tours.csv` into `Tour` objects
-(`getDistanceKm()` gives the distance as a number; the editions before 1910
-are flagged as archived), and `TDFDataLoader.openResource(name)` opens any of
-the files.
+## Usage
+
+Within the repository, or after a local `mvn install`:
+
+```xml
+<dependency>
+  <groupId>org.monflabs.galta</groupId>
+  <artifactId>demo-tour-de-france</artifactId>
+  <version>${project.version}</version>
+</dependency>
+```
+
+```java
+List<Tour> tours = TDFDataLoader.loadTours();
+```
+
+## Contents
+
+Package: `org.monflabs.demodata.tourdefrance`.
+
+- `TDFDataLoader.loadTours()` - reads `tdf_tours.csv` into `Tour` objects
+  (`getDistanceKm()` gives the distance as a number; the editions before 1910,
+  `Tour.ARCHIVE_YEAR`, are flagged as archived).
+- `TDFDataLoader.openResource(name)` - opens any of the files.
 
 ## Source and license
 

@@ -88,7 +88,7 @@ Tests run both modes to ensure equivalence. Transpiled Java is saved under `src/
 
 ### GaltaJS Extensions (beyond ECMAScript)
 
-- `BigDecimal` type via `0m` literal suffix; `DECIMAL64` precision
+- `BigDecimal` type via `0m` literal suffix; `DECIMAL128` precision by default (`ConfigurationImpl`)
 - Long integer promotion on overflow (`JSEnvironment.Builder.supportLongPromotion(true)`)
 - JSON path operators: `..` (deep scan), `.*`, `?[]` (filter), `!.`/`![` (non-null required access), `?:` (null coalescing)
 - Sequence type for multi-value results from path expressions

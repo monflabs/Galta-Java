@@ -7,11 +7,11 @@ The core `json` artifact has no third-party dependency. Everything else is packa
 | [`json-serialization`](/GaltaJSON/Modules/Serialization) | Java objects to and from JSON, by reflection or custom adapters. | none |
 | [`json-config`](/GaltaJSON/Modules/Config) | Application settings in JSON files: typed reads, updates with auto-save, `$ref`, encrypted values. | none |
 | [`json-impexp`](/GaltaJSON/Modules/ImportExport) | Import, export and replication of JSON documents between files, zips, in-memory containers and streams. | none |
-| [`json-impexp-fastcsv`](/GaltaJSON/Modules/ImportExport#csv) | CSV source and target for `json-impexp`. | `de.siegmar:fastcsv` 2.1.0 |
+| [`json-impexp-fastcsv`](/GaltaJSON/Modules/ImportExport#csv) | CSV source and target for `json-impexp`. | `de.siegmar:fastcsv` 4.4.0 |
 | [`json-memdb`](/GaltaJSON/Modules/MemoryDb) | `MemoryJsonDb`, an in-memory document store with selects, transactions and replication. | none (uses `json-impexp`) |
-| [`json-yaml-snakeyaml`](/GaltaJSON/Modules/Yaml) | YAML parsing and writing. | `org.snakeyaml:snakeyaml-engine` 2.6 |
-| [`json-jsonpath-jayway`](/GaltaJSON/Modules/JsonPathJayway) | Jayway JsonPath over GaltaJSON values. | `com.jayway.jsonpath:json-path` 2.9.0 |
-| [`json-jsonschema-jsonschemafriend`](/GaltaJSON/Modules/JsonSchema) | JSON Schema validation. | `net.jimblackler.jsonschemafriend:core` 0.12.5 |
+| [`json-yaml-snakeyaml`](/GaltaJSON/Modules/Yaml) | YAML parsing and writing. | `org.snakeyaml:snakeyaml-engine` 3.1.1 |
+| [`json-jsonpath-jayway`](/GaltaJSON/Modules/JsonPathJayway) | Jayway JsonPath over GaltaJSON values. | `com.jayway.jsonpath:json-path` 3.0.0 |
+| [`json-jsonschema-jsonschemafriend`](/GaltaJSON/Modules/JsonSchema) | JSON Schema validation. | `org.metaeffekt.bundle.jsonschemafriend:ae-jsonschemafriend-core` 0.12.5-1 |
 
 All of them work on the values described in [Values](/GaltaJSON/Values): a YAML file, a CSV row, a configuration or a serialized Java object is a regular `JsonObject` that the rest of the library, and the GaltaJS engine, can use as is.
 

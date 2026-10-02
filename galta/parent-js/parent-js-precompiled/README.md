@@ -1,0 +1,23 @@
+# GaltaJS Precompiled Libraries Parent
+
+[![Maven Central](https://img.shields.io/maven-central/v/org.monflabs.galta/parent-js-precompiled?label=Maven%20Central)](https://central.sonatype.com/artifact/org.monflabs.galta/parent-js-precompiled)
+
+The parent of third-party JavaScript libraries shipped as Java classes: each
+module keeps the library's JavaScript source in its `js/` folder (with the
+`download.sh` script that fetched it), transpiles it to Java at build time with
+the [js-transpiler-maven](../js-transpiler-maven/README.md) plugin, and adds a
+thin Java facade that runs the transpiled code in a GaltaJS environment. They
+are both useful formatters and real-world tests of the transpiler.
+
+## Modules
+
+- [js-precompiled-beautify-js](js-precompiled-beautify-js/README.md) - the js-beautify JavaScript formatter (`BeautifyJs`)
+- [js-precompiled-beautify-css](js-precompiled-beautify-css/README.md) - the js-beautify CSS formatter (`BeautifyCss`)
+- [js-precompiled-beautify-html](js-precompiled-beautify-html/README.md) - the js-beautify HTML formatter (`BeautifyHtml`)
+- [js-precompiled-typescript](js-precompiled-typescript/README.md) - the TypeScript compiler; not functional yet and not published
+
+## Documentation
+
+- [Execution Modes](../../../docs/GaltaJS/UserGuide/ExecutionModes.md) ([online](https://monflabs.github.io/Galta-Java/#/GaltaJS/UserGuide/ExecutionModes)) - the transpiled mode and the Maven plugin
+- [Companion Modules](../../../docs/GaltaJS/UserGuide/CompanionModules.md) ([online](https://monflabs.github.io/Galta-Java/#/GaltaJS/UserGuide/CompanionModules))
+- [API reference](https://monflabs.github.io/Galta-Java/#/API)
