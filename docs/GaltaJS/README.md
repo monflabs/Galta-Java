@@ -42,7 +42,7 @@ All artifacts use the `org.monflabs.galta` group id and share the project versio
 | `js-template`, `js-vb` | Text templates and `${...}` value bindings evaluated by the engine. |
 | `js-debugger` | Swing debugger front-end speaking the Chrome DevTools Protocol. |
 | `js-playground` | Interactive playground application. |
-| `js-precompiled-beautify-js`, `-css`, `-html` | js-beautify formatters transpiled to Java at build time. |
+| `js-precompiled-beautify-js`, `-css`, `-html` | js-beautify formatters transpiled to Java at build time (built from source, not published to Maven Central). |
 
 See [Companion Modules](/GaltaJS/UserGuide/CompanionModules) for details on each of them.
 

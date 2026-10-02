@@ -18,10 +18,10 @@ Published to Maven Central:
 - [js-vb](js-vb/README.md) - `${...}` expression-language value bindings evaluated with GaltaJS
 - [js-debugger](js-debugger/README.md) - Swing debugger speaking the Chrome DevTools Protocol
 - [js-playground](js-playground/README.md) - the interactive GaltaJS playground (Swing application)
-- [parent-js-precompiled](parent-js-precompiled/README.md) - JavaScript libraries transpiled to Java at build time (js-beautify)
 
 Built from source only (not published):
 
+- [parent-js-precompiled](parent-js-precompiled/README.md) - JavaScript libraries transpiled to Java at build time (js-beautify)
 - [js-all](js-all/README.md) - a single fat jar of the engine and its dependencies
 - [js-playground-cheerpj](js-playground-cheerpj/README.md) - the browser (CheerpJ) build of the playground
 - [js-library-v8](js-library-v8/README.md) - pulls V8 (Javet) for cross-engine checks in tests

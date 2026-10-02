@@ -40,9 +40,7 @@ All entries use the `org.monflabs.galta` group id and the BOM's own version.
   `json-serialization`, `json-yaml-snakeyaml`
 - UI and playground: `ui-commons`, `ui-swing`, `ui-swing-ide`,
   `playground-core`, `playground-ui-swing`
-- GaltaJS: `js`, `js-debugger`, `js-template`, `js-vb`, `js-playground`,
-  `js-precompiled-beautify-css`, `js-precompiled-beautify-html`,
-  `js-precompiled-beautify-js`
+- GaltaJS: `js`, `js-debugger`, `js-template`, `js-vb`, `js-playground`
 - Test jars (`<type>test-jar</type>`): `filesystem`, `js`
 
 The `js-transpiler-maven` plugin is not a dependency, so it is not in the BOM:

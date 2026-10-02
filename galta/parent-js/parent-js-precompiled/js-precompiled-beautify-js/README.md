@@ -1,6 +1,6 @@
 # GaltaJS Precompiled js-beautify
 
-[![Maven Central](https://img.shields.io/maven-central/v/org.monflabs.galta/js-precompiled-beautify-js?label=Maven%20Central)](https://central.sonatype.com/artifact/org.monflabs.galta/js-precompiled-beautify-js)
+> Not published to Maven Central: build and install it from this repository.
 
 The JavaScript formatter of [js-beautify](https://github.com/beautify-web/js-beautify)
 (1.15.4, the version `js/download.sh` fetches), transpiled to Java with GaltaJS at build time: the library runs
@@ -16,8 +16,10 @@ as compiled Java classes, with no JavaScript parsing at run time. A small facade
 </dependency>
 ```
 
-The version comes from the `galta-bom` (see [Modules](../../../../README.md#modules)),
-or declare `<version>` directly.
+It is not on Maven Central (nor in the `galta-bom`): install it from a checkout of
+this repository, from `galta/`, with
+`mvn install -pl parent-js/parent-js-precompiled/js-precompiled-beautify-js -am`, and declare it
+with the Galta version (`<version>0.8.0</version>`).
 
 `BeautifyJs.newBuilder().build()` creates the formatter, optionally with
 `.environment(env)` to run it in a given `JSEnvironment` (by default a plain

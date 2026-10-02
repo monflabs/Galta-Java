@@ -1,6 +1,6 @@
 # GaltaJS Precompiled Libraries Parent
 
-[![Maven Central](https://img.shields.io/maven-central/v/org.monflabs.galta/parent-js-precompiled?label=Maven%20Central)](https://central.sonatype.com/artifact/org.monflabs.galta/parent-js-precompiled)
+> Not published to Maven Central: neither this parent nor its modules; build and install them from this repository.
 
 The parent of third-party JavaScript libraries shipped as Java classes: each
 module keeps the library's JavaScript source in its `js/` folder (with the

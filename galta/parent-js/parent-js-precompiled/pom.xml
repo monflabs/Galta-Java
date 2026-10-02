@@ -13,6 +13,17 @@
 	<name>GaltaJS Precompiled Libraries Parent</name>
 	<description>Parent of JavaScript libraries transpiled to Java with GaltaJS at build time.</description>
 
+	<properties>
+		<!--
+			Not published: neither this parent nor its modules go to Maven Central
+			(excluded from the bundle in the root pom central profile). The modules
+			inherit these properties.
+		-->
+		<maven.deploy.skip>true</maven.deploy.skip>
+		<maven.javadoc.skip>true</maven.javadoc.skip>
+		<gpg.skip>true</gpg.skip>
+	</properties>
+
 
 	<modules>
 		<module>js-precompiled-beautify-css</module>

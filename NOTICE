@@ -42,11 +42,6 @@ In the json artifact:
   JSON-SMART authors (Uriel Chemouni), Apache License 2.0
   org/monflabs/json/parser
 
-In the js-precompiled-beautify-js, -css and -html artifacts:
-
-- js-beautify, Copyright (c) 2007-2018 Einar Lielmanis, Liam Newman, and
-  contributors, MIT License (licenses/js-beautify-MIT.txt), transpiled to Java
-
 In the ui-swing-ide and playground-ui-swing artifacts:
 
 - Parts of RSyntaxTextArea, Copyright (c) 2021 Robert Futrell, BSD 3-Clause
@@ -56,7 +51,7 @@ In the ui-swing-ide and playground-ui-swing artifacts:
 
 In the js-playground artifact (the sample snippets):
 
-- js-beautify (see above), as JavaScript
+- js-beautify (see below), as JavaScript
 - Bootstrap 4.0.0, Copyright 2011-2018 The Bootstrap Authors and Twitter, Inc.,
   MIT License (licenses/bootstrap-MIT.txt), as sample input of the beautifiers
 - World Cup 2018 match data from the openfootball project
@@ -72,6 +67,9 @@ In the js test artifact (js-tests):
 
 Not published as Maven artifacts:
 
+- js-beautify, Copyright (c) 2007-2018 Einar Lielmanis, Liam Newman, and
+  contributors, MIT License (licenses/js-beautify-MIT.txt), transpiled to Java
+  in the js-precompiled-beautify-js, -css and -html modules
 - TypeScript compiler, Copyright Microsoft Corporation, Apache License 2.0
   galta/parent-js/parent-js-precompiled/js-precompiled-typescript/js/typescript.js
 - The sample datasets under galta/parent-demodata come from third-party sources

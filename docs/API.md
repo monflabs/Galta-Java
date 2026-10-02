@@ -38,9 +38,6 @@ To use a module, import `galta-bom` and declare it without a version - see
 | `js-debugger` | [js-debugger](api/js-debugger/index.html ':ignore') | Swing debugger speaking the Chrome DevTools Protocol |
 | `js-template` | [js-template](api/js-template/index.html ':ignore') | JSP-like text templates |
 | `js-vb` | [js-vb](api/js-vb/index.html ':ignore') | Expression-language value bindings |
-| `js-precompiled-beautify-js` | [js-precompiled-beautify-js](api/js-precompiled-beautify-js/index.html ':ignore') | js-beautify JavaScript formatter, transpiled to Java |
-| `js-precompiled-beautify-css` | [js-precompiled-beautify-css](api/js-precompiled-beautify-css/index.html ':ignore') | js-beautify CSS formatter, transpiled to Java |
-| `js-precompiled-beautify-html` | [js-precompiled-beautify-html](api/js-precompiled-beautify-html/index.html ':ignore') | js-beautify HTML formatter, transpiled to Java |
 
 ## UI & Playground
 
