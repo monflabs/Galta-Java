@@ -237,17 +237,31 @@ which has no parent, carries its own copy.
 
 1. A Central Portal account with the `org.monflabs` namespace verified
    (<https://central.sonatype.com>).
-2. A Central Portal user token, stored in `~/.m2/settings.xml` under the
-   server id `central` (encrypt it with `mvn --encrypt-password` and a master
-   password in `settings-security.xml` so it is not on disk in the clear):
+2. A Central Portal user token. Its password half is kept in the macOS
+   Keychain, never on disk in the clear: store it once (the command prompts for
+   it, so it is not on a command line),
+
+   ```sh
+   security add-generic-password -a "$USER" -s central-token -w
+   ```
+
+   and declare the server in `~/.m2/settings.xml` with the token's username,
+   the password coming from the environment:
 
    ```xml
    <server>
      <id>central</id>
      <username>token-username</username>
-     <password>token-password</password>
+     <password>${env.CENTRAL_TOKEN}</password>
    </server>
    ```
+
+   `buildtools/release.sh` reads the Keychain item into `CENTRAL_TOKEN` for
+   the run (`CENTRAL_TOKEN_ITEM` names another item; a `CENTRAL_TOKEN` already
+   set, e.g. on CI, is used as is). macOS asks the first time whether
+   `security` may read the item. When the token is regenerated on the Portal,
+   update both halves: the username in `settings.xml`, the password with the
+   same command plus `-U`.
 
 3. A GPG key whose public part is published to a key server
    (`gpg --keyserver keyserver.ubuntu.com --send-keys <key id>`). The
@@ -298,8 +312,8 @@ The script:
    (the desktop playground, `java -jar`) and `galtajs-all-<version>.jar` (the
    engine and its dependencies in one jar).
 
-It holds no secrets: the Central token is read by Maven from `settings.xml`,
-the GPG passphrase comes from `gpg-agent`, GitHub access from the `gh` keyring.
+It holds no secrets: the Central token comes from the Keychain for the run
+only, the GPG passphrase from `gpg-agent`, GitHub access from the `gh` keyring.
 Other knobs (`RELEASE_YES`, `RELEASE_SKIP_CENTRAL`, `RELEASE_SKIP_SMOKE`,
 `RELEASE_SKIP_GHRELEASE`, `MVN`) are described in the script's header.
 
