@@ -115,7 +115,10 @@ run it.
 Every jar (main and test) gets the repository's `LICENSE`, `NOTICE` and
 `licenses/` folder in its `META-INF`: `monflabs-parent` copies them from the
 repository root, which Maven finds through the `.mvn` folder there, also when
-building from `galta/`. `NOTICE` lists the third-party code bundled in each
+building from `galta/`. A build started outside the repository (the
+`monflabs-projects` aggregator) has another root, without these files: its jars
+are fine to use locally but carry no legal files, so release builds always run
+from this repository (`buildtools/release.sh` checks the jars). `NOTICE` lists the third-party code bundled in each
 artifact, with the file of its license in `licenses/`; a new piece of
 third-party code needs an entry there and its license text. The source files
 keep their original copyright notices. The shaded jars of the GitHub release
