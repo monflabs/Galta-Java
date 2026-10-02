@@ -110,6 +110,17 @@ Running the `test262` profile before publishing is the point at which a
 compliance regression is meant to be caught, since the routine build does not
 run it.
 
+## Licenses in the artifacts
+
+Every jar (main and test) gets the repository's `LICENSE`, `NOTICE` and
+`licenses/` folder in its `META-INF`: `monflabs-parent` copies them from the
+repository root, which Maven finds through the `.mvn` folder there, also when
+building from `galta/`. `NOTICE` lists the third-party code bundled in each
+artifact, with the file of its license in `licenses/`; a new piece of
+third-party code needs an entry there and its license text. The source files
+keep their original copyright notices. The shaded jars of the GitHub release
+concatenate the license and notice files of everything they bundle.
+
 ## Versioning
 
 The version is a Maven CI-friendly `${revision}` property, resolved at build
@@ -125,7 +136,9 @@ description, licenses, developers, scm - as written. A version bump changes:
 
 `buildtools/release.sh` refuses to run when these disagree. The default
 `galta.version` of `smoke-test/pom.xml` can follow too (the release script
-passes the version explicitly), and `CHANGELOG.md` gets a section per version.
+passes the version explicitly), and `CHANGELOG.md` gets a section per version,
+headed `## <version> (<date>)`: the release script refuses an `(unreleased)`
+heading, as that section becomes the notes of the GitHub release.
 
 ## Dependency and plugin versions
 

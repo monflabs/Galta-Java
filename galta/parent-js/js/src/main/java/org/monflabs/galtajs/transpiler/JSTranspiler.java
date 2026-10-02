@@ -153,10 +153,18 @@ public class JSTranspiler {
 			
 			b.println("//");
 			b.println("// Transpiled with GaltaJS Transpiler");
-			b.println("// (c) 2018-2026 Monflabs");
 			b.println("//");
 			b.println("// Unit: {0}", commentSafe(moduleName));
 			b.println("//");
+			// The license of the source (its leading comment, when it has one) applies to
+			// the generated code as well
+			String license = leadingLicenseComment(program.getSourceCode());
+			if(license!=null) {
+				for(String line: license.split("\\r?\\n|\\r", -1)) {
+					b.println("{0}", commentSafe(line.isBlank() ? "//" : "// "+line.stripTrailing()));
+				}
+				b.println("//");
+			}
 			b.println();
 			if(StringUtil.isNotEmpty(packageName)) {
 				b.println("package {0};",packageName);
@@ -281,6 +289,61 @@ public class JSTranspiler {
 	 * by braces) would fail the compilation. A backslash is written as the unicode
 	 * escape of a backslash, which javac does not process a second time.
 	 */
+	/**
+	 * The license or copyright notice at the start of a source: the first of its leading
+	 * comments (block comments, or runs of line comments, before any code and after an
+	 * optional #! line) that mentions a license or a copyright. Null when there is none.
+	 */
+	public static String leadingLicenseComment(String source) {
+		if(source==null) {
+			return null;
+		}
+		int p = 0;
+		int n = source.length();
+		if(source.startsWith("#!")) {
+			while(p<n && source.charAt(p)!='\n') {
+				p++;
+			}
+		}
+		while(true) {
+			while(p<n && Character.isWhitespace(source.charAt(p))) {
+				p++;
+			}
+			String comment;
+			if(source.startsWith("/*", p)) {
+				int end = source.indexOf("*/", p+2);
+				if(end<0) {
+					return null;
+				}
+				// Without the leading " * " decoration of the lines
+				comment = source.substring(p+2, end).replaceAll("(?m)^[ \\t]*\\*(?!/) ?", "");
+				p = end+2;
+			} else if(source.startsWith("//", p)) {
+				StringBuilder b = new StringBuilder();
+				while(source.startsWith("//", p)) {
+					int eol = source.indexOf('\n', p);
+					if(eol<0) {
+						eol = n;
+					}
+					// Without the space after the //
+					int start = p+2<eol && source.charAt(p+2)==' ' ? p+3 : p+2;
+					b.append(source, start, eol).append('\n');
+					p = eol+1;
+					while(p<n && (source.charAt(p)==' ' || source.charAt(p)=='\t')) {
+						p++;
+					}
+				}
+				comment = b.toString();
+			} else {
+				return null;
+			}
+			String lower = comment.toLowerCase(java.util.Locale.ROOT);
+			if(lower.contains("license") || lower.contains("copyright")) {
+				return comment.strip();
+			}
+		}
+	}
+
 	public static String commentSafe(String text) {
 		if(text==null) {
 			return null;

@@ -252,4 +252,13 @@ public class EngineRegressionJavaTest extends __BaseTestCase {
 			throw new AssertionError(error.get());
 		}
 	}
+
+	// The transpiled code keeps the license of its source, and claims no copyright itself
+	public void testTranspiledLicenseComment() {
+		String mit = "/* AUTO-GENERATED. */\n/*\n * The MIT License\n * Copyright (c) 2020 Someone\n */\nvar a = 1;";
+		assertEquals("The MIT License\nCopyright (c) 2020 Someone", org.monflabs.galtajs.transpiler.JSTranspiler.leadingLicenseComment(mit));
+		assertEquals("Copyright 2021 X\nApache License", org.monflabs.galtajs.transpiler.JSTranspiler.leadingLicenseComment("#!/usr/bin/env node\n// Copyright 2021 X\n// Apache License\nvar a;"));
+		assertNull(org.monflabs.galtajs.transpiler.JSTranspiler.leadingLicenseComment("// just a comment\nvar a; /* license */"));
+		assertNull(org.monflabs.galtajs.transpiler.JSTranspiler.leadingLicenseComment("var a; // Copyright"));
+	}
 }

@@ -1,4 +1,35 @@
 /*
+ * Copyright (c) 2019-2026 Philippe Riand
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * This grammar is derived from the EcmaScript grammar distributed with JavaCC
+ * (grammars/EcmaScript.jjt):
+ *
+ *     Copyright (c) 2004-2005, The Dojo Foundation
+ *     All Rights Reserved.
+ *
+ *     Licensed under the Academic Free License version 2.1 or above OR the
+ *     modified BSD license. For more information on Dojo licensing, see:
+ *     http://dojotoolkit.org/community/licensing.shtml
+ *
+ *     Code donated to the Dojo Foundation by AOL LLC under the terms of
+ *     the Dojo CCLA (http://dojotoolkit.org/ccla.txt).
+ *
+ * GaltaJS uses it under the modified BSD license, whose text is in
+ * META-INF/licenses/dojo-EcmaScript-grammar-BSD-3-Clause.txt.
+ */
+/*
   GaltaJS Parser
 
   Inspired from

@@ -9,16 +9,7 @@ The core library reads and navigates JSON Schema documents (see [Schema](/GaltaJ
 </dependency>
 ```
 
-jsonschemafriend is not on Maven Central: it is published on [JitPack](https://jitpack.io), so a project using this module also declares that repository:
-
-```xml
-<repositories>
-    <repository>
-        <id>jitpack.io</id>
-        <url>https://jitpack.io</url>
-    </repository>
-</repositories>
-```
+jsonschemafriend comes from Maven Central, as `org.metaeffekt.bundle.jsonschemafriend:ae-jsonschemafriend-core`: the original project is only published on JitPack, and this is the same code, published on Central by metaeffekt. No extra repository is needed.
 
 Two classes, in `org.monflabs.json.jsonschema`:
 

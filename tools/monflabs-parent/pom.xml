@@ -78,6 +78,8 @@
 		<maven.compiler.release>21</maven.compiler.release>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<!-- Where LICENSE, NOTICE and licenses/ are read from (see legal-files below) -->
+		<monflabs.legal.dir>${maven.multiModuleProjectDirectory}</monflabs.legal.dir>
 
 		<!--
 			The Galta version this parent belongs to (= its own version). Children
@@ -175,11 +177,15 @@
 			    	<version>3.0.0</version>
 				</dependency>
 			
-				<!-- https://mvnrepository.com/artifact/net.jimblackler.jsonschemafriend/core -->
+				<!--
+					jsonschemafriend (net.jimblackler.jsonschemafriend:core) is only on JitPack:
+					this is the same code, published on Maven Central by metaeffekt (see the
+					NOTICE in its jar)
+				-->
 				<dependency>
-				    <groupId>net.jimblackler.jsonschemafriend</groupId>
-				    <artifactId>core</artifactId>
-				    <version>0.12.5</version>
+				    <groupId>org.metaeffekt.bundle.jsonschemafriend</groupId>
+				    <artifactId>ae-jsonschemafriend-core</artifactId>
+				    <version>0.12.5-1</version>
 				</dependency>
 				<!-- https://mvnrepository.com/artifact/org.snakeyaml/snakeyaml-engine -->
 				<dependency>
@@ -805,6 +811,60 @@
 							<rules>
 								<dependencyConvergence/>
 							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!--
+				Legal files: the repository's LICENSE, NOTICE and licenses/ (the texts of the
+				third-party licenses of bundled code) go in META-INF of every jar, main and
+				test. They are read from monflabs.legal.dir, the repository root by default
+				(found through its .mvn folder, also when building from a sub folder); a
+				repository without them simply gets none.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-resources-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>legal-files</id>
+						<phase>process-resources</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.outputDirectory}/META-INF</outputDirectory>
+							<resources>
+								<resource>
+									<directory>${monflabs.legal.dir}</directory>
+									<includes>
+										<include>LICENSE</include>
+										<include>NOTICE</include>
+										<include>licenses/**</include>
+									</includes>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+					<execution>
+						<id>legal-files-tests</id>
+						<phase>process-test-resources</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.testOutputDirectory}/META-INF</outputDirectory>
+							<resources>
+								<resource>
+									<directory>${monflabs.legal.dir}</directory>
+									<includes>
+										<include>LICENSE</include>
+										<include>NOTICE</include>
+										<include>licenses/**</include>
+									</includes>
+								</resource>
+							</resources>
 						</configuration>
 					</execution>
 				</executions>

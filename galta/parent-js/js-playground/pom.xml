@@ -160,8 +160,82 @@
 										<exclude>src/org/eclipse/jdt/**</exclude>
 									</excludes>
 								</filter>
+								<!--
+									The Galta jars all carry the same LICENSE and NOTICE: only the js
+									jar contributes them, so the merged files hold one copy
+								-->
+								<filter>
+									<artifact>org.monflabs.galta:json*</artifact>
+									<excludes>
+										<exclude>META-INF/LICENSE</exclude>
+										<exclude>META-INF/NOTICE</exclude>
+									</excludes>
+								</filter>
+								<filter>
+									<artifact>org.monflabs.galta:utilities</artifact>
+									<excludes>
+										<exclude>META-INF/LICENSE</exclude>
+										<exclude>META-INF/NOTICE</exclude>
+									</excludes>
+								</filter>
+								<filter>
+									<artifact>org.monflabs.galta:javacompiler</artifact>
+									<excludes>
+										<exclude>META-INF/LICENSE</exclude>
+										<exclude>META-INF/NOTICE</exclude>
+									</excludes>
+								</filter>
+								<filter>
+									<artifact>org.monflabs.galta:filesystem</artifact>
+									<excludes>
+										<exclude>META-INF/LICENSE</exclude>
+										<exclude>META-INF/NOTICE</exclude>
+									</excludes>
+								</filter>
+								<filter>
+									<artifact>org.monflabs.galta:test</artifact>
+									<excludes>
+										<exclude>META-INF/LICENSE</exclude>
+										<exclude>META-INF/NOTICE</exclude>
+									</excludes>
+								</filter>
+								<filter>
+									<artifact>org.monflabs.galta:ui-*</artifact>
+									<excludes>
+										<exclude>META-INF/LICENSE</exclude>
+										<exclude>META-INF/NOTICE</exclude>
+									</excludes>
+								</filter>
+								<filter>
+									<artifact>org.monflabs.galta:playground-*</artifact>
+									<excludes>
+										<exclude>META-INF/LICENSE</exclude>
+										<exclude>META-INF/NOTICE</exclude>
+									</excludes>
+								</filter>
+								<filter>
+									<artifact>org.monflabs.galta:js-*</artifact>
+									<excludes>
+										<exclude>META-INF/LICENSE</exclude>
+										<exclude>META-INF/NOTICE</exclude>
+									</excludes>
+								</filter>
 							</filters>
 							<transformers>
+								<!--
+									The license files of the bundled jars (Galta's own LICENSE and
+									NOTICE, and those of the libraries) are concatenated, not
+									overwritten by the last jar
+								-->
+								<transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+									<resource>META-INF/LICENSE</resource>
+								</transformer>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+									<resource>META-INF/LICENSE.txt</resource>
+								</transformer>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+									<resource>META-INF/NOTICE</resource>
+								</transformer>
 								<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer">
 								</transformer>
 								<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">

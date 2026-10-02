@@ -204,7 +204,9 @@ public class JSTranspilerMojo extends AbstractMojo {
     	deleteOrphans(outputRoot, outputs);
 
     	String fingerprint = fingerprint();
-    	Path stamp = outputRoot.resolve(STAMP_FILE);
+    	// Next to the output folder, not in it: the output folder is a source root, packaged
+    	// in the sources jar, and the stamp holds local paths
+    	Path stamp = outputRoot.toAbsolutePath().resolveSibling(outputRoot.getFileName()+STAMP_FILE);
     	boolean sameConfiguration = Files.isRegularFile(stamp)
     			&& fingerprint.equals(Files.readString(stamp, StandardCharsets.UTF_8));
     	List<Path> stale = new ArrayList<>();
@@ -247,6 +249,7 @@ public class JSTranspilerMojo extends AbstractMojo {
 					+ (generated==null ? 0 : generated.size()) + " of " + stale.size() + ")");
 		}
 		Files.createDirectories(outputRoot);
+		Files.createDirectories(stamp.getParent());
 		Files.writeString(stamp, fingerprint, StandardCharsets.UTF_8);
     }
 

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2019-2026 Philippe Riand
+ * Copyright 2011 JSON-SMART authors (Uriel Chemouni)
+ * Copyright (c) 2019-2026 Philippe Riand (modifications)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +13,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Derived from json-smart (net.minidev.json.parser).
  */
 package org.monflabs.json.parser;
 

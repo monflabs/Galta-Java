@@ -2,6 +2,12 @@
 <!DOCTYPE RSyntaxTheme SYSTEM "theme.dtd">
 
 <!--
+	Derived from the dark theme of RSyntaxTextArea, Copyright (c) 2021, Robert Futrell. All rights reserved.
+	Distributed under the BSD 3-Clause License (see
+	META-INF/licenses/RSyntaxTextArea-BSD-3-Clause.txt).
+-->
+
+<!--
 	Dark theme based off of Notepad++'s Obsidian theme.
 	See theme.dtd and org.fife.ui.rsyntaxtextarea.Theme for more information.
 -->

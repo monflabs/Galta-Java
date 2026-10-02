@@ -200,6 +200,17 @@ First public release: Galta is published to Maven Central under the
   `js-transpiler-maven` plugin honours its options (and works with Maven 3.9).
 
 ### Build
+- Every jar carries `META-INF/LICENSE`, `META-INF/NOTICE` and the texts of the
+  third-party licenses of the code it bundles (`META-INF/licenses/`); NOTICE
+  lists every bundled component. The release script checks the jars, the
+  CHANGELOG date and the list of unpublished modules before anything is staged.
+- The JSON Schema module gets jsonschemafriend from Maven Central (the
+  `org.metaeffekt.bundle.jsonschemafriend` build of the same code): no JitPack
+  repository is needed any more.
+- Transpiled code keeps the license comment of its JavaScript source instead of
+  a Monflabs copyright line.
+- The unused character-set transcoders of the regular expression engine are
+  removed (1.4 MB less in `js.jar`).
 
 - A shared parent, `monflabs-parent`, manages every plugin and library version,
   with enforcer rules against version drift; plugins and libraries upgraded

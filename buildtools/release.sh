@@ -199,6 +199,39 @@ TAG="v${VERSION}"
 git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null && gate "tag ${TAG} already exists locally"
 git ls-remote --exit-code --tags origin "${TAG}" >/dev/null 2>&1 && gate "tag ${TAG} already exists on origin"
 
+note "checking CHANGELOG.md has a dated ${VERSION} section"
+changelog_head="$(grep -E "^#+ *${VERSION//./\\.} \\(" CHANGELOG.md | head -1 || true)"
+[ -n "$changelog_head" ] || gate "CHANGELOG.md has no '## ${VERSION} (<date>)' section (the release notes come from it)"
+case "$changelog_head" in *nreleased*) gate "CHANGELOG.md still says '${changelog_head}': set the release date" ;; esac
+
+note "checking the unpublished modules are excluded from the Central upload"
+# The publishing plugin filters the upload by its excludeArtifacts list only;
+# maven.deploy.skip alone does not keep a module out of the bundle.
+# (Written to a file first: bash 3.2, macOS's, mis-parses a here-document
+# inside $(...).)
+unpublished_py="$(mktemp)"
+RELEASE_TEMPS="$RELEASE_TEMPS $unpublished_py"
+cat > "$unpublished_py" <<'PYEOF'
+import re, subprocess
+root = open("pom.xml", encoding="utf-8").read()
+excluded = set(re.findall(r"<excludeArtifact>([^<]+)</excludeArtifact>", root))
+skipped = set()
+# The tracked poms only: the build folders can hold symbolic link loops
+poms = subprocess.run(["git", "ls-files", "--", "galta/*pom.xml", "tools/*pom.xml"],
+                      capture_output=True, text=True, check=True).stdout.split()
+for p in poms:
+    s = open(p, encoding="utf-8").read()
+    if re.search(r"<maven\.deploy\.skip>\s*true\s*</maven\.deploy\.skip>", s):
+        body = re.sub(r"<parent>.*?</parent>", "", s, count=1, flags=re.S)
+        skipped.add(re.search(r"<artifactId>([^<]+)</artifactId>", body).group(1))
+for a in sorted(skipped - excluded):
+    print("not in the root pom excludeArtifacts (would be published): " + a)
+for a in sorted(excluded - skipped):
+    print("in excludeArtifacts but does not set maven.deploy.skip: " + a)
+PYEOF
+UNPUBLISHED_CHECK="$(python3 "$unpublished_py")" || die "could not compare the unpublished module lists"
+[ -z "$UNPUBLISHED_CHECK" ] || gate "$(printf 'the unpublished module lists disagree:\n%s' "$UNPUBLISHED_CHECK")"
+
 # The GitHub release assets: built by the release build (shade), renamed with the
 # version when attached. "<built file>|<name in the release>".
 ASSETS=(
@@ -274,6 +307,18 @@ for a in "${ASSETS[@]}"; do
   f="${a%%|*}"
   [ -f "$f" ] || die "expected artifact missing: $f (did the build run?)"
 done
+
+note "checking every built jar carries META-INF/LICENSE and META-INF/NOTICE (the sources and javadoc jars do not need them)"
+missing_legal=""
+while IFS= read -r jar; do
+  listing="$(unzip -Z1 "$jar" 2>/dev/null || true)"
+  if ! grep -qx "META-INF/LICENSE" <<<"$listing" || ! grep -qx "META-INF/NOTICE" <<<"$listing"; then
+    missing_legal="${missing_legal}
+    ${jar}"
+  fi
+done < <(find galta tools -path '*/target/*.jar' -not -name 'original-*' -not -name '*-sources.jar' -not -name '*-javadoc.jar' -not -path '*/target/*/*' | sort)
+[ -z "$missing_legal" ] || die "jars without META-INF/LICENSE or NOTICE:${missing_legal}$(dry && echo '' || echo "
+    If a Central deployment was staged, DROP it in the Portal: ${PORTAL_URL}")"
 
 # --- 1b. smoke-test the built jars from ~/.m2 ---------------------------------
 # Installs the jars locally and runs the standalone smoke-test project against

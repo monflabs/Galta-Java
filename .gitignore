@@ -33,3 +33,4 @@ docs/playground/*.jar
 
 # Build output of the standalone smoke-test project
 smoke-test/target/
+/target/

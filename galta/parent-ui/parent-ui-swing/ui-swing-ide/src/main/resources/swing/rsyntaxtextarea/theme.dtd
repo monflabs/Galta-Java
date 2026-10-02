@@ -1,3 +1,8 @@
+<!--
+	From RSyntaxTextArea, Copyright (c) 2021, Robert Futrell. All rights reserved.
+	Distributed under the BSD 3-Clause License (see
+	META-INF/licenses/RSyntaxTextArea-BSD-3-Clause.txt).
+-->
 <!-- DTD for RSyntaxTextArea Theme XML. See org.fife.ui.rsyntaxtextarea.themes package for examples. -->
 <!ELEMENT RSyntaxTheme (baseFont?, background, caret, selection,
       currentLineHighlight, tabLine?, marginLine, markAllHighlight, markOccurrencesHighlight,

@@ -3,39 +3,81 @@ Copyright (c) 2019-2026 Philippe Riand
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
-It includes third-party code that keeps its original license and copyright
-notice, reproduced in the header of each file:
+It includes third-party software, listed below with its license. The full text
+of each license is in the licenses/ folder (META-INF/licenses/ in the jars),
+and the source files keep their original copyright notices.
 
-- Joni regular expression engine (MIT License), modified for GaltaJS
-  galta/parent-js/js/src/main/java/org/monflabs/galtajs/external/org_joni
-- big-math by Eric Obermühlner (MIT License)
-  galta/parent-js/js/src/main/java/org/monflabs/galtajs/external/ch_obermuhlner_math_big
-- Mozilla Rhino number conversion (Mozilla Public License 2.0, see LICENSE.txt in that folder)
-  galta/parent-js/js/src/main/java/org/monflabs/galtajs/external/org_mozilla_javascript
-- Temporal, ported from the TC39 Temporal proposal reference polyfill, Ecma International
-  (BSD License, see LICENSE.txt in that folder)
-  galta/parent-js/js/src/main/java/org/monflabs/galtajs/rt/builtins/standard/temporal
-- Ryu floating point formatting by Ulf Adams (Apache License 2.0)
-  galta/parent-utilities/utilities/src/main/java/org/monflabs/util/impl/ryu
-- json-smart and json-simple parser classes (Apache License 2.0)
-  galta/parent-json/json/src/main/java/org/monflabs/json/parser/JsonParser.java
-  galta/parent-json/json/src/main/java/org/monflabs/json/parser/ParseException.java
-- Jdk9LibraryInfo, derived from RSyntaxTextArea by Robert Futrell (BSD 3-Clause License)
-  galta/parent-playground/playground-ui-swing/src/main/java/com/monflabs/swing/rtsyntax/Jdk9LibraryInfo.java
-- js-beautify by Einar Lielmanis, Liam Newman and contributors (MIT License),
-  transpiled to Java at build time
-  galta/parent-js/parent-js-precompiled/js-precompiled-beautify-js/js
-  galta/parent-js/parent-js-precompiled/js-precompiled-beautify-css/js
-  galta/parent-js/parent-js-precompiled/js-precompiled-beautify-html/js
-- TypeScript compiler, Microsoft Corporation (Apache License 2.0), not published
+In the js artifact (GaltaJS):
+
+- Joni regular expression engine and JCodings character encodings,
+  Copyright (c) JRuby Team, MIT License (licenses/joni-jcodings-MIT.txt),
+  modified for GaltaJS
+  org/monflabs/galtajs/external/org_joni, and the tables in
+  org/monflabs/galtajs/org_joni/tables
+- big-math, Copyright (c) 2017 Eric Obermühlner, MIT License
+  (licenses/big-math-MIT.txt)
+  org/monflabs/galtajs/external/ch_obermuhlner_math_big
+- Number to string conversion from Mozilla Rhino, Mozilla Public License 2.0
+  (licenses/MPL-2.0.txt; the source code is in the sources jar), including
+  David M. Gay's dtoa, Copyright (c) 1991, 2000, 2001 by Lucent Technologies
+  (licenses/dtoa-Lucent.txt), and the V8 fast dtoa, Copyright 2010 the V8
+  project authors, BSD 3-Clause License (licenses/v8-dtoa-BSD-3-Clause.txt)
+  org/monflabs/galtajs/external/org_mozilla_javascript
+- Temporal, ported from the TC39 Temporal proposal reference polyfill,
+  Copyright (c) 2017-2020 Ecma International, BSD License
+  (licenses/temporal-polyfill-BSD-3-Clause.txt)
+  org/monflabs/galtajs/rt/builtins/standard/temporal
+- The JavaScript grammar (JSParser.jj) is derived from the EcmaScript grammar
+  of JavaCC, Copyright (c) 2004-2005 The Dojo Foundation, BSD License
+  (licenses/dojo-EcmaScript-grammar-BSD-3-Clause.txt)
+
+In the utilities artifact:
+
+- Ryu floating point formatting, Copyright 2018 Ulf Adams, Apache License 2.0
+  org/monflabs/util/impl/ryu
+
+In the json artifact:
+
+- The JSON parser and ParseException derive from json-smart, Copyright 2011
+  JSON-SMART authors (Uriel Chemouni), Apache License 2.0
+  org/monflabs/json/parser
+
+In the js-precompiled-beautify-js, -css and -html artifacts:
+
+- js-beautify, Copyright (c) 2007-2018 Einar Lielmanis, Liam Newman, and
+  contributors, MIT License (licenses/js-beautify-MIT.txt), transpiled to Java
+
+In the ui-swing-ide and playground-ui-swing artifacts:
+
+- Parts of RSyntaxTextArea, Copyright (c) 2021 Robert Futrell, BSD 3-Clause
+  License (licenses/RSyntaxTextArea-BSD-3-Clause.txt): the theme DTD and the
+  dark theme the FlatLaf theme derives from (swing/rsyntaxtextarea), and
+  Jdk9LibraryInfo (com/monflabs/swing/rtsyntax)
+
+In the js-playground artifact (the sample snippets):
+
+- js-beautify (see above), as JavaScript
+- Bootstrap 4.0.0, Copyright 2011-2018 The Bootstrap Authors and Twitter, Inc.,
+  MIT License (licenses/bootstrap-MIT.txt), as sample input of the beautifiers
+- World Cup 2018 match data from the openfootball project
+  (https://github.com/openfootball), dedicated to the public domain (CC0)
+
+In the js test artifact (js-tests):
+
+- JSONPath tests adapted from dchester/jsonpath, Copyright (c) 2014-2016 David
+  Chester, MIT License (licenses/jsonpath-dchester-MIT.txt)
+- util/Hashtable from the Mozilla Rhino tests, Mozilla Public License 2.0
+  (licenses/MPL-2.0.txt)
+- Examples from MDN Web Docs, dedicated to the public domain (CC0)
+
+Not published as Maven artifacts:
+
+- TypeScript compiler, Copyright Microsoft Corporation, Apache License 2.0
   galta/parent-js/parent-js-precompiled/js-precompiled-typescript/js/typescript.js
-
-Test and benchmark material (test262, the Rhino test suite, Octane, SunSpider
-and V8 benchmarks, and reference number-conversion code used only by tests)
-is distributed under the licenses stated in those files and folders.
-
-The sample datasets under galta/parent-demodata come from third-party sources
-and keep their original licenses; they are not published as Maven artifacts.
-
-tools/eea/jdk-eea-2.4.0.jar holds third-party Eclipse external null
-annotations for the JDK, used only at build time by the IDE.
+- The sample datasets under galta/parent-demodata come from third-party sources
+  and keep their original licenses (see the README of each module).
+- Test and benchmark material (test262, the Rhino test suite, Octane, SunSpider
+  and V8 benchmarks, and reference number-conversion code used only by tests)
+  is distributed under the licenses stated in those files and folders.
+- tools/eea/jdk-eea-2.4.0.jar holds third-party Eclipse external null
+  annotations for the JDK, used only at build time by the IDE.
