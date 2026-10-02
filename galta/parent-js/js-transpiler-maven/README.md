@@ -12,6 +12,8 @@ sources. The project also needs a dependency on [`js`](../js/README.md) to run t
 The build is incremental: a file is transpiled again only when one of its
 outputs is missing or older than the file, or when the configuration, the plugin
 or the engine changed (recorded in a stamp file next to the output directory).
+A file transpiled again to the same content is not rewritten: it keeps its
+modification time, so the Java compiler does not compile it again.
 Generated files whose JavaScript source is gone are deleted when the output
 directory is inside the build directory.
 

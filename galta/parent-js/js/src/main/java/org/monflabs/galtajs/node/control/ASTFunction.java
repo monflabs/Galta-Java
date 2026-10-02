@@ -567,22 +567,42 @@ public abstract class ASTFunction extends ASTRootStatementList {
 	}
 
 	private static int lineColToOffset(String source, int line, int col) {
-		int curLine = 1;
-		int i = 0;
+		int[] starts = lineStarts(source);
+		// Past the last line: the end of the source, as a scan would reach it
+		int i = line<=1 ? 0 : line-1<starts.length ? starts[line-1] : source.length();
+		return i + (col-1);
+	}
+
+	// The offset of the first character of each line (\n, \r\n or \r ends a line), for the
+	// last source asked: the functions of a unit all ask for the same source, which a scan
+	// from its start for each function made quadratic (minutes for a large library)
+	private record LineStarts(String source, int[] starts) {}
+	private static volatile LineStarts lastLineStarts;
+
+	private static int[] lineStarts(String source) {
+		LineStarts ls = lastLineStarts;
+		if(ls!=null && ls.source==source) {
+			return ls.starts;
+		}
 		int len = source.length();
-		while(curLine<line && i<len) {
+		int[] starts = new int[64];
+		int n = 0;
+		starts[n++] = 0;
+		for(int i=0; i<len; i++) {
 			char c = source.charAt(i);
-			i++;
-			if(c=='\r') {
-				if(i<len && source.charAt(i)=='\n') {
+			if(c=='\r' || c=='\n') {
+				if(c=='\r' && i+1<len && source.charAt(i+1)=='\n') {
 					i++;
 				}
-				curLine++;
-			} else if(c=='\n') {
-				curLine++;
+				if(n==starts.length) {
+					starts = java.util.Arrays.copyOf(starts, n*2);
+				}
+				starts[n++] = i+1;
 			}
 		}
-		return i + (col-1);
+		starts = java.util.Arrays.copyOf(starts, n);
+		lastLineStarts = new LineStarts(source, starts);
+		return starts;
 	}
 	
 	public boolean isStrictMode() {

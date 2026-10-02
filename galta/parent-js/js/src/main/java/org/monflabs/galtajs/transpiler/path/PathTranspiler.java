@@ -16,8 +16,6 @@
 package org.monflabs.galtajs.transpiler.path;
 
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -252,9 +250,14 @@ public class PathTranspiler {
 	        }
 		}
 		s = normalizeLineBreaks(s);
-		
-		try (Writer w = new OutputStreamWriter(Files.newOutputStream(f),Charset.forName(encoding))) {
-			w.write(s);
+		byte[] content = s.getBytes(Charset.forName(encoding));
+		try {
+			// An identical file is left untouched: it keeps its modification time, so
+			// an incremental Java build does not compile it again
+			if(Files.isRegularFile(f) && Files.size(f)==content.length && java.util.Arrays.equals(Files.readAllBytes(f), content)) {
+				return;
+			}
+			Files.write(f, content);
 		} catch(IOException ex) {
 			// A missing output file must fail the build, not just be logged
 			throw new JSTranspilerException(ex, "Error writing file {0}", f);

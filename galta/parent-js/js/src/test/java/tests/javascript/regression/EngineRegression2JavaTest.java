@@ -187,4 +187,30 @@ public class EngineRegression2JavaTest extends __BaseTestCase {
 		String java = Files.readString(out.resolve("q").resolve("M.java"));
 		assertTrue(java, java.contains("isCommonJS()"));
 	}
+
+	// PathTranspiler: an unchanged output file is not rewritten (it keeps its modification
+	// time, so an incremental Java build does not compile it again); a changed one is
+	public void testPathTranspilerKeepsUnchangedFiles() throws Exception {
+		Path src = Files.createTempDirectory("pt-keep-src");
+		Path out = Files.createTempDirectory("pt-keep-out");
+		Files.writeString(src.resolve("a.js"), "var x=1;");
+		java.util.function.Supplier<PathTranspiler> transpiler = () -> PathTranspiler.newBuilder()
+				.options(JSTranspilerOptions.newBuilder().build())
+				.sourceFolder(src).outputFolder(out).jsPackage("k").sourceFile(true)
+				.pathFactory(() -> List.of(src.resolve("a.js")))
+				.build();
+		transpiler.get().execute();
+		Path javaFile = out.resolve("k").resolve("A.java");
+		Path js = out.resolve("k").resolve("A.js");
+		java.nio.file.attribute.FileTime old = java.nio.file.attribute.FileTime.fromMillis(1_000_000_000_000L);
+		Files.setLastModifiedTime(javaFile, old);
+		Files.setLastModifiedTime(js, old);
+		transpiler.get().execute();
+		assertEquals(old, Files.getLastModifiedTime(javaFile));
+		assertEquals(old, Files.getLastModifiedTime(js));
+		Files.writeString(src.resolve("a.js"), "var x=2;");
+		transpiler.get().execute();
+		assertFalse(old.equals(Files.getLastModifiedTime(javaFile)));
+		assertTrue(Files.readString(javaFile).contains("2"));
+	}
 }
