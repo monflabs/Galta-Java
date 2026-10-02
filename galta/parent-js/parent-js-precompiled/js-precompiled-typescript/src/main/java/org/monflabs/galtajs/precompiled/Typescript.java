@@ -24,10 +24,6 @@ import org.monflabs.util.ObjectBuilder;
 /**
  * The TypeScript compiler, meant to run transpiled to Java.
  * <p>
- * Not functional yet: the transpilation of typescript.js is disabled in this
- * module's pom (the transpiler cannot handle it yet), so there is no compiled
- * compiler to run and {@link #execute(String)} fails with an
- * {@link IllegalStateException}.
  */
 public class Typescript {
 	
@@ -61,12 +57,11 @@ public class Typescript {
 					.supportGlobalAlias(true)
 					.build();
 		}
-/*
+
 		//Enable that when the transpiler is enabled!
 		js.Typescript js = new js.Typescript(env);
 		runtimeContext = new TranspiledGlobalRuntimeContext(env,env.createProgramExecutor());
         js.executeWithContext(runtimeContext);
-*/
 	}
 
 	/**
