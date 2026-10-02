@@ -326,8 +326,8 @@ public class ConvertValueTest extends ProjectTestCase {
 		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.value());
 		
 		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.numberValue());
-		assertEquals((byte)21,v_bigInteger.byteValue());
-		assertEquals((short)24341,v_bigInteger.shortValue());
+		assertEquals(Byte.MAX_VALUE,v_bigInteger.byteValue());
+		assertEquals(Short.MAX_VALUE,v_bigInteger.shortValue());
 		assertEquals(Integer.MAX_VALUE,v_bigInteger.intValue()); // saturated, not wrapped
 		assertEquals(Long.MAX_VALUE,v_bigInteger.longValue()); // saturated, not wrapped
 		assertEquals(1.2345678912345679E26f,v_bigInteger.floatValue());
@@ -340,8 +340,8 @@ public class ConvertValueTest extends ProjectTestCase {
 		assertThrows( JsonException.class, () -> v_bigInteger.arrayValue());
 
 		assertEquals(new BigInteger("123456789123456789123456789"),v_bigInteger.numberValue(BigInteger.TEN));
-		assertEquals((byte)21,v_bigInteger.byteValue((byte)10));
-		assertEquals((short)24341,v_bigInteger.shortValue((short)10));
+		assertEquals(Byte.MAX_VALUE,v_bigInteger.byteValue((byte)10));
+		assertEquals(Short.MAX_VALUE,v_bigInteger.shortValue((short)10));
 		assertEquals(Integer.MAX_VALUE,v_bigInteger.intValue(10)); // saturated, not wrapped
 		assertEquals(Long.MAX_VALUE,v_bigInteger.longValue(10L)); // saturated, not wrapped
 		assertEquals(1.2345678912345679E26f,v_bigInteger.floatValue(10.10f));
@@ -368,8 +368,8 @@ public class ConvertValueTest extends ProjectTestCase {
 		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.value());
 		
 		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.numberValue());
-		assertEquals((byte)-90,v_bigDecimal.byteValue());
-		assertEquals((short)-25178,v_bigDecimal.shortValue());
+		assertEquals(Byte.MAX_VALUE,v_bigDecimal.byteValue());
+		assertEquals(Short.MAX_VALUE,v_bigDecimal.shortValue());
 		assertEquals(Integer.MAX_VALUE,v_bigDecimal.intValue()); // saturated, not wrapped
 		assertEquals(4567892345678765478L,v_bigDecimal.longValue());
 		assertEquals(4.5678923456787656E18f,v_bigDecimal.floatValue());
@@ -382,8 +382,8 @@ public class ConvertValueTest extends ProjectTestCase {
 		assertThrows( JsonException.class, () -> v_bigDecimal.arrayValue());
 
 		assertEquals(new BigDecimal("4567892345678765478.5657654"),v_bigDecimal.numberValue(BigDecimal.TEN));
-		assertEquals((byte)-90,v_bigDecimal.byteValue((byte)10));
-		assertEquals((short)-25178,v_bigDecimal.shortValue((short)10));
+		assertEquals(Byte.MAX_VALUE,v_bigDecimal.byteValue((byte)10));
+		assertEquals(Short.MAX_VALUE,v_bigDecimal.shortValue((short)10));
 		assertEquals(Integer.MAX_VALUE,v_bigDecimal.intValue(10)); // saturated, not wrapped
 		assertEquals(4567892345678765478L,v_bigDecimal.longValue(10L));
 		assertEquals(4.5678923456787656E18f,v_bigDecimal.floatValue(10.10f));

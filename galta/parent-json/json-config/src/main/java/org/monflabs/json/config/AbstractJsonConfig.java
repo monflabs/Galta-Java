@@ -484,7 +484,19 @@ public abstract class AbstractJsonConfig implements JsonConfig {
 			}
 
 			JsonReference.Resolver r = new ConfigResolver(this, main);
-			JsonObject c = (JsonObject)JsonReference.resolve(JsonFactory.get(), main, r, true);
+			JsonObject c;
+			try {
+				c = (JsonObject)JsonReference.resolve(JsonFactory.get(), main, r, true);
+			} catch(RuntimeException e) {
+				// The resolution wraps the resolver's errors: a cycle between resources is
+				// reported as such
+				for(Throwable t = e; t!=null; t = t.getCause()) {
+					if(t instanceof CircularReferenceException cre) {
+						throw cre;
+					}
+				}
+				throw e;
+			}
 			if(encryptor!=null) {
 				// Save the content again if some values are not encrypted, or have to be
 				// encrypted again with the current format

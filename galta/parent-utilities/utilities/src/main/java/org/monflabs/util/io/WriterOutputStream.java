@@ -96,7 +96,9 @@ public class WriterOutputStream extends OutputStream {
         // No byte[] per call: decoderIn always has room after processInput() compacts it
         decoderIn.put((byte)b);
         processInput(false);
-        flush();
+        if(autoFlush) {
+        	flush();
+        }
     }
 
     @Override

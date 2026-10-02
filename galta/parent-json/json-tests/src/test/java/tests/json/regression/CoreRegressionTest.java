@@ -358,8 +358,10 @@ public class CoreRegressionTest extends ProjectTestCase {
 		byte[] bytes = "﻿{\"a\":1}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
 		assertEquals(1, ((JsonObject)JsonFactory.get().parse(new java.io.ByteArrayInputStream(bytes))).getInt("a"));
 		assertEquals(1, ((JsonObject)JsonFactory.get().parse(new java.io.StringReader("﻿{\"a\":1}"))).getInt("a"));
-		// Not in a string: a BOM is not a JSON whitespace (JSON.parse)
-		assertThrows(JsonException.class, () -> JsonFactory.get().parse("﻿1"));
+		// Skipped by the lenient parser whatever the source, rejected by the strict one
+		// (a BOM is not a JSON whitespace: JSON.parse)
+		assertEquals(1, ((Number)JsonFactory.get().parse("﻿1")).intValue());
+		assertThrows(JsonException.class, () -> JsonFactory.get().parse("﻿1", true));
 	}
 
 	public void testEndOfInputIsSticky() {

@@ -103,15 +103,13 @@ public class ClassMetadata {
 			return new ClassInfoCache(type);
 		}
 	};
-	private static final Set<ClassLoader> PERMANENT_LOADERS = permanentLoaders();
-	private static Set<ClassLoader> permanentLoaders() {
-		Set<ClassLoader> loaders = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-		for(ClassLoader l = ClassLoader.getSystemClassLoader(); l!=null; l = l.getParent()) {
-			loaders.add(l);
-		}
-		return loaders;
-	}
-	private static boolean isPermanentClass(Class<?> c) {
+	/**
+	 * Whether a class comes from a loader whose classes are never unloaded (bootstrap,
+	 * platform or system). A cache owned by an instance must not keep such a class in a
+	 * ClassValue whose value references the instance: the instance would never be
+	 * collected.
+	 */
+	public static boolean isPermanentClass(Class<?> c) {
 		ClassLoader l = c.getClassLoader();
 		return l==null || PERMANENT_LOADERS.contains(l);
 	}
@@ -580,7 +578,7 @@ public class ClassMetadata {
 
 	// The loaders whose classes are never unloaded: the bootstrap loader (null),
 	// the platform loader and the system loader with its ancestors
-	private static final Set<ClassLoader> PERMANENT_LOADERS = permanentLoaders();
+	static final Set<ClassLoader> PERMANENT_LOADERS = permanentLoaders();
 
 	private static Set<ClassLoader> permanentLoaders() {
 		Set<ClassLoader> set = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());

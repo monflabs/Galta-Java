@@ -41,6 +41,40 @@ First public release: Galta is published to Maven Central under the
   supports enums and top-level collections and reports cycles; YAML sets,
   `NaN` and recursive aliases are handled; FastCSV 4 (a CSV writer flush bug was
   fixed on the way).
+- Hardening against hostile input: number literals are limited to 1000
+  characters (`setMaxNumberLength`), nesting deeper than 1000 levels fails
+  cleanly when parsing and stringifying, error messages clip the source
+  excerpt, YAML alias expansion has a budget, and huge `BigDecimal`s are
+  checked before any integral conversion.
+- Text: `stringify` writes non-ASCII characters as they are, like
+  `JSON.stringify` (`setEscapeNonAscii(true)` restores ASCII output); `""`
+  parses to `null` (strict mode rejects it); a leading BOM is skipped in
+  lenient mode only; strict parsing of byte streams rejects malformed UTF-8.
+- Model: byte/short getters saturate instead of wrapping, the `as*`
+  conversions of strings follow one rule, `hashCode()` agrees with number
+  equality, cyclic containers report a `CircularReference` and `toString()`
+  writes it as `"[circular]"`.
+- JSONPath: the RFC 9535 functions (`length`, `count`, `match`, `search`,
+  `value`), exact number literals, compile-time rejection of non-singular
+  comparisons and an opt-in strict mode. `$ref` resolution loads each document
+  once, resolves relative references against their own document and supports
+  `$id`/`$anchor` in schemas; JSON Schema validation fails closed on an
+  unresolvable reference.
+- Serialization: JSON nulls are assigned to reference fields, subclass items in
+  collections keep their data, declared collection types (`TreeMap`,
+  `EnumSet`...) are honoured, built-in adapters for `java.time`, `UUID`, `URI`,
+  `Date` and `Optional`, sealed hierarchies (`sealedTypes()`), `TypeRef`
+  generic tokens and error messages with the path of the failing value.
+- Import/export and memory database: exports are written atomically, CSV
+  edge cases (single column, unclosed quotes, formula injection option) are
+  handled, the range filter applies to every source, and transactions are
+  overlays that only conflict on the records they write (a record committed
+  after a replication started is no longer skipped).
+- Configuration: encrypted values are bound to their key path (`[[v3:...]]`,
+  600,000 PBKDF2 iterations; older values are re-encrypted on load), `$ref`
+  fragments are written back and encrypted, a resource referenced twice is
+  shared, symlinks can't escape the folder, and a failed save leaves the
+  configuration unchanged.
 
 ### Utilities
 
@@ -54,6 +88,40 @@ First public release: Galta is published to Maven Central under the
   classes and sees earlier compilation results.
 - Golden-file test templates no longer create themselves silently; saving them
   is opt-in (`-Dmonflabs.tests.saveTemplates=missing|all`).
+- `ClassMetadata` no longer keeps its instances (and GaltaJS environments)
+  alive forever, ranks numeric overloads by Java widening, matches a String to
+  a `char` only when it has one character, ignores bridge methods and supports
+  varargs.
+- Generators: an interrupted consumer gets a `CancellationException`; a body
+  that keeps yielding after being abandoned gets a `GeneratorAbandonedError`
+  instead of spinning; `GeneratorScheduler.createPlatformExecutor()` for bodies
+  that yield inside `synchronized` code.
+- File systems follow the JDK `java.nio` behaviour, checked by a conformance
+  test against the default file system: closed file systems, `relativize`,
+  foreign paths, NOFOLLOW operations in sandboxes, memory moves that keep the
+  file, zip entries streamed (random access capped at 256 MB). A backslash is
+  no longer a separator on `/` file systems.
+- The Java compiler writes its outputs only when the compilation succeeds,
+  doesn't run annotation processors unless asked, keeps its class loader when
+  nothing it loaded changed and serves generated resources.
+- Strict `Properties` parsing, `@Required` always checked by `ObjectBuilder`,
+  `WriterOutputStream` flushes only on `flush()` (or with `autoFlush`), ISO
+  dates before 1582 use the proleptic Gregorian calendar.
+- Removed unused API: `SimpleDtoA`, `SingletonSupplier`,
+  `CloseableSingletonSupplier`, `QuickSort`, `ToBeRemovedException`,
+  `TriConsumer`, `QuadConsumer`, `QuadFunction`, `NullInputStream`,
+  `NullReader`, `NullWriter`, `CharIterator`, `IntIterable`, `LongIterable`,
+  `HighResolutionTimer`, `JsonNumberType`, `JavaJsonContainer` and a few
+  `JsonUtil`/`IOStreamUtil` helpers.
+
+### UI and playground
+
+- The playground cancels a superseded run, saves snippets atomically, handles
+  binary snippet files, doesn't record a loaded snippet as an undoable edit and
+  no longer leaks its editors; the console stream can't deadlock with the
+  Swing event thread. The GaltaJS playground no longer bundles Rhino.
+- Removed unused UI API (`JTreeTable` and a few lookups and converters) and the
+  `demo-airline` and `demo-retail` modules.
 
 ### GaltaJS
 
@@ -87,6 +155,9 @@ First public release: Galta is published to Maven Central under the
   class. The JavaCC grammar generates without warnings.
 - A decorated private class member (`@dec #x`, `@dec accessor #x`) no longer
   fails the class definition: the decorator context names it `"#x"`.
+- `JSON.rawJSON` uses the strict parser, `JSON.parse` errors give the position,
+  a too deeply nested `JSON.stringify` throws a `RangeError`, and non-ASCII
+  characters are written as they are.
 - `Reflect.defineProperty` returns `false` instead of throwing when the
   property cannot be defined, and a proxy `set` trap returning false throws
   a `TypeError` in strict code.
@@ -135,5 +206,9 @@ First public release: Galta is published to Maven Central under the
   (GraalVM 25.0.1 on the `org.graalvm.polyglot` coordinates, json-path 3,
   snakeyaml-engine 3, Rhino 1.9.1, ...).
 - Every test class runs exactly once; the build works on Windows and on JDK 25.
+- Every library test suite checks that it registers all the test classes of its
+  module; coverage is reported for the json and utilities libraries
+  (`target/site/jacoco-aggregate` of their test modules); resource leak
+  detection runs in the json and utilities test suites.
 - The in-repository `js-test-performance` module is replaced by the separate
   JavascriptPerformance project.

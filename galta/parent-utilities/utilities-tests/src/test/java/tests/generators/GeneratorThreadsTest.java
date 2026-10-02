@@ -16,12 +16,17 @@
 package tests.generators;
 
 import java.util.NoSuchElementException;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.monflabs.util.generators.GeneratorAbandonedError;
 import org.monflabs.util.generators.GeneratorImpl;
+import org.monflabs.util.generators.GeneratorReturnSignal;
 import org.monflabs.util.generators.GeneratorScheduler;
 
 import tests.ProjectTestCase;
@@ -73,8 +78,9 @@ public class GeneratorThreadsTest extends ProjectTestCase {
 			}
 		});
 		interrupter.start();
-		// Interrupted while waiting for the body's next value
-		assertFalse(gen.hasNext());
+		// Interrupted while waiting for the body's next value: reported as a cancellation,
+		// not as the end of the values
+		assertThrows(CancellationException.class, () -> gen.hasNext());
 		assertTrue(Thread.interrupted());   // the interrupt status is kept (and cleared here)
 		interrupter.join();
 		// The body is not left parked in yield(2) forever: it is driven to completion
@@ -94,9 +100,10 @@ public class GeneratorThreadsTest extends ProjectTestCase {
 			}
 		});
 		assertEquals(Integer.valueOf(1), gen.next());
-		// The next resume is interrupted before it starts
+		// The next resume is interrupted before it starts: a stale interrupt flag used to
+		// make the generator silently report that it had no more values
 		Thread.currentThread().interrupt();
-		assertFalse(gen.hasNext());
+		assertThrows(CancellationException.class, () -> gen.hasNext());
 		assertTrue(Thread.interrupted());
 		assertTrue(bodyDone.await(5, TimeUnit.SECONDS));
 	}
@@ -187,5 +194,131 @@ public class GeneratorThreadsTest extends ProjectTestCase {
 
 	private static void assertThrows(Class<? extends Throwable> c, org.junit.function.ThrowingRunnable r) {
 		org.junit.Assert.assertThrows(c, r);
+	}
+
+	public void testCloseWhenFinallyYields() throws Exception {
+		// close() used to take the value yielded by the finally block and return, leaving
+		// the body parked in that yield() forever
+		CountDownLatch bodyDone = new CountDownLatch(1);
+		GeneratorImpl<Integer,Void> gen = GeneratorImpl.create( (g) -> {
+			try {
+				try {
+					g.yield(1);
+				} finally {
+					g.yield(99);
+				}
+				g.yield(2);
+				return null;
+			} finally {
+				bodyDone.countDown();
+			}
+		});
+		assertEquals(Integer.valueOf(1), gen.next());
+		gen.close();
+		assertTrue("the generator body was left parked", bodyDone.await(5, TimeUnit.SECONDS));
+		assertFalse(gen.hasNext());
+	}
+
+	public void testAbandonedBodyCatchingRuntimeException() throws Exception {
+		// A body catching RuntimeException (so the GeneratorReturnSignal) around its yield
+		// used to be answered with a new return signal on every yield: both threads spun
+		// forever. It now gets a GeneratorAbandonedError
+		AtomicInteger yields = new AtomicInteger();
+		AtomicReference<Throwable> ended = new AtomicReference<>();
+		CountDownLatch bodyDone = new CountDownLatch(1);
+		GeneratorImpl<Integer,Void> gen = GeneratorImpl.create( (g) -> {
+			try {
+				while(true) {
+					try {
+						g.yield(yields.incrementAndGet());
+					} catch(RuntimeException e) {
+						// swallowed
+					}
+				}
+			} catch(Throwable t) {
+				ended.set(t);
+				throw t;
+			} finally {
+				bodyDone.countDown();
+			}
+		});
+		assertEquals(Integer.valueOf(1), gen.next());
+		gen.close();
+		assertTrue(bodyDone.await(5, TimeUnit.SECONDS));
+		assertTrue(String.valueOf(ended.get()), ended.get() instanceof GeneratorAbandonedError);
+		assertTrue(String.valueOf(yields.get()), yields.get() <= 4);
+	}
+
+	public void testAbandonedBodyYieldingForever() throws Exception {
+		// Even an Error is swallowed by a body yielding from a finally (like a JavaScript
+		// "finally { continue }"): it is then left parked instead of spinning
+		AtomicInteger yields = new AtomicInteger();
+		GeneratorImpl<Integer,Void> gen = GeneratorImpl.create( (g) -> {
+			while(true) {
+				try {
+					g.yield(yields.incrementAndGet());
+				} catch(Throwable t) {
+					// swallowed
+				}
+			}
+		});
+		assertEquals(Integer.valueOf(1), gen.next());
+		gen.close();
+		Thread.sleep(200);
+		int count = yields.get();
+		assertTrue(String.valueOf(count), count <= 4);
+		Thread.sleep(200);
+		assertEquals(count, yields.get());
+	}
+
+	public void testGeneratorReturnSignalStillWorks() throws Exception {
+		GeneratorImpl<Integer,String> gen = GeneratorImpl.create( (g) -> {
+			try {
+				g.yield(1);
+			} catch(GeneratorReturnSignal s) {
+				throw s;
+			}
+			return "end";
+		});
+		assertEquals(Integer.valueOf(1), gen.next());
+		assertThrows(NoSuchElementException.class, () -> gen.returnWith("r"));
+		assertEquals("r", gen.getReturnValue());
+	}
+
+	public void testPlatformExecutor() throws Exception {
+		ExecutorService ex = GeneratorScheduler.createPlatformExecutor();
+		try {
+			AtomicReference<Thread> t = new AtomicReference<>();
+			GeneratorImpl<Integer,Void> gen = GeneratorImpl.create(ex, (g) -> {
+				t.set(Thread.currentThread());
+				synchronized(t) {
+					g.yield(1);	// pinning is harmless on a platform thread
+				}
+				return null;
+			});
+			assertEquals(Integer.valueOf(1), gen.next());
+			assertFalse(t.get().isVirtual());
+			assertTrue(t.get().isDaemon());
+			gen.close();
+		} finally {
+			ex.shutdown();
+		}
+	}
+
+	public void testBoundedExecutorStillWorksWhenFree() throws Exception {
+		// A bounded executor works as long as a thread is free for each live generator
+		ExecutorService ex = Executors.newFixedThreadPool(1);
+		try {
+			for(int i=0; i<3; i++) {
+				try(GeneratorImpl<Integer,Void> gen = GeneratorImpl.create(ex, (g) -> {
+					g.yield(1);
+					return null;
+				})) {
+					assertEquals(Integer.valueOf(1), gen.next());
+				}
+			}
+		} finally {
+			ex.shutdown();
+		}
 	}
 }

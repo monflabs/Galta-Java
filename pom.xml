@@ -89,10 +89,8 @@
 								<excludeArtifact>js-transpiler-maven-tests</excludeArtifact>
 								<excludeArtifact>js-precompiled-typescript</excludeArtifact>
 								<excludeArtifact>parent-demodata</excludeArtifact>
-								<excludeArtifact>demo-airline</excludeArtifact>
 								<excludeArtifact>demo-dvdrental</excludeArtifact>
 								<excludeArtifact>demo-northwind</excludeArtifact>
-								<excludeArtifact>demo-retail</excludeArtifact>
 								<excludeArtifact>demo-tour-de-france</excludeArtifact>
 							</excludeArtifacts>
 						</configuration>

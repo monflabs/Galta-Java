@@ -152,9 +152,12 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 		
 	private HashMap<String, JavaClass> primitives = new HashMap<String, JavaClass>();
 	
-	// A ClassValue rather than a Map keyed by Class (like ClassMetadata's own
-	// cache): the entry lives with the class, so a class and its loader are
-	// not pinned by this library
+	// Two caches, like ClassMetadata's own: the classes of the permanent loaders (JDK,
+	// application) in a map owned by this library, the others in a ClassValue whose entry
+	// lives with the class, so a class and its loader are not pinned by this library. A
+	// ClassValue entry for a class that is never unloaded would pin this library (and its
+	// environment) forever, as a JavaClass references it.
+	private final java.util.concurrent.ConcurrentHashMap<Class<?>, JavaClass> permanentJavaClassCache = new java.util.concurrent.ConcurrentHashMap<>();
 	private final ClassValue<JavaClass> javaClassCache = new ClassValue<>() {
 		@Override
 		protected JavaClass computeValue(Class<?> clazz) {
@@ -214,6 +217,10 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 	
 	@Override
 	public JavaClass getJavaClass(Class<?> clazz) {
+		if(ClassMetadata.isPermanentClass(clazz)) {
+			JavaClass jc = permanentJavaClassCache.get(clazz);
+			return jc!=null ? jc : permanentJavaClassCache.computeIfAbsent(clazz, c -> new JavaClassImpl(classMetadata.getClassInfoCache(c)));
+		}
 		return javaClassCache.get(clazz);
 	}
 

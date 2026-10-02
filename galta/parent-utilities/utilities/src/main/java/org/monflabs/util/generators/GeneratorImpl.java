@@ -30,12 +30,40 @@ import java.util.function.Function;
  * A generator yields {@code <T>} and can return a final value {@code <V>}
  * For example, it can yield objects and return the number of object yielded.
  * <p>
- * The object returned by {@link #create} is only the consumer-facing handle: the body
- * runs against a separate internal state object and never references the handle. When
- * the handle becomes unreachable while the body is still parked in {@code yield()}, a
- * {@link Cleaner} abandons the body, which then unwinds (as with {@link #returnWith})
- * and lets its thread terminate. The body also unwinds when its executor is shut down
- * with {@code shutdownNow()}, or when the consumer is interrupted while waiting.
+ * The body runs on a thread of the executor, handing each value to the consumer through
+ * a rendezvous. The object returned by {@link #create} is only the consumer-facing
+ * handle: the body runs against a separate internal state object and never references
+ * the handle. When the handle becomes unreachable while the body is still parked in
+ * {@code yield()}, a {@link Cleaner} abandons the body, which then unwinds (as with
+ * {@link #returnWith}) and lets its thread terminate. The body also unwinds when its
+ * executor is shut down with {@code shutdownNow()}. Things to know:
+ * <ul>
+ * <li>The executor must be able to start every generator's body without waiting for
+ * another one to complete: a body parked in {@code yield()} keeps its thread. An
+ * unbounded executor is required - the default one (see {@link GeneratorScheduler})
+ * creates a virtual thread per generator. With a bounded pool, the generators beyond
+ * the pool size never start and their consumers wait forever (a warning is logged when
+ * a body has not started after {@value #START_WARNING_SECONDS} seconds).</li>
+ * <li>On JDK 21 to 23, a virtual thread that blocks inside a {@code synchronized} block
+ * or method pins its carrier thread (JEP 491, fixed in JDK 24). A body that yields
+ * while holding a monitor therefore pins a carrier until it is resumed; once every
+ * carrier is pinned, no other virtual thread can run and the application deadlocks.
+ * Don't yield inside {@code synchronized} code (use a {@code ReentrantLock}), or run
+ * such bodies on platform threads ({@link GeneratorScheduler#createPlatformExecutor()}).</li>
+ * <li>The body runs on another thread: thread locals set by the consumer are not
+ * visible to it. An {@code InheritableThreadLocal} is inherited when the body's thread
+ * is created, that is on the first resume ({@code hasNext()}, {@code next()}...), not
+ * when the generator is created.</li>
+ * <li>Interrupting the consumer while it waits for the body (or calling it with its
+ * interrupt flag set) abandons the generator: the call throws a
+ * {@link CancellationException}, the interrupt flag stays set, and the body is unwound
+ * in the background.</li>
+ * <li>An abandoned body (closed, interrupted or collected generator) gets a
+ * {@link GeneratorReturnSignal} from its pending {@code yield()}. A body that swallows
+ * it and yields again gets a {@link GeneratorAbandonedError}; if it still yields after
+ * that, it stays parked in that {@code yield()} until its executor is shut down, rather
+ * than spinning.</li>
+ * </ul>
  *
  * @param <T>
  * @param <V>
@@ -166,6 +194,8 @@ public class GeneratorImpl<T,V> implements Generator<T,V>, Yielder<T> {
 
 	// How long a consumer waits for a handoff before checking whether the body is gone
 	private static final long CONSUMER_POLL_MS = 100;
+	// A body that has not started running after this delay is reported (bounded executor)
+	static final int START_WARNING_SECONDS = 10;
 
 	@SuppressWarnings("unchecked")
 	private static <TH extends Throwable> void sneakyThrow(Throwable t) throws TH {
@@ -216,6 +246,12 @@ public class GeneratorImpl<T,V> implements Generator<T,V>, Yielder<T> {
 		private Thread bodyThread;
 		// The body task has ended: no handoff will ever come again
 		private volatile boolean terminated;
+		// Set by the body's thread once it actually runs (see the bounded executor warning)
+		private volatile boolean bodyRunning;
+		private long startNanos;
+		private boolean startWarned;
+		// The yields made by the body after it was abandoned (body thread only)
+		private int abandonedYields;
 		private volatile Cleaner.Cleanable cleanable;
 
 		Core(ExecutorService executor, Function<Yielder<T>,V> body) {
@@ -237,6 +273,7 @@ public class GeneratorImpl<T,V> implements Generator<T,V>, Yielder<T> {
 		private void ensureStarted() {
 			if(!started) {
 				started = true;
+				startNanos = System.nanoTime();
 				executor.submit(this::runBody);
 			}
 		}
@@ -246,6 +283,7 @@ public class GeneratorImpl<T,V> implements Generator<T,V>, Yielder<T> {
 			synchronized(this) {
 				bodyThread = Thread.currentThread();
 			}
+			bodyRunning = true;
 			try {
 				if(abandoned) {
 					return;
@@ -295,7 +333,21 @@ public class GeneratorImpl<T,V> implements Generator<T,V>, Yielder<T> {
 					if(terminated || executor.isTerminated()) {
 						throw new CancellationException("The generator body was abandoned");
 					}
+					checkStarted();
 				}
+			}
+		}
+
+		// With a bounded executor whose threads are all held by other (parked) generator
+		// bodies, a body never starts. That can't be detected for sure, but a body still
+		// not running after a while is reported once, instead of the consumer hanging
+		// silently.
+		private void checkStarted() {
+			if(!bodyRunning && !startWarned && System.nanoTime()-startNanos > TimeUnit.SECONDS.toNanos(START_WARNING_SECONDS)) {
+				startWarned = true;
+				System.getLogger(GeneratorImpl.class.getName()).log(System.Logger.Level.WARNING,
+						"A generator body has not started after {0} seconds: its executor may be bounded, and all its threads held by other generators (generator executors must be unbounded)",
+						START_WARNING_SECONDS);
 			}
 		}
 
@@ -377,9 +429,12 @@ public class GeneratorImpl<T,V> implements Generator<T,V>, Yielder<T> {
 				// The body is either parked in yield() or still running towards its
 				// next handoff - nobody would ever take that handoff, so it is
 				// abandoned and unwinds instead of leaking a parked thread.
+				// It is reported as such: silently answering "no more values" would make an
+				// interrupted consumer believe it saw every value.
 				done();
 				abandon();
 				Thread.currentThread().interrupt();
+				throw new CancellationException("The generator consumer was interrupted: the generator is abandoned");
 			} catch (CancellationException e) {
 				done();
 				throw e;
@@ -439,6 +494,12 @@ public class GeneratorImpl<T,V> implements Generator<T,V>, Yielder<T> {
 				} catch(RuntimeException ignored) {
 					// The body's finally blocks may throw; the generator is done either way
 				}
+				if(pendingResume) {
+					// A finally block yielded again: the body is parked in that yield(), so
+					// it is abandoned (and unwinds) rather than left parked forever
+					done();
+					abandon();
+				}
 			}
 			if(hasValue==null || hasValue) {
 				hasValue = Boolean.FALSE;
@@ -451,11 +512,11 @@ public class GeneratorImpl<T,V> implements Generator<T,V>, Yielder<T> {
 		@Override
 		public T yield(T v) {
 			if(bodyExchange(toConsumer, v)==ABANDONED) {
-				throw new GeneratorReturnSignal(null);
+				return abandonedYield();
 			}
 			Object resumeSignal = bodyExchange(toGenerator, null);
 			if(resumeSignal==ABANDONED) {
-				throw new GeneratorReturnSignal(null);
+				return abandonedYield();
 			}
 			if (resumeSignal instanceof _ThrowSignal_ ts) {
 				sneakyThrow(ts.value());
@@ -464,6 +525,24 @@ public class GeneratorImpl<T,V> implements Generator<T,V>, Yielder<T> {
 				throw new GeneratorReturnSignal(rs.value());
 			}
 			return (T) resumeSignal;
+		}
+
+		// A yield() of an abandoned body: asked to return, then, if it swallowed that and
+		// yields again, aborted with an Error. If it still yields after that (e.g. a
+		// JavaScript "finally { continue }"), it is parked until its executor is shut down:
+		// answering every further yield would make it spin forever.
+		private T abandonedYield() {
+			int n = ++abandonedYields;
+			if(n == 1) {
+				throw new GeneratorReturnSignal(null);
+			}
+			if(n == 2) {
+				throw new GeneratorAbandonedError();
+			}
+			while(!executor.isShutdown()) {
+				java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+			}
+			throw new GeneratorAbandonedError();
 		}
 
 		void exception(Throwable t) {

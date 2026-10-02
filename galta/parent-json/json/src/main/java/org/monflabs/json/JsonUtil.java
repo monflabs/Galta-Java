@@ -789,7 +789,9 @@ public abstract class JsonUtil extends TypeUtil {
 			if(strict) {
 				throw new JsonException(null,"Value {0} cannot be converted to a BigInteger",n);
 			}
-			return toBigInteger(n);
+			// Saturated (TypeUtil.toBigInteger() rejects them)
+			double d = n.doubleValue();
+			return Double.isNaN(d) ? BigInteger.ZERO : BigInteger.valueOf(d>0 ? Long.MAX_VALUE : Long.MIN_VALUE);
 		}
 		if(n instanceof BigDecimal || n instanceof Double || n instanceof Float) {
 			return toBigDecimal(n).toBigInteger();
@@ -806,6 +808,11 @@ public abstract class JsonUtil extends TypeUtil {
 	public static BigDecimal bigDecimalValue(Number n, boolean strict) {
 		if(strict && (isNaN(n) || isInfinite(n))) {
 			throw new JsonException(null,"Value {0} cannot be converted to a BigDecimal",n);
+		}
+		if(isNaN(n) || isInfinite(n)) {
+			// Saturated (TypeUtil.toBigDecimal() rejects them)
+			double d = n.doubleValue();
+			return Double.isNaN(d) ? BigDecimal.ZERO : BigDecimal.valueOf(d>0 ? Double.MAX_VALUE : -Double.MAX_VALUE);
 		}
 		return toBigDecimal(n);
 	}

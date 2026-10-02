@@ -322,12 +322,12 @@ public class JsonUtilTest extends ProjectTestCase {
 		assertEquals( new BigInteger("1"), JsonUtil.toBigInteger(1L) );
 		assertEquals( new BigInteger("1"), JsonUtil.toBigInteger(1.1f) );
 		assertEquals( new BigInteger("1"), JsonUtil.toBigInteger(1.1) );
-		assertEquals( BigInteger.ZERO, JsonUtil.toBigInteger(Double.NaN) );
-		assertEquals( BigInteger.valueOf(Long.MAX_VALUE), JsonUtil.toBigInteger(Double.POSITIVE_INFINITY) );
-		assertEquals( BigInteger.valueOf(Long.MIN_VALUE), JsonUtil.toBigInteger(Double.NEGATIVE_INFINITY) );
-		assertEquals( BigInteger.ZERO, JsonUtil.toBigInteger(Float.NaN) );
-		assertEquals( BigInteger.valueOf(Long.MAX_VALUE), JsonUtil.toBigInteger(Float.POSITIVE_INFINITY) );
-		assertEquals( BigInteger.valueOf(Long.MIN_VALUE), JsonUtil.toBigInteger(Float.NEGATIVE_INFINITY) );
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigInteger(Double.NaN));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigInteger(Double.POSITIVE_INFINITY));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigInteger(Double.NEGATIVE_INFINITY));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigInteger(Float.NaN));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigInteger(Float.POSITIVE_INFINITY));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigInteger(Float.NEGATIVE_INFINITY));
 
 		assertEquals( new BigDecimal("1"), JsonUtil.toBigDecimal((byte)1) );
 		assertEquals( new BigDecimal("1"), JsonUtil.toBigDecimal((short)1) );
@@ -335,12 +335,12 @@ public class JsonUtilTest extends ProjectTestCase {
 		assertEquals( new BigDecimal("1"), JsonUtil.toBigDecimal(1L) );
 		assertEquals( new BigDecimal("1.5"), JsonUtil.toBigDecimal(1.5f) );
 		assertEquals( new BigDecimal("1.1"), JsonUtil.toBigDecimal(1.1) );
-		assertEquals( BigDecimal.ZERO, JsonUtil.toBigDecimal(Double.NaN) );
-		assertEquals( BigDecimal.valueOf(Double.MAX_VALUE), JsonUtil.toBigDecimal(Double.POSITIVE_INFINITY) );
-		assertEquals( BigDecimal.valueOf(-Double.MAX_VALUE), JsonUtil.toBigDecimal(Double.NEGATIVE_INFINITY) ); // was Double.MIN_VALUE, a tiny positive number
-		assertEquals( BigDecimal.ZERO, JsonUtil.toBigDecimal(Float.NaN) );
-		assertEquals( BigDecimal.valueOf(Double.MAX_VALUE), JsonUtil.toBigDecimal(Float.POSITIVE_INFINITY) );
-		assertEquals( BigDecimal.valueOf(-Double.MAX_VALUE), JsonUtil.toBigDecimal(Float.NEGATIVE_INFINITY) );
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigDecimal(Double.NaN));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigDecimal(Double.POSITIVE_INFINITY));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigDecimal(Double.NEGATIVE_INFINITY));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigDecimal(Float.NaN));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigDecimal(Float.POSITIVE_INFINITY));
+		assertThrows(ArithmeticException.class, () -> JsonUtil.toBigDecimal(Float.NEGATIVE_INFINITY));
 	}
 
 	public void testEq() throws Exception {

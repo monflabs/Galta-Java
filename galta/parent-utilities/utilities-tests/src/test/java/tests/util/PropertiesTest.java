@@ -37,8 +37,8 @@ public class PropertiesTest extends ProjectTestCase {
 		assertEquals(1, child.get("a"));
 		assertEquals("dflt", child.get("none", "dflt"));
 		assertNull(child.get("none"));
-		assertEquals(Boolean.TRUE, child.has("a"));
-		assertEquals(Boolean.FALSE, child.has("none"));
+		assertTrue(child.has("a"));
+		assertFalse(child.has("none"));
 		child.put("c", 3).putAll(Map.of("d", 4));
 		assertEquals(Map.of("b", "child", "c", 3, "d", 4), child.getPropertyMap());
 		assertEquals("3", child.getString("c"));

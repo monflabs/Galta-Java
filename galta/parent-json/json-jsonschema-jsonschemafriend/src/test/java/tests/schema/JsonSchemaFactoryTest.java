@@ -146,7 +146,6 @@ public class JsonSchemaFactoryTest extends ProjectTestCase {
 		} finally {
 			org.monflabs.util.path.FilesUtil.deleteRecursively(dir);
 		}
-		}
 	}
 
 	// Fail closed: an unresolvable reference used to validate everything

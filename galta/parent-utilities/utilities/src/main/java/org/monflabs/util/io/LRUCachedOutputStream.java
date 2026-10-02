@@ -34,7 +34,9 @@ public class LRUCachedOutputStream extends OutputStream {
     private static class CacheWriter extends WriterOutputStream {
         private LRUCharBuffer buffer;
     	CacheWriter(LRUCharBuffer buffer) {
-    		super(null);
+    		// Auto flush: the cache can be read at any time, so the decoded text must reach it
+    		// with every (bulk) write
+    		super(null, true);
     		this.buffer = buffer;
     	}
         @Override

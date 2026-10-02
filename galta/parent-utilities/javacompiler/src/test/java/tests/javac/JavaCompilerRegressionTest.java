@@ -447,7 +447,7 @@ public class JavaCompilerRegressionTest extends ProjectTestCase {
 				.build());
 	}
 
-	public void testPlatformPackagesAreParentFirst() throws Exception {
+	public void testOtherPlatformPackagesAreParentFirst() throws Exception {
 		MapTargetFactory tgt = new MapTargetFactory();
 		tgt.getFiles().put("javax/net/SocketFactory.class", new byte[] {1,2,3});
 		tgt.getFiles().put("jdk/internal/misc/Unsafe.class", new byte[] {1,2,3});
