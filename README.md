@@ -1,5 +1,7 @@
 # Galta
 
+[![Maven Central](https://img.shields.io/maven-central/v/org.monflabs.galta/galta-bom?label=Maven%20Central)](https://central.sonatype.com/artifact/org.monflabs.galta/galta-bom)
+
 Galta is a set of Java libraries, mostly focused on a JSON library,
 **GaltaJSON**, and a JavaScript-inspired scripting engine for the JVM,
 **GaltaJS**. The engine is built on the JSON library: a JavaScript object *is*

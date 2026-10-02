@@ -4,7 +4,7 @@ All notable changes to Galta. Versions follow the `<revision>` of the root
 `pom.xml`; the release notes of a GitHub release are the matching section below
 (`buildtools/release.sh` extracts it).
 
-## 0.8.0 (unreleased)
+## 0.8.0 (2026-10-02)
 
 First public release: Galta is published to Maven Central under the
 `org.monflabs.galta` group id and licensed under the Apache License 2.0.
