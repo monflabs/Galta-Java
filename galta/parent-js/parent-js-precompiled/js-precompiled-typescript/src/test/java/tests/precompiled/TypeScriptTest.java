@@ -47,14 +47,9 @@ public class TypeScriptTest extends __BaseTestCase {
 				.build();
 
 		String tsSource = support.loadText("source/sample.ts");
-		// typescript.js is not transpiled by this build yet (see the pom): a
-		// clear failure, not a NullPointerException
-		try {
-			tsCompiler.execute(tsSource);
-			fail("The precompiled compiler is not available");
-		} catch(IllegalStateException e) {
-			assertTrue(e.getMessage(), e.getMessage().contains("not available"));
-		}
+		// The compiler transpiled to Java gives the same result as interpreted
+		String result = tsCompiler.execute(tsSource);
+		support.assertTextResult(result, "sample.js");
 	}
 	
 	public void testInterpreted() throws Exception {

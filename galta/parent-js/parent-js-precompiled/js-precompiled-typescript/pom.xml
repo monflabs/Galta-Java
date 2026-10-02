@@ -9,7 +9,7 @@
 	</parent>
 	<artifactId>js-precompiled-typescript</artifactId>
 	<name>GaltaJS Precompiled TypeScript</name>
-	<description>TypeScript compiler precompiled with GaltaJS. Not published yet.</description>
+	<description>TypeScript compiler precompiled with GaltaJS. Not published.</description>
 	
 	<properties>
 		<!-- Not published: excluded from the Maven Central bundle (see the root pom central profile) -->
@@ -94,7 +94,7 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
 					<includes>
-						<include>**/AllBuildNoTest.class</include>
+						<include>**/AllPrecompiledTypescriptTests.class</include>
 					</includes>
 				</configuration>
 			</plugin>

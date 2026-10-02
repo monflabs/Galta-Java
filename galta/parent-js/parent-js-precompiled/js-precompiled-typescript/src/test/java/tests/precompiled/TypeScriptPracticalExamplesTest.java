@@ -64,14 +64,13 @@ public class TypeScriptPracticalExamplesTest extends __BaseTestCase {
 				.environment(env)
 				.build();
 		
-		// typescript.js is not transpiled by this build yet (see the pom): a
-		// clear failure, not a NullPointerException. Once it is, check every
-		// example as testInterpreted() does.
-		try {
-			tsCompiler.execute("let x: number = 1;");
-			fail("The precompiled compiler is not available");
-		} catch(IllegalStateException e) {
-			assertTrue(e.getMessage(), e.getMessage().contains("not available"));
+		// Every example gives the same result as the interpreted compiler
+		File dir = support.getProjectDirectory("js/Practical Examples");
+		File[] files = dir.listFiles((f)-> "ts".equals(PathUtil.FILE_AGNOSTIC.getFileExtension(f.getPath())));
+		assertTrue(files.length>0);
+		for(File f: files) {
+			String result = tsCompiler.execute(FileUtil.readContent(f));
+			support.assertTextResult(result, PathUtil.FILE_AGNOSTIC.removeExtension(f.getName())+".js");
 		}
 	}
 }

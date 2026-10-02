@@ -14,7 +14,7 @@ are both useful formatters and real-world tests of the transpiler.
 - [js-precompiled-beautify-js](js-precompiled-beautify-js/README.md) - the js-beautify JavaScript formatter (`BeautifyJs`)
 - [js-precompiled-beautify-css](js-precompiled-beautify-css/README.md) - the js-beautify CSS formatter (`BeautifyCss`)
 - [js-precompiled-beautify-html](js-precompiled-beautify-html/README.md) - the js-beautify HTML formatter (`BeautifyHtml`)
-- [js-precompiled-typescript](js-precompiled-typescript/README.md) - the TypeScript compiler; not functional yet and not published
+- [js-precompiled-typescript](js-precompiled-typescript/README.md) - the TypeScript compiler (`Typescript`)
 
 ## Documentation
 

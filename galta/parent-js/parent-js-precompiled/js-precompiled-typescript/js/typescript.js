@@ -12552,7 +12552,7 @@ function createScanner(languageVersion, skipTrivia2, languageVariant = 0 /* Stan
       case 98 /* b */:
         return "\b";
       case 116 /* t */:
-        return "  ";
+        return "	";
       case 110 /* n */:
         return "\n";
       case 118 /* v */:
@@ -20100,7 +20100,7 @@ var doubleQuoteEscapedCharsRegExp = /[\\"\u0000-\u001f\u2028\u2029\u0085]/g;
 var singleQuoteEscapedCharsRegExp = /[\\'\u0000-\u001f\u2028\u2029\u0085]/g;
 var backtickQuoteEscapedCharsRegExp = /\r\n|[\\`\u0000-\u0009\u000b-\u001f\u2028\u2029\u0085]/g;
 var escapedCharsMap = new Map(Object.entries({
-  " ": "\\t",
+  "	": "\\t",
   "\v": "\\v",
   "\f": "\\f",
   "\b": "\\b",
@@ -183283,7 +183283,7 @@ function getIndentationString(indentation, options) {
       internedTabsIndentation = [];
     }
     if (internedTabsIndentation[tabs] === void 0) {
-      internedTabsIndentation[tabs] = tabString = repeatString("  ", tabs);
+      internedTabsIndentation[tabs] = tabString = repeatString("	", tabs);
     } else {
       tabString = internedTabsIndentation[tabs];
     }
@@ -189105,19 +189105,19 @@ var Project2 = class _Project {
     );
   }
   filesToStringWorker(writeProjectFileNames, writeFileExplaination, writeFileVersionAndText) {
-    if (this.initialLoadPending) return " Files (0) InitialLoadPending\n";
-    if (!this.program) return " Files (0) NoProgram\n";
+    if (this.initialLoadPending) return "	Files (0) InitialLoadPending\n";
+    if (!this.program) return "	Files (0) NoProgram\n";
     const sourceFiles = this.program.getSourceFiles();
-    let strBuilder = `  Files (${sourceFiles.length})
+    let strBuilder = `	Files (${sourceFiles.length})
 `;
     if (writeProjectFileNames) {
       for (const file of sourceFiles) {
-        strBuilder += ` ${file.fileName}${writeFileVersionAndText ? ` ${file.version} ${JSON.stringify(file.text)}` : ""}
+        strBuilder += `	${file.fileName}${writeFileVersionAndText ? ` ${file.version} ${JSON.stringify(file.text)}` : ""}
 `;
       }
       if (writeFileExplaination) {
         strBuilder += "\n\n";
-        explainFiles(this.program, (s) => strBuilder += ` ${s}
+        explainFiles(this.program, (s) => strBuilder += `	${s}
 `);
       }
     }
@@ -191790,8 +191790,8 @@ var _ProjectService = class _ProjectService {
     this.logger.info("Open files: ");
     this.openFiles.forEach((projectRootPath, path) => {
       const info = this.getScriptInfoForPath(path);
-      this.logger.info(`  FileName: ${info.fileName} ProjectRootPath: ${projectRootPath}`);
-      this.logger.info(`    Projects: ${info.containingProjects.map((p) => p.getProjectName())}`);
+      this.logger.info(`	FileName: ${info.fileName} ProjectRootPath: ${projectRootPath}`);
+      this.logger.info(`		Projects: ${info.containingProjects.map((p) => p.getProjectName())}`);
     });
     this.logger.endGroup();
   }
@@ -196782,7 +196782,7 @@ Project '${project.projectName}' (${ProjectKind[project.projectKind]}) ${counter
         for (i = 0, len = lineText.length; i < len; i++) {
           if (lineText.charAt(i) === " ") {
             hasIndent++;
-          } else if (lineText.charAt(i) === " ") {
+          } else if (lineText.charAt(i) === "	") {
             hasIndent += formatOptions.tabSize;
           } else {
             break;

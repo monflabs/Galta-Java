@@ -22,8 +22,8 @@ import org.monflabs.galtajs.rt.transpiler.TranspiledGlobalRuntimeContext;
 import org.monflabs.util.ObjectBuilder;
 
 /**
- * The TypeScript compiler, meant to run transpiled to Java.
- * <p>
+ * The TypeScript compiler (typescript.js), transpiled to Java at build time: it
+ * transpiles TypeScript to JavaScript with no JavaScript parsing at run time.
  */
 public class Typescript {
 	
@@ -58,7 +58,6 @@ public class Typescript {
 					.build();
 		}
 
-		//Enable that when the transpiler is enabled!
 		js.Typescript js = new js.Typescript(env);
 		runtimeContext = new TranspiledGlobalRuntimeContext(env,env.createProgramExecutor());
         js.executeWithContext(runtimeContext);
@@ -66,15 +65,8 @@ public class Typescript {
 
 	/**
 	 * Transpiles TypeScript source to JavaScript (ES2020, no module system).
-	 *
-	 * @throws IllegalStateException as long as the compiler is not transpiled
-	 * (see the class documentation)
 	 */
 	public String execute(String source) {
-		if(runtimeContext==null) {
-			throw new IllegalStateException("The precompiled TypeScript compiler is not available: "
-					+ "typescript.js is not transpiled by this build (see js-precompiled-typescript/pom.xml)");
-		}
 		JSValue ts = runtimeContext.global("ts");
 
 		JSValue compilerOptions = runtimeContext.createObject();

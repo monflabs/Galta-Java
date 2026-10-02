@@ -352,7 +352,7 @@ profile. The two lists must be kept in sync when a module is added.
 | `js-library-v8` | test-only V8 (Javet) harness |
 | `js-all` | fat jar, built locally (`target/galtajs-all.jar`) |
 | `js-playground-cheerpj` | browser build of the playground |
-| `js-precompiled-typescript` | not generated yet (its transpiler step is disabled) |
+| `parent-js-precompiled` and its modules (js-beautify, TypeScript) | third-party JavaScript libraries transpiled to Java, built from this repository |
 | `parent-demodata` and the `demo-*` modules | sample datasets |
 
 ### Other repositories

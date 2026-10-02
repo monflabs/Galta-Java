@@ -110,7 +110,7 @@ The `org.monflabs.galta:javacompiler` module (`parent-utilities/javacompiler`) p
 
 The Maven plugin `js-transpiler-maven` exposes one mojo, `org.monflabs.galtajs.maven.JSTranspilerMojo` (goal `generate-sources`, prefix `monflabs`), which builds a `JSEnvironment` with `ScriptOptimizer.defaultOptimizer()` and delegates to `transpiler/path/PathTranspiler`. Parameters: `sourceDirectory` (`${basedir}/js`), `outputDirectory` (`${project.build.directory}/generated-sources/js`), `jsPackage` (`js`), `includes`/`excludes`, `sourceMap`, `sourceCode`, `mapFile`, `sourceFile`, `sourceInComments`, `maxSourceInComments`, `splitCode`, `commonJS`, `encoding`, `failOnError`, `followSymlinks`, `galtaJs`, `verbose`. Usage is in [Execution modes](/GaltaJS/UserGuide/ExecutionModes).
 
-`parent-js-precompiled/` ships js-beautify (JS, CSS, HTML) transpiled at build time; the TypeScript module is wired but disabled (plugin block commented out in its `pom.xml`, and the `Typescript` facade leaves its runtime context null behind `//Enable that when the transpiler is enabled!`).
+`parent-js-precompiled/` ships js-beautify (JS, CSS, HTML) and the TypeScript compiler (`typescript.js`, about 9 MB, a few minutes of build time) transpiled at build time; their tests check that the transpiled code gives the same output as the interpreted one.
 
 ## Transpiled modules
 

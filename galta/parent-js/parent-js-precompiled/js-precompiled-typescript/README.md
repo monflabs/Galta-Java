@@ -1,27 +1,35 @@
 # GaltaJS Precompiled TypeScript
 
-> Not published to Maven Central: the precompiled compiler is not functional yet - the transpilation of `typescript.js` is disabled in this module's `pom.xml`.
+> Not published to Maven Central: build and install it from this repository.
 
-Meant to ship the [TypeScript](https://www.typescriptlang.org) compiler
-(the checked-in `js/typescript.js` is version 6.0.3, although `js/download.sh` names 5.9.2) transpiled to Java with
-GaltaJS, like the [js-beautify modules](../README.md). The plugin execution that
-would transpile it is commented out in `pom.xml`, so no compiled compiler exists:
-`Typescript.execute(source)` throws an `IllegalStateException` until it is
-re-enabled. The tests run the compiler interpreted instead.
+The [TypeScript](https://www.typescriptlang.org) compiler (`js/typescript.js`,
+version 6.0.3, unmodified from the npm package - `js/download.sh` fetches it)
+transpiled to Java with GaltaJS at build time, like the
+[js-beautify modules](../README.md): the compiler runs as compiled Java classes,
+with no JavaScript parsing at run time. A small facade, `Typescript`, transpiles
+TypeScript source to JavaScript.
+
+```java
+Typescript ts = Typescript.newBuilder().build();   // or .environment(env)
+String js = ts.execute("let x: number = 1;");       // ES2020, no module system
+```
+
+Transpiling `typescript.js` (about 9 MB of JavaScript) takes a few minutes of
+build time; it is skipped while the generated sources are up to date, i.e.
+until `mvn clean` or a change of the compiler or of the plugin options.
 
 ## Contents
 
-- `org.monflabs.galtajs.precompiled.Typescript` - the facade (`newBuilder()`, `.environment(env)`, `execute(source)`), which would transpile TypeScript to ES2020 JavaScript with no module system
-- `js/typescript.js` - the TypeScript compiler source; `js/Practical Examples/` - sample `.ts` files
-- `tests.AllPrecompiledTypescriptTests` - `TypeScriptTest` (checks that the facade reports the missing compiler, and runs the compiler interpreted on `src/test/resources/source/sample.ts`) and `TypeScriptPracticalExamplesTest` (the practical examples, interpreted)
-- `tests.AllBuildNoTest` - the no-op that a plain build runs (the only class surefire includes)
+- `org.monflabs.galtajs.precompiled.Typescript` - the facade (`newBuilder()`, `.environment(env)`, `execute(source)`), transpiling TypeScript to ES2020 JavaScript with no module system
+- `js/typescript.js` - the TypeScript compiler source; `js/Practical Examples/` - sample `.ts` files with their expected JavaScript
+- `tests.AllPrecompiledTypescriptTests` - `TypeScriptTest` and `TypeScriptPracticalExamplesTest`: the compiler, interpreted and transpiled, on `src/test/resources/source/sample.ts` and on every practical example, both giving the expected JavaScript
 
-## Running the tests
+## Building and testing
 
 From `galta/`:
 
 ```sh
-mvn test -pl parent-js/parent-js-precompiled/js-precompiled-typescript -Dtest=AllPrecompiledTypescriptTests
+mvn install -pl parent-js/parent-js-precompiled/js-precompiled-typescript -am
 ```
 
 ## Documentation
