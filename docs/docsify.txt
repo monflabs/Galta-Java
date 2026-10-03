@@ -1,5 +1,5 @@
 https://docsify.js.org/#/quickstart?id=writing-content
 
-npx docsify-cli serve --port 3033 nashorn
+npx docsify-cli serve --port 3033 docs
 
 http://localhost:3033
