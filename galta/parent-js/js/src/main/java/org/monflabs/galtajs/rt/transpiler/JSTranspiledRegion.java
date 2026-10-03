@@ -40,6 +40,17 @@ public interface JSTranspiledRegion {
 	};
 
 	/**
+	 * A return of a derived class constructor: its value is staged in the
+	 * constructor's return holder, and the constructor breaks to its return label.
+	 */
+	public static final Object DERIVED_RETURN = new Object() {
+		@Override
+		public String toString() {
+			return "JSTranspiledRegion.DERIVED_RETURN";
+		}
+	};
+
+	/**
 	 * A break or continue leaving the region, by index.
 	 */
 	public static final Object[] JUMPS = Jumps.create(64);

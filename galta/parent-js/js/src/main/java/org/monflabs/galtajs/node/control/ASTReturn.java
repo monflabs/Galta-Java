@@ -150,8 +150,14 @@ public class ASTReturn extends ASTNode {
     			// as a plain Java `return`, javac can prove the labeled block
     			// never completes via break and flags ASTFunction's trailing
     			// statement unreachable.
-    			b.println("{0} = {1};", enclosingFunction.getDerivedCtorReturnVar(jsContext), node!=null ? JSTranspiler.asValue(jsContext, node) : "UNDEFINED");
-    			b.println("break {0};", enclosingFunction.getDerivedCtorReturnLabel(jsContext));
+    			b.println("{0} = {1};", enclosingFunction.getDerivedCtorReturnTarget(jsContext), node!=null ? JSTranspiler.asValue(jsContext, node) : "UNDEFINED");
+    			if(org.monflabs.galtajs.transpiler.context.TranspilerGeneratorRegionContext.isInRegion(jsContext)) {
+    				// Inside a region (see TranspilerMethodSplitter): the label is in the
+    				// method that runs it, which breaks to it on this marker
+    				b.println("return org.monflabs.galtajs.rt.transpiler.JSTranspiledRegion.DERIVED_RETURN;");
+    			} else {
+    				b.println("break {0};", enclosingFunction.getDerivedCtorReturnLabel(jsContext));
+    			}
     		} else if(node!=null) {
     			String value = JSTranspiler.asValue(jsContext, node);
     			if(insideAsyncGeneratorBody) {

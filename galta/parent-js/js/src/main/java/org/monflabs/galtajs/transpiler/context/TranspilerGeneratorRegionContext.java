@@ -35,12 +35,32 @@ public class TranspilerGeneratorRegionContext extends JSTranspilerGeneratorConte
 	 * emitted in, or -1 when it is a plain jump.
 	 */
 	public static int findRegionJump(JSTranspilerGeneratorContext context, ASTNode jump) {
-		for(JSTranspilerGeneratorContext c=context; c!=null; c=c.getParent()) {
-			if(c instanceof TranspilerGeneratorRegionContext rc) {
-				Integer index = rc.region.getEscapes().get(jump);
-				return index!=null ? index : -1;
-			}
+		TranspilerGeneratorRegionContext rc = findRegion(context);
+		if(rc!=null) {
+			Integer index = rc.region.getEscapes().get(jump);
+			return index!=null ? index : -1;
 		}
 		return -1;
+	}
+
+	/**
+	 * Whether code is emitted inside a region of its own function.
+	 */
+	public static boolean isInRegion(JSTranspilerGeneratorContext context) {
+		return findRegion(context)!=null;
+	}
+
+	// The innermost region, without crossing into an enclosing function (a function
+	// or class declared inside a region starts a new method)
+	private static TranspilerGeneratorRegionContext findRegion(JSTranspilerGeneratorContext context) {
+		for(JSTranspilerGeneratorContext c=context; c!=null; c=c.getParent()) {
+			if(c instanceof TranspilerGeneratorRegionContext rc) {
+				return rc;
+			}
+			if(c instanceof TranspilerGeneratorFunctionContext) {
+				return null;
+			}
+		}
+		return null;
 	}
 }

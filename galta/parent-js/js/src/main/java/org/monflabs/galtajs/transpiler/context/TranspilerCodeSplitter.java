@@ -32,8 +32,14 @@ public class TranspilerCodeSplitter {
 	
 	public static final int DEFAULT_MAX_FUNCTIONS_PER_DISPATCHER = 500;
 
+	// Class elements initialized per method: about 55 bytes of bytecode each, so 100
+	// keep a chunk well under the 8000 bytes beyond which the JIT never compiles it
+	public static final int DEFAULT_CLASS_ELEMENT_SPLIT_MAX = 100;
+
 	public static final int DEFAULT_OBJECT_LITERAL_SPLIT_THRESHOLD = 5;
-	public static final int DEFAULT_OBJECT_SPLIT_MAX = 150;
+	// About 60 bytes of bytecode per property: 100 keep a chunk well under the 8000
+	// bytes beyond which the JIT never compiles a method
+	public static final int DEFAULT_OBJECT_SPLIT_MAX = 100;
 
 	public static final int DEFAULT_ARRAY_LITERAL_SPLIT_THRESHOLD = 5;
 	public static final int DEFAULT_ARRAY_SPLIT_MAX = 150;

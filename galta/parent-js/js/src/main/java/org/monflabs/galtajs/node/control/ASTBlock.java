@@ -325,7 +325,7 @@ loop:	for(int i=0; i<statements.length; i++) {
 		// TranspilerMethodSplitter)
 		org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.Region whole = jsContext.getMainContext().getWholeListRegion(container);
 		if(whole!=null) {
-			emitRegion(jsContext, b, whole, regionContext -> transpileStatementsWithRegions(regionContext, b, container, statements));
+			emitRegion(jsContext, b, container, whole, regionContext -> transpileStatementsWithRegions(regionContext, b, container, statements));
 		} else {
 			transpileStatementsWithRegions(jsContext, b, container, statements);
 		}
@@ -345,7 +345,7 @@ loop:	for(int i=0; i<statements.length; i++) {
 				// The rest is unreachable
 				return;
 			}
-			emitRegion(jsContext, b, region, regionContext -> transpileStatementRange(regionContext, b, mapBlock, statements, region.getFrom(), region.getTo()));
+			emitRegion(jsContext, b, container, region, regionContext -> transpileStatementRange(regionContext, b, mapBlock, statements, region.getFrom(), region.getTo()));
 			pos = region.getTo();
 		}
 		transpileStatementRange(jsContext, b, mapBlock, statements, pos, statements.length);
@@ -372,7 +372,7 @@ loop:	for(int i=0; i<statements.length; i++) {
 	 * once, whose result the caller acts on - continue, perform a break or continue
 	 * that left the region, or return the value a return statement gave.
 	 */
-	public static void emitRegion(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.Region region, java.util.function.Consumer<JSTranspilerGeneratorContext> body) {
+	public static void emitRegion(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, ASTNode container, org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.Region region, java.util.function.Consumer<JSTranspilerGeneratorContext> body) {
 		String regionClass = org.monflabs.galtajs.rt.transpiler.JSTranspiledRegion.class.getName();
 		String result = jsContext.generateUniqueId("region");
 		// An anonymous class rather than a lambda: javac compiles large numbers of
@@ -397,6 +397,17 @@ loop:	for(int i=0; i<statements.length; i++) {
 			b.println("if({0}=={1}.JUMPS[{2}]) {", result, regionClass, Integer.toString(jump.getValue()));
 			b.incIndent();
 			jump.getKey().transpileJavaStatement(jsContext, b);
+			b.decIndent();
+			b.print("} else ");
+		}
+		// A derived constructor's return from inside the region: at the method level,
+		// break to its return label (a region in a region passes the marker on)
+		ASTNode function = enclosingFunction(container);
+		if(function instanceof ASTFunction f && f.isDerivedClassConstructor()
+				&& !org.monflabs.galtajs.transpiler.context.TranspilerGeneratorRegionContext.isInRegion(jsContext)) {
+			b.println("if({0}=={1}.DERIVED_RETURN) {", result, regionClass);
+			b.incIndent();
+			b.println("break {0};", f.getDerivedCtorReturnLabel(jsContext));
 			b.decIndent();
 			b.print("} else ");
 		}

@@ -337,7 +337,8 @@ public class EngineRegression3JavaTest extends __BaseTestCase {
 	// Large functions have statement lists moved to regions (lambdas run at once):
 	// with a budget of 1, every list is, and the control flow crossing them -
 	// labeled break/continue, switch fall-through, try/finally, return values,
-	// exceptions, per-iteration closures - must behave as when interpreted
+	// exceptions, per-iteration closures, generators, derived constructor
+	// returns, direct eval - must behave as when interpreted
 	public void testTranspiledMethodRegions() throws Exception {
 		String code = """
 			function run() {
@@ -385,6 +386,30 @@ public class EngineRegression3JavaTest extends __BaseTestCase {
 				var obj = { v: 7, get: function () { return this.v; } };
 				function fact(n) { if (n <= 1) { return 1; } return n * fact(n - 1); }
 				out.push(sum(1, 2, 3), obj.get(), fact(6), (function () { if (true) { return; } })());
+				function* gen(n) {
+					for (var g = 0; g < n; g++) {
+						if (g == 1) { continue; }
+						try { yield g * 2; } finally { out.push('gf' + g); }
+						if (g == 3) { return 'end'; }
+					}
+				}
+				var it = gen(5), gr = [], step;
+				while (!(step = it.next()).done) { gr.push(step.value); }
+				out.push(gr.join('/') + ':' + step.value);
+				class Base { constructor(v) { this.v = v; } }
+				class Derived extends Base {
+					constructor(v, other) {
+						super(v);
+						for (var c = 0; c < 2; c++) {
+							if (other) { return { replaced: v }; }
+						}
+						this.w = v * 2;
+					}
+				}
+				var d1 = new Derived(3, false), d2 = new Derived(4, true);
+				out.push(d1.v + '/' + d1.w + '/' + (d1 instanceof Derived), d2.replaced + '/' + (d2 instanceof Derived));
+				function withEval(code) { var local = 1; eval(code); if (true) { return local + (typeof added); } }
+				out.push(withEval('var added = 2; local = 5;'));
 				return out.join(',');
 			}
 			""";

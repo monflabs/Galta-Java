@@ -62,9 +62,10 @@ Java limits a method body and a class constant pool to 64K, which the IIFE build
 | Constant | Value |
 |---|---|
 | `DEFAULT_BLOCK_SPLIT_MIN` / `DEFAULT_BLOCK_SPLIT_MAX` | 20 / 150 statements |
-| `DEFAULT_OBJECT_LITERAL_SPLIT_THRESHOLD` / `DEFAULT_OBJECT_SPLIT_MAX` | 5 / 150 properties |
+| `DEFAULT_OBJECT_LITERAL_SPLIT_THRESHOLD` / `DEFAULT_OBJECT_SPLIT_MAX` | 5 / 100 properties |
 | `DEFAULT_ARRAY_LITERAL_SPLIT_THRESHOLD` / `DEFAULT_ARRAY_SPLIT_MAX` | 5 / 150 items |
 | `DEFAULT_MAX_FUNCTIONS_BEFORE_DISPATCHER` / `DEFAULT_MAX_FUNCTIONS_PER_DISPATCHER` | 50 / 500 functions |
+| `DEFAULT_CLASS_ELEMENT_SPLIT_MAX` | 100 class elements per initialization method |
 
 Four kinds of split exist:
 
@@ -80,9 +81,9 @@ The JIT never compiles a method larger than 8000 bytes of bytecode, so a large J
 - Before a function body is emitted, its AST is weighed: one unit per node, about 15 bytes of bytecode, a nested function counting for little since it is a method of its own. Above the budget (`methodBudget`, 400 units by default), statement lists are chosen to become **regions**: the statements of a block or of a `case`, moved whole, and runs of consecutive statements of a long list. A region's own content is sized the same way.
 - A region is emitted as an anonymous `JSTranspiledRegion` class run at once: its `run()` is a separate method. The JavaScript variables live in `final Object[]` scope arrays, so it captures nothing else. (A lambda would do the same, but javac compiles hundreds of them about twice as slowly.) Generated code calls `jsToString(...)` rather than `toString(...)`, which `Object.toString()` would hide inside an anonymous class.
 - `run()` returns `JSTranspiledRegion.NORMAL` when its statements complete, the value of a JavaScript `return`, or `JUMPS[i]` for a `break`/`continue` that leaves it (`TranspilerGeneratorRegionContext` makes `ASTBreak`/`ASTContinue` emit that). The caller performs the jump or returns the value, so labels, loops, `switch` fall-through and `try`/`finally` keep their meaning across regions.
-- Generators, async functions, derived class constructors and functions with a direct `eval` are left whole, and a block wrapped in a `using` disposal keeps its statements together.
+- Every kind of function is split. `yield` and `await` are method calls on the context (the coroutine runs on its own thread), so they work from a region. A derived class constructor stages its return value in a one-element holder and a region reports `DERIVED_RETURN`, on which the constructor's method breaks to its return label. A block wrapped in a `using` disposal keeps its statements together.
 
-For the TypeScript compiler, this removes all but one of its methods above 8000 bytes, the remaining one being a single statement, and makes it run about 25% faster. The `galtajs.transpiler.methodBudget` system property sets the default budget: running the GaltaJS suite with `-Dgaltajs.transpiler.methodBudget=1` makes every statement list a region, which exercises them all; in the regular build, `EngineRegression3JavaTest` checks their control flow against the interpreter.
+With the literal and class element chunks sized to the same limit, the TypeScript compiler has no method above 8000 bytes left (17 before), and runs about 25% faster. The `galtajs.transpiler.methodBudget` system property sets the default budget: running the GaltaJS suite with `-Dgaltajs.transpiler.methodBudget=1` makes every statement list a region, which exercises them all; in the regular build, `EngineRegression3JavaTest` checks their control flow against the interpreter.
 
 ## Compilation and loading
 

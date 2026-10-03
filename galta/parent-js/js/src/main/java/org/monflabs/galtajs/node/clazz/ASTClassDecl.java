@@ -869,7 +869,7 @@ public class ASTClassDecl extends ASTBaseClass /*implements HoistableNode*/ { //
     // this wrapping. Below the threshold, emits inline exactly as before
     // (no anonymous class overhead for the common, small-class case).
     private void transpileClassElementLoop(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, int length, java.util.function.BiConsumer<JSTranspilerGeneratorContext,Integer> emitter) {
-    	int chunkSize = TranspilerCodeSplitter.DEFAULT_BLOCK_SPLIT_MAX;
+    	int chunkSize = TranspilerCodeSplitter.DEFAULT_CLASS_ELEMENT_SPLIT_MAX;
     	if(length<=chunkSize) {
     		for(int i=0; i<length; i++) {
     			emitter.accept(jsContext, i);

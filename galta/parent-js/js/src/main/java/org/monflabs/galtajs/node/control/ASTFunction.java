@@ -1425,6 +1425,16 @@ public abstract class ASTFunction extends ASTRootStatementList {
 	private String derivedCtorReturnVar;
 	private String derivedCtorReturnLabel;
 
+	// Whether the staged return value of a derived constructor is in a holder array
+	// (its body has regions) rather than a local variable
+	private boolean derivedCtorReturnHolder;
+
+	// The Java target a derived constructor's return stages its value into
+	String getDerivedCtorReturnTarget(JSTranspilerGeneratorContext jsContext) {
+		String v = getDerivedCtorReturnVar(jsContext);
+		return derivedCtorReturnHolder ? v+"[0]" : v;
+	}
+
 	String getDerivedCtorReturnVar(JSTranspilerGeneratorContext jsContext) {
 		ensureDerivedCtorReturnNames(jsContext);
 		return derivedCtorReturnVar;
@@ -1808,6 +1818,15 @@ public abstract class ASTFunction extends ASTRootStatementList {
 
 		ASTNode[] statements = getStatements();
 		boolean derivedCtor = isDerivedClassConstructor();
+
+		// A large function: some of its statement lists become regions, so that its
+		// methods stay small enough to be JIT-compiled (see TranspilerMethodSplitter)
+		boolean splittable = functionContext.getOptions().getMethodBudget()>0;
+		org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter methodSplitter = splittable ? org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.plan(this, functionContext.getOptions().getMethodBudget()) : null;
+		if(splittable) {
+			functionContext.getMainContext().addMethodSplitter(this, methodSplitter);
+		}
+
 		String returnVar = null, returnLabel = null;
 		if(derivedCtor) {
 			// See getDerivedCtorReturnVar()'s field comment: stage the
@@ -1817,7 +1836,14 @@ public abstract class ASTFunction extends ASTRootStatementList {
 			// runs at [[Construct]]-caller timing, not inline.
 			returnVar = getDerivedCtorReturnVar(functionContext);
 			returnLabel = getDerivedCtorReturnLabel(functionContext);
-			b.println("Object {0} = UNDEFINED;", returnVar);
+			// A return inside a region stages the value from another method: in a
+			// one-element holder rather than a local variable then
+			derivedCtorReturnHolder = methodSplitter!=null;
+			if(derivedCtorReturnHolder) {
+				b.println("final Object[] {0} = new Object[] {UNDEFINED};", returnVar);
+			} else {
+				b.println("Object {0} = UNDEFINED;", returnVar);
+			}
 			b.println("{0}: {", returnLabel);
 			b.incIndent();
 		}
@@ -1840,18 +1866,7 @@ public abstract class ASTFunction extends ASTRootStatementList {
 				? new TranspilerEvalShadowContext(functionContext)
 				: functionContext;
 
-		// A large function: some of its statement lists become regions, so that its
-		// methods stay small enough to be JIT-compiled (see TranspilerMethodSplitter).
-		// Generators and async functions (suspended mid-body), derived constructors
-		// (their returns break to a label) and direct evals are left whole.
-		boolean splittable = functionContext.getOptions().getMethodBudget()>0
-				&& !isGenerator() && !isAsync() && !derivedCtor && !splitForGenerator
-				&& !hasNonStrictDirectEvalInOwnBody() && !hasNonStrictDirectEvalInOwnParams();
-		org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter methodSplitter = splittable ? org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.plan(this, functionContext.getOptions().getMethodBudget()) : null;
-		if(splittable) {
-			functionContext.getMainContext().addMethodSplitter(this, methodSplitter);
-		}
-		if(methodSplitter!=null) {
+		if(methodSplitter!=null && !derivedCtor) {
 			// The closing return below must stay reachable for javac whatever the
 			// regions do
 			b.println("if(true) {");
@@ -1886,7 +1901,7 @@ public abstract class ASTFunction extends ASTRootStatementList {
 			// setThis() there - see its comment), but has no way to reach
 			// back into this outer method's local `_this` variable, which is
 			// a plain Java parameter private to this call frame.
-			b.println("return checkDerivedConstructorReturn({0},{1}.getThis());", returnVar, JSTranspiler.MAIN_CONTEXT);
+			b.println("return checkDerivedConstructorReturn({0},{1}.getThis());", derivedCtorReturnHolder ? returnVar+"[0]" : returnVar, JSTranspiler.MAIN_CONTEXT);
 			b.decIndent();
 			b.println("}");
 			return;

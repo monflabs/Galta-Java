@@ -108,9 +108,7 @@ public class TranspilerMethodSplitter {
 	}
 
 	/**
-	 * Plans the regions of a function body, or returns null when the function needs
-	 * none or cannot be split (generators, async functions, derived constructors,
-	 * functions with a direct eval).
+	 * Plans the regions of a function body, or returns null when it needs none.
 	 */
 	public static TranspilerMethodSplitter plan(ASTFunction function, int budget) {
 		if(budget<=0) {
