@@ -111,6 +111,30 @@ strings[0] = 'x'; strings[1] = 'y';
 // -> [ 3, 5, 0, "x-y" ]
 ```
 
+### `Java.to` and `Java.from`
+
+`Java.to(value, type)` converts a JavaScript array, any array-like value (a `length` and indexed elements, a string included), a Java array or a collection into a new Java array. The type is a class name (`'int[]'`, `'java.lang.String[][]'`) or a `Java.type()` class, and defaults to `Object[]`:
+
+- `byte` to `double`, their wrappers, `boolean`, `char` and `String` elements use the JavaScript conversions (ToNumber, ToBoolean, ToString), so `'3'` becomes `3` and a hole or `undefined` becomes `0` (`NaN` for `double`). For a `char`, a one-character string gives its character, and anything else gives the character with that number.
+- `null` and `undefined` become `null` for the reference types.
+- Nested arrays are converted for a multi-dimensional type.
+- Other element types are converted like method arguments: a function becomes a functional interface, a `Java.type()` class its `Class`. An element that can't be converted throws a `TypeError`.
+- A `List`/`Collection`, `Deque`/`Queue` or `Set` type gives a new `ArrayList`, `ArrayDeque` or `LinkedHashSet`.
+
+`Java.from(value)` copies a Java array, a collection or any other `Iterable` into a new JavaScript array. Array type names also work with `Java.type()`, and `new` on an array type creates an array of the given length.
+
+Sample: `doc_examples/JavaInteropExamples.java` (`testJavaToAndFrom`)
+
+```js
+const Arrays = Java.type('java.util.Arrays');
+const ints = Java.to([1, 2.7, '3'], 'int[]');     // JS -> int[], with ToNumber
+const names = Java.to(['a', 'b'], Java.type('java.lang.String[]'));
+const back = Java.from(ints);                      // Java array -> JS array
+[Arrays.toString(ints), names.length, Array.isArray(back), back.map(n => n * 10).join(),
+ Java.from(Java.type('java.util.List').of('x', 'y')).join('-'), new (Java.type('long[]'))(2).length]
+// -> [ "[1, 2, 3]", 2, true, "10,20,30", "x-y", 2 ]
+```
+
 ## The `$` prefix: reaching the Java object behind a value
 
 Every JavaScript value is a Java object. With `supportJavaNative` on, a member name starting with `$` bypasses the JavaScript semantics and accesses the Java member of the underlying object: `(42).$getClass()`, `list.$size()`, `str.$length()`.
@@ -189,7 +213,7 @@ r
 - `Java.type()` needs the fully qualified name; nested classes use `$`.
 - A `java.util.List` is array-like but `Array.isArray()` returns `false`; build a `JSArray` when a script needs a real array.
 - Number arguments convert between numeric types, so `Math.abs(-3)` picks the `int` overload and `Math.abs(-3.5)` the `double` one. A call with no single most specific overload throws, for example a number for `f(long)`/`f(BigDecimal)`; cast the argument (`Java.type('long')(n)`) to choose.
-- Strings are not converted to numbers or the reverse, and a JavaScript array is not converted to a Java array: build one with `new Int[n]` where `Int = Java.type('int')`.
+- Strings are not converted to numbers or the reverse, and a JavaScript array is not converted to a Java array parameter: convert it with `Java.to(array, 'int[]')`.
 - `Java` itself is not available in `JavaScriptEnvironment`.
 
 ## Source

@@ -172,6 +172,11 @@ First public release: Galta is published to Maven Central under the
   `AtomicInteger`; unrelated parameter types are an ambiguity, as in Java; a
   method wins over a getter property of the same name (`shutdown()` next to
   `isShutdown()`). Member access and calls are 20-40% faster.
+- `Java.to(value, type)` converts a JavaScript array or array-like value to a
+  Java array (with the JavaScript conversions, nested for `int[][]`) or to a
+  `List`, `Deque` or `Set`; `Java.from(value)` copies a Java array or
+  collection into a JavaScript array. `Java.type()` accepts array type names
+  (`'int[]'`), and `new` on an array type creates an array of that length.
 - `JSON.rawJSON` uses the strict parser, `JSON.parse` errors give the position,
   a too deeply nested `JSON.stringify` throws a `RangeError`, and non-ASCII
   characters are written as they are.

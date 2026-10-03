@@ -16,6 +16,7 @@
 package org.monflabs.galtajs.library.java;
 
 import org.monflabs.galtajs.JSEnvironment;
+import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.BaseMethod;
 import org.monflabs.galtajs.rt.builtins.NativeObject;
 
@@ -32,6 +33,8 @@ public class Java extends NativeObject {
 		super(env);
 		this.javaLibrary = javaLibrary;
 		setOwnMethod(new Method(env,MethodId.type,1));
+		setOwnMethod(new Method(env,MethodId.to,2));
+		setOwnMethod(new Method(env,MethodId.from,1));
 	}
 
 	@Override
@@ -41,6 +44,8 @@ public class Java extends NativeObject {
 	
 	private static enum MethodId {
 		type,
+		to,
+		from,
 	}
 	
 	private final class Method extends BaseMethod {
@@ -58,6 +63,20 @@ public class Java extends NativeObject {
         			String arg0 = paramString(args, 0);
         			Object r = javaLibrary.loadClass(getEnvironment(),arg0);
             		return r;
+            	}
+            	case to:{
+            		// The type: a Java.type() class or a class name, Object[] by default
+            		Object type = param(args, 1, null);
+            		Class<?> c = null;
+            		if(type instanceof JavaClass jc) {
+            			c = jc.getNativeClass();
+            		} else if(type!=null && type!=RuntimeUtil.UNDEFINED) {
+            			c = javaLibrary.loadClass(getEnvironment(), RuntimeUtil.toString(getEnvironment(), type)).getNativeClass();
+            		}
+            		return javaLibrary.toJava(getEnvironment(), param(args, 0), c);
+            	}
+            	case from:{
+            		return javaLibrary.fromJava(getEnvironment(), param(args, 0));
             	}
 	            
 	            default: {

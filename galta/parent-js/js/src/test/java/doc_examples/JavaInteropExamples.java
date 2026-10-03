@@ -124,6 +124,19 @@ public class JavaInteropExamples extends __BaseTestCase {
 		assertEquals(List.of(3, 5, 0, "x-y"), list(r));
 	}
 
+	public void testJavaToAndFrom() {
+		JSEnvironment env = GaltaJSEnvironment.create();
+		Object r = env.evaluateScript("""
+			const Arrays = Java.type('java.util.Arrays');
+			const ints = Java.to([1, 2.7, '3'], 'int[]');     // JS -> int[], with ToNumber
+			const names = Java.to(['a', 'b'], Java.type('java.lang.String[]'));
+			const back = Java.from(ints);                      // Java array -> JS array
+			[Arrays.toString(ints), names.length, Array.isArray(back), back.map(n => n * 10).join(),
+			 Java.from(Java.type('java.util.List').of('x', 'y')).join('-'), new (Java.type('long[]'))(2).length]
+			""");
+		assertEquals(List.of("[1, 2, 3]", 2, true, "10,20,30", "x-y", 2), list(r));
+	}
+
 	public void testDollarPrefixReachesTheJavaObject() {
 		JSEnvironment env = GaltaJSEnvironment.create();
 		// A JavaScript value is a Java object; "$" gives access to its Java members

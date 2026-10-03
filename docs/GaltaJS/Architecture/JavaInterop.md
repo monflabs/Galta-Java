@@ -165,6 +165,22 @@ The overload lists live as long as the class, possibly for the whole JVM for a J
 
 The array given by the caller is never modified. For a varargs call, the trailing arguments are converted to the component type and collected into a new array.
 
+## `Java.to` and `Java.from`
+
+`JavaLibrary.toJava(env, value, type)` reads the elements first, whatever the source:
+- Java array: `Array.get()`;
+- script object or string: its `length` and indexed properties, through its accessor, so holes read as `undefined`;
+- any other `Iterable`: iterated.
+
+It then fills a new array of the component type or a new collection, element by element (`toJavaElement()`):
+- **primitives, their wrappers and `String`:** the JavaScript conversions (`RuntimeUtil.toNumber`, `toInt32`, `toBoolean`, `toString`), not the lossy Java narrowing used for method arguments, so `'3'` gives `3`;
+- **array components:** converted recursively;
+- **any other type:** `convertObject()`, as for an argument, followed by a type check.
+
+`AccessManager.canCreateArray()` and `canCreateObject()` apply as for `new`. `fromJava()` copies the elements of a Java array or `Iterable` into `JSArray.of()`, checking `Class` values with `canLoadClass()` like any value returned to a script.
+
+`JavaLibrary.loadClass()` resolves array type names (`int[]`, `java.lang.String[][]`) by stripping the `[]` suffixes and calling `Class.arrayType()`. `new` on such a class creates an array of the given length.
+
 ## Functions as Java interfaces
 
 `JavaLibrary.functionalMethod(interface)` finds the single abstract method of an interface, caching the result in a `ClassValue`. The abstract methods that redeclare a public method of `Object` (`Comparator.equals()`) don't count, and several abstract methods of the same name count as one (a generic method redeclared with a narrower signature). Without a single abstract method, the interface doesn't take a function.

@@ -34,6 +34,7 @@ import org.eclipse.jdt.annotation.NonNull;
 import org.monflabs.galtajs.AbstractLibrary;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.JSEnvironment.Builder;
+import org.monflabs.galtajs.jsonfactory.JSArray;
 import org.monflabs.galtajs.jsonfactory.JSObject;
 import org.monflabs.galtajs.jsonfactory.JSObject.DESC_CHECK;
 import org.monflabs.galtajs.rt.JSRuntimeException;
@@ -382,6 +383,17 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 				throw RuntimeUtil.typeError("Java class '{0}' cannot be created", c);
 			}
 			AccessManager accessManager = getAccessManager(); 
+			// new (Java.type('int[]'))(n): an array of that size
+			if(c.isArray()) {
+				if(accessManager!=null && !accessManager.canCreateArray(c.getComponentType())) {
+					throw RuntimeUtil.typeError("Java array '{0}' cannot be created", c.getComponentType());
+				}
+				long size = parameters.length>0 ? RuntimeUtil.toLength(JSEnvironment.getEnvironment(), parameters[0]) : 0;
+				if(size>Integer.MAX_VALUE-8) {
+					throw RuntimeUtil.rangeError("Invalid array length {0}", size);
+				}
+				return Array.newInstance(c.getComponentType(), (int)size);
+			}
 			if(accessManager!=null && !accessManager.canCreateObject(c)) {
 				throw RuntimeUtil.typeError("Java class '{0}' cannot be created", c);
 			}
@@ -533,11 +545,30 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 		}
 		
 		try {
+			// An array type: "int[]", "java.lang.String[][]"
+			int dimensions = 0;
+			String name = className;
+			while(name.endsWith("[]")) {
+				name = name.substring(0, name.length()-2).trim();
+				dimensions++;
+			}
+			if(dimensions>0) {
+				if(accessManager!=null && !accessManager.canLoadClass(name)) {
+					throw RuntimeUtil.typeError("Java class '{0}' cannot be loaded", name);
+				}
+				Class<?> c = primitives.containsKey(name) ? primitives.get(name).getNativeClass() : getClassLoader(env).loadClass(name);
+				for(int i=0; i<dimensions; i++) {
+					c = c.arrayType();
+				}
+				return getJavaClass(c);
+			}
 			if(primitives.containsKey(className)) {
 				return primitives.get(className);
 			}
 			Class<?> clazz = getClassLoader(env).loadClass(className);
 			return getJavaClass(clazz);
+		} catch (JSRuntimeException e) {
+			throw e;
 		} catch (Exception e) {
 			throw RuntimeUtil.error(e, "Error while loading Java class '{0}'", className);
 		}
@@ -545,6 +576,152 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 
 	
 	
+	/////////////////////////////////////////////////////////////////////////////////////
+	// Java.to() / Java.from()
+	/////////////////////////////////////////////////////////////////////////////////////
+
+	/**
+	 * Java.to(value, type): converts a script array, or any array-like value (a length and
+	 * indexed elements), a Java array or a collection, to a new Java array of the given type,
+	 * converting every element with the JavaScript conversions (ToNumber, ToString,
+	 * ToBoolean) for the primitives, their wrappers and String. Nested arrays are converted
+	 * for multi-dimensional types. A List, Collection, Deque or Set type gives a new
+	 * ArrayList, ArrayDeque or LinkedHashSet. The type defaults to Object[].
+	 */
+	public Object toJava(JSEnvironment env, Object value, Class<?> type) {
+		if(type==null) {
+			type = Object[].class;
+		}
+		List<Object> elements = elements(env, value, "Java.to");
+		AccessManager accessManager = getAccessManager();
+		if(type.isArray()) {
+			Class<?> component = type.getComponentType();
+			if(accessManager!=null && !accessManager.canCreateArray(component)) {
+				throw RuntimeUtil.typeError("Java array '{0}' cannot be created", component);
+			}
+			Object array = Array.newInstance(component, elements.size());
+			for(int i=0; i<elements.size(); i++) {
+				Array.set(array, i, toJavaElement(env, elements.get(i), component));
+			}
+			return array;
+		}
+		java.util.Collection<Object> collection;
+		if(type.isAssignableFrom(java.util.ArrayList.class)) {
+			collection = new java.util.ArrayList<>(elements.size());
+		} else if(type.isAssignableFrom(java.util.ArrayDeque.class)) {
+			collection = new java.util.ArrayDeque<>(elements.size());
+		} else if(type.isAssignableFrom(java.util.LinkedHashSet.class)) {
+			collection = new java.util.LinkedHashSet<>();
+		} else {
+			throw RuntimeUtil.typeError("Java.to() converts to an array, List, Collection, Deque or Set type, not {0}", type.getName());
+		}
+		if(accessManager!=null && !accessManager.canCreateObject(collection.getClass())) {
+			throw RuntimeUtil.typeError("Java class '{0}' cannot be created", collection.getClass().getName());
+		}
+		for(Object e: elements) {
+			collection.add(toJavaElement(env, e, Object.class));
+		}
+		return collection;
+	}
+
+	/**
+	 * Java.from(value): a new script array with the elements of a Java array, a collection or
+	 * any other Iterable.
+	 */
+	public Object fromJava(JSEnvironment env, Object value) {
+		if(value!=null && (value.getClass().isArray() || value instanceof Iterable<?>)) {
+			List<Object> elements = elements(env, value, "Java.from");
+			Object[] values = new Object[elements.size()];
+			for(int i=0; i<values.length; i++) {
+				values[i] = checkClassAccess(elements.get(i));
+			}
+			return JSArray.of(env, values);
+		}
+		throw RuntimeUtil.typeError("Java.from() expects a Java array or collection, not {0}", RuntimeUtil.objectTypeName(value));
+	}
+
+	// The elements of an array-like value, as they are
+	private List<Object> elements(JSEnvironment env, Object value, String function) {
+		if(value!=null && value.getClass().isArray()) {
+			int length = Array.getLength(value);
+			List<Object> l = new java.util.ArrayList<>(length);
+			for(int i=0; i<length; i++) {
+				l.add(Array.get(value, i));
+			}
+			return l;
+		}
+		// A script array or object: its length and indexed properties, holes included
+		if(value instanceof JSObject || value instanceof CharSequence) {
+			JSAccessor acc = env.getAccessor(value);
+			long length = RuntimeUtil.toLength(env, acc.getProperty(value, "length", RuntimeUtil.UNDEFINED));
+			if(length>Integer.MAX_VALUE-8) {
+				throw RuntimeUtil.rangeError("Invalid array length {0}", length);
+			}
+			List<Object> l = new java.util.ArrayList<>((int)length);
+			for(long i=0; i<length; i++) {
+				l.add(acc.getProperty(value, i, RuntimeUtil.UNDEFINED));
+			}
+			return l;
+		}
+		if(value instanceof Iterable<?> it) {
+			List<Object> l = new java.util.ArrayList<>();
+			for(Object o: it) {
+				l.add(o);
+			}
+			return l;
+		}
+		throw RuntimeUtil.typeError("{0}() expects an array-like value, not {1}", function, RuntimeUtil.objectTypeName(value));
+	}
+
+	// An element converted to a component type, with the JavaScript conversions
+	private Object toJavaElement(JSEnvironment env, Object v, Class<?> type) {
+		boolean nullish = v==null || v==RuntimeUtil.UNDEFINED;
+		if(type.isArray()) {
+			return nullish ? null : toJava(env, v, type);
+		}
+		if(nullish && !type.isPrimitive()) {
+			return null;
+		}
+		Class<?> boxed = type.isPrimitive() ? java.lang.invoke.MethodType.methodType(type).wrap().returnType() : type;
+		if(boxed==Boolean.class) {
+			return RuntimeUtil.toBoolean(env, v);
+		}
+		if(boxed==Character.class) {
+			if(v instanceof CharSequence cs && cs.length()==1) {
+				return cs.charAt(0);
+			}
+			if(v instanceof Character) {
+				return v;
+			}
+			return (char)RuntimeUtil.toInt32(env, v);
+		}
+		if(boxed==String.class) {
+			return v instanceof String ? v : RuntimeUtil.toString(env, v);
+		}
+		if(ClassMetadata.isNumericTarget(boxed)) {
+			Number n = v instanceof Number num ? num : RuntimeUtil.toNumber(env, v);
+			if(boxed==Integer.class) {
+				return RuntimeUtil.toInt32(n);
+			} else if(boxed==Long.class) {
+				return n instanceof Double || n instanceof Float ? Long.valueOf((long)n.doubleValue()) : Long.valueOf(n.longValue());
+			} else if(boxed==Double.class) {
+				return n.doubleValue();
+			} else if(boxed==Float.class) {
+				return n.floatValue();
+			} else if(boxed==Short.class) {
+				return (short)RuntimeUtil.toInt32(n);
+			} else if(boxed==Byte.class) {
+				return (byte)RuntimeUtil.toInt32(n);
+			}
+			return ClassMetadata.convertObject(n, boxed);
+		}
+		Object o = convertObject(v, type);
+		if(o!=null && !type.isInstance(o)) {
+			throw RuntimeUtil.typeError("Java.to() cannot convert {0} to {1}", RuntimeUtil.objectTypeName(v), type.getName());
+		}
+		return o;
+	}
+
 	/////////////////////////////////////////////////////////////////////////////////////
 	// Java Proxy
 	/////////////////////////////////////////////////////////////////////////////////////

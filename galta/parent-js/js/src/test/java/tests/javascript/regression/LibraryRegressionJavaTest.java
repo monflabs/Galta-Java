@@ -186,6 +186,39 @@ public class LibraryRegressionJavaTest extends __BaseTestCase {
 				"var ex=Java.type('java.util.concurrent.Executors').newSingleThreadExecutor(); ex.shutdown(); ex.isShutdown()"));
 	}
 
+	// Java.to() / Java.from(), and the array types they take
+	public void testJavaToAndFrom() {
+		JSEnvironment env = javaEnv(new JavaLibrary());
+		String arrays = "var A=Java.type('java.util.Arrays');";
+		assertEquals("[1, 2, 1, 0, 0]", env.evaluateScript(arrays + "A.toString(Java.to([1.9,'2',true,null,undefined],'int[]'))"));
+		assertEquals("[1.0, NaN, 4.0]", env.evaluateScript(arrays + "A.toString(Java.to([1,,4],'double[]'))"));
+		assertEquals("[1, a, null]", env.evaluateScript(arrays + "A.toString(Java.to([1,'a',undefined],'java.lang.String[]'))"));
+		assertEquals("[a, B]", env.evaluateScript(arrays + "A.toString(Java.to(['a',66],'char[]'))"));
+		assertEquals("[a, b, c]", env.evaluateScript(arrays + "A.toString(Java.to('abc','char[]'))"));
+		assertEquals("[[1, 2], [3]]", env.evaluateScript(arrays + "A.deepToString(Java.to([[1,2],[3]],'int[][]'))"));
+		assertEquals("[1, 1099511627776]", env.evaluateScript(arrays + "A.toString(Java.to([1, 2**40], Java.type('long[]')))"));
+		assertEquals("[a, b]", env.evaluateScript(arrays + "A.toString(Java.to({length:2, 0:'a', 1:'b'},'java.lang.String[]'))"));
+		// Object[] by default, elements as they are
+		assertEquals("Object[]", env.evaluateScript("Java.to([1,'x']).$getClass().getSimpleName()"));
+		// Collections
+		assertEquals("java.util.ArrayList", env.evaluateScript("Java.to([1,2],'java.util.List').$getClass().getName()"));
+		assertEquals("java.util.ArrayDeque", env.evaluateScript("Java.to([1,2],'java.util.Deque').getClass().getName()"));
+		assertEquals(2, (Object) env.evaluateScript("Java.to([1,1,2],'java.util.Set').size"));
+		// Functions to a functional interface, other values rejected
+		assertEquals(Boolean.TRUE, env.evaluateScript("Java.to([()=>1],'java.lang.Runnable[]')[0] instanceof Java.type('java.lang.Runnable')"));
+		assertThrows(JSException.class, () -> env.evaluateScript("Java.to([{a:1}],'java.lang.Runnable[]')"));
+		assertThrows(JSException.class, () -> env.evaluateScript("Java.to([1],'java.util.Map')"));
+		assertThrows(JSException.class, () -> env.evaluateScript("Java.to(5,'int[]')"));
+		// Java.from()
+		assertEquals("true,3,5", env.evaluateScript("var x=Java.from(Java.to([1,2,3],'int[]')); [Array.isArray(x), x.length, x[1]+x[2]].join()"));
+		assertEquals("1,2", env.evaluateScript("var s=new (Java.type('java.util.TreeSet'))(); s.add(2); s.add(1); Java.from(s).join()"));
+		assertThrows(JSException.class, () -> env.evaluateScript("Java.from({a:1})"));
+		assertThrows(JSException.class, () -> env.evaluateScript("Java.from(null)"));
+		// Array types: Java.type() and new
+		assertEquals("3,int[]", env.evaluateScript("var a=new (Java.type('int[]'))(3); [a.length, a.$getClass().getSimpleName()].join()"));
+		assertEquals("[[Ljava.lang.String;", env.evaluateScript("Java.to([], 'java.lang.String[][]').$getClass().getName()"));
+	}
+
 	// setInterval without a delay, or with 0, repeats until cleared
 	public void testIntervalWithoutDelayRepeats() {
 		JSEnvironment env = JavaScriptEnvironment.newBuilder().registerLibrary(new HostLibrary()).build();

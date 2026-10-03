@@ -476,7 +476,7 @@ public class ClassMetadata {
 	 * the numeric primitive wrappers, {@link BigInteger} and {@link BigDecimal}. Any other
 	 * {@link Number} subclass (e.g. AtomicInteger) only takes an instance of itself.
 	 */
-	protected static boolean isNumericTarget(Class<?> c) {
+	public static boolean isNumericTarget(Class<?> c) {
 		return c == Integer.class || c == Long.class || c == Double.class || c == Float.class
 				|| c == Short.class || c == Byte.class || c == BigInteger.class || c == BigDecimal.class;
 	}
