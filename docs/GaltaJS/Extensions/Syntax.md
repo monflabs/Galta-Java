@@ -104,6 +104,11 @@ assertEquals(1, JavaScriptEnvironment.create().evaluateScript("sloppy = 1; slopp
 
 Calling `strictMode(true)` directly also sets `mustDeclareAllVariables` and clears `deprecatedApis` (`escape`/`unescape`); `enableGaltaJSExtensions()` turns `deprecatedApis` back on.
 
+The flag gives strict-mode semantics: no `with`, `this` is `undefined` in a plain function call, writing to a frozen object throws, `delete` of a variable is an error. A few early errors are only raised by a real `"use strict"` directive, though:
+
+- A number with a leading `0` (`01234`) reads as a decimal number, `1234`, instead of the legacy octal `668` of sloppy JavaScript. With `"use strict"`, it is a `SyntaxError`, as in JavaScript.
+- Duplicate parameter names (`function f(a, a)`) and declaring a variable named `eval` or `arguments` are accepted.
+
 ## Other details
 
 - A `#!` shebang line at the start of a script is skipped.
@@ -112,6 +117,7 @@ Calling `strictMode(true)` directly also sets `mustDeclareAllVariables` and clea
 ## Gotchas
 
 - `?:` is not `??`: `0 ?: 1` is `1`.
+- With `strictMode`, `010` is `10`, while a plain `JavaScriptEnvironment` reads it as octal `8`.
 - `return` at the top level is a parse error without `supportReturnOutsideFunction`.
 - `global` only exists with `supportGlobalAlias`; `globalThis` always does.
 - `@` requires `supportIdentifierAtSign`; a filter can still use a named function or arrow without it.
