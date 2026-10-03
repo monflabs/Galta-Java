@@ -90,6 +90,102 @@ public class LibraryRegressionJavaTest extends __BaseTestCase {
 		assertEquals("function", javaEnv(new JavaLibrary()).evaluateScript("typeof Java.type('java.lang.Math').abs"));
 	}
 
+	public static class Interop {
+		public static String obj(Object o) {
+			return o==null ? "null" : o instanceof org.monflabs.galtajs.rt.builtins.Callable ? "function" : o.getClass().getSimpleName();
+		}
+		public static String list(List<?> l) {
+			return "List";
+		}
+		public static String fn(List<?> l) {
+			return "List";
+		}
+		public static String fn(Runnable r) {
+			return "Runnable";
+		}
+		public static String task(Runnable r) {
+			return "Runnable";
+		}
+		public static String task(java.util.concurrent.Callable<?> c) throws Exception {
+			return "Callable " + c.call();
+		}
+		public static String str(String s) {
+			return "String " + s;
+		}
+		public static String box(int i) {
+			return "int";
+		}
+		public static String box(Integer i) {
+			return "Integer " + i;
+		}
+		public static String ch(char c) {
+			return "char";
+		}
+		public static String ch(Object o) {
+			return "Object";
+		}
+		public static String type(java.lang.reflect.Type t) {
+			return t.getTypeName();
+		}
+		public static int applyAsInt(java.util.function.ToIntFunction<String> f) {
+			return f.applyAsInt("x");
+		}
+	}
+	private static final String INTEROP = "var I=Java.type('" + Interop.class.getName() + "');";
+
+	// Mixed int/double arguments: every overload of Math.max() used to be an ambiguity
+	public void testJavaMixedNumericOverloads() {
+		JSEnvironment env = javaEnv(new JavaLibrary());
+		assertEquals(2.5, env.evaluateScript("Java.type('java.lang.Math').max(1, 2.5)"));
+		assertEquals(2.5, env.evaluateScript("Java.type('java.lang.Math').max(2.5, 1)"));
+		assertEquals(5.5, env.evaluateScript("Java.type('java.lang.Math').clamp(5.5, 1, 10)"));
+		assertEquals(3, (Object) env.evaluateScript("Java.type('java.lang.Math').max(1, 3)"));
+	}
+
+	// A function is passed as is to a parameter it is an instance of, and only adapted
+	// to a functional interface
+	public void testJavaFunctionArguments() {
+		JSEnvironment env = javaEnv(new JavaLibrary());
+		// It used to fail: "ScriptFunction must match an interface"
+		assertEquals("function", env.evaluateScript(INTEROP + "I.obj(function(){})"));
+		assertEquals(Boolean.TRUE, env.evaluateScript("var f=()=>1; Java.type('java.util.Objects').requireNonNull(f)===f"));
+		// List is not a functional interface: it used to get a proxy
+		assertThrows(JSException.class, () -> env.evaluateScript(INTEROP + "I.list(function(){})"));
+		assertEquals("Runnable", env.evaluateScript(INTEROP + "I.fn(function(){})"));
+		// Runnable/Callable: the one returning a value wins, as a function always returns one
+		assertEquals("Callable 7", env.evaluateScript(INTEROP + "I.task(function(){ return 7 })"));
+		assertEquals(1, (Object) env.evaluateScript(
+				"var ex=Java.type('java.util.concurrent.Executors').newSingleThreadExecutor();"
+				+ "try { ex.submit(function(){ return 1 }).get() } finally { ex.shutdown() }"));
+		// The result is converted to the primitive type the interface method returns
+		assertEquals(1, (Object) env.evaluateScript(INTEROP + "I.applyAsInt(s => 1.5)"));
+	}
+
+	// undefined reaches Java as null
+	public void testJavaUndefinedArgument() {
+		JSEnvironment env = javaEnv(new JavaLibrary());
+		assertEquals("String null", env.evaluateScript(INTEROP + "I.str(undefined)"));
+		assertEquals("null", env.evaluateScript(INTEROP + "I.obj(undefined)"));
+		assertEquals("Integer null", env.evaluateScript(INTEROP + "I.box(undefined)"));
+		assertEquals("Integer null", env.evaluateScript(INTEROP + "(function(x){ return I.box(x) })()"));
+	}
+
+	// Overload ranking specific to the script values
+	public void testJavaOverloadRanking() {
+		JSEnvironment env = javaEnv(new JavaLibrary());
+		// f(int) and f(Integer): the primitive one, whatever the reflection order
+		assertEquals("int", env.evaluateScript(INTEROP + "I.box(1)"));
+		// A one-character string goes where a longer one goes
+		assertEquals("Object", env.evaluateScript(INTEROP + "I.ch('a')"));
+		assertEquals("Object", env.evaluateScript(INTEROP + "I.ch('ab')"));
+		// A Java class is passed as its Class to a parameter a Class is assignable to
+		assertEquals(Interop.class.getName(), env.evaluateScript(INTEROP + "I.type(I)"));
+		// A method wins over the property of the same name derived from a getter
+		// (shutdown() over isShutdown()), which couldn't be called at all
+		assertEquals(Boolean.TRUE, env.evaluateScript(
+				"var ex=Java.type('java.util.concurrent.Executors').newSingleThreadExecutor(); ex.shutdown(); ex.isShutdown()"));
+	}
+
 	// setInterval without a delay, or with 0, repeats until cleared
 	public void testIntervalWithoutDelayRepeats() {
 		JSEnvironment env = JavaScriptEnvironment.newBuilder().registerLibrary(new HostLibrary()).build();

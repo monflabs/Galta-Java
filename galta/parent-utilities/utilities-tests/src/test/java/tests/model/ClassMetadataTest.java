@@ -109,6 +109,96 @@ public class ClassMetadataTest extends ProjectTestCase {
 		}
 	}
 
+	public static class Resolution {
+		public String max(int a, int b) {
+			return "int";
+		}
+		public String max(long a, long b) {
+			return "long";
+		}
+		public String max(double a, double b) {
+			return "double";
+		}
+		public String clamp(long v, int min, int max) {
+			return "long,int,int";
+		}
+		public String clamp(double v, double min, double max) {
+			return "double";
+		}
+		public String q(java.io.Serializable a, String b) {
+			return "Serializable,String";
+		}
+		public String q(Comparable<?> a, Object b) {
+			return "Comparable,Object";
+		}
+		public String cyc(List<?> a, java.util.Collection<?> b, java.util.RandomAccess c) {
+			return "A";
+		}
+		public String cyc(java.util.Collection<?> a, java.util.RandomAccess b, List<?> c) {
+			return "B";
+		}
+		public String cyc(java.util.RandomAccess a, List<?> b, java.util.Collection<?> c) {
+			return "C";
+		}
+		public String atomic(java.util.concurrent.atomic.AtomicInteger a) {
+			return "AtomicInteger";
+		}
+		public String atomic2(int a) {
+			return "int";
+		}
+		public String atomic2(java.util.concurrent.atomic.AtomicLong a) {
+			return "AtomicLong";
+		}
+		public String c1(char c) {
+			return "char";
+		}
+		public String c1(Object o) {
+			return "Object";
+		}
+		public String c2(char c) {
+			return "char";
+		}
+		public String c2(CharSequence s) {
+			return "CharSequence";
+		}
+		public String c3(char a, char b) {
+			return "char,char";
+		}
+		public String c3(CharSequence a, CharSequence b) {
+			return "CharSequence,CharSequence";
+		}
+		public String w1(int i) {
+			return "int";
+		}
+		public String w1(Integer i) {
+			return "Integer";
+		}
+		public String w2(Long i) {
+			return "Long";
+		}
+		public String w2(long i) {
+			return "long";
+		}
+	}
+	public interface Api {
+		String run(String s);
+		String run(Object o);
+	}
+	// A non-public implementation with an extra public overload no public type declares
+	static class HiddenApi implements Api {
+		@Override
+		public String run(String s) {
+			return "String";
+		}
+		@Override
+		public String run(Object o) {
+			return "Object";
+		}
+		public String run(Integer i) {
+			return "Integer";
+		}
+	}
+
 	private PojoAccessor accessor() {
 		PojoAccessor a = new PojoAccessor();
 		a.setUseExceptions(true);
@@ -347,6 +437,63 @@ public class ClassMetadataTest extends ProjectTestCase {
 		assertEquals("varargs 2", accessor().call(new Widening(), "fixed", new Object[] {"x", "y"}));
 		// A null can't be an int
 		assertThrows(ModelException.class, () -> accessor().call(new Widening(), "total", new Object[] {1, null}));
+	}
+
+	public void testMixedNumericArguments() throws Exception {
+		// max(1, 2.5): int is more specific for the first argument, double for the second -
+		// it used to be an ambiguity. The signature both arguments widen to wins
+		assertEquals("double", accessor().call(new Resolution(), "max", new Object[] {1, 2.5}));
+		assertEquals("double", accessor().call(new Resolution(), "max", new Object[] {2.5, 1}));
+		assertEquals("long", accessor().call(new Resolution(), "max", new Object[] {1, 2L}));
+		assertEquals("int", accessor().call(new Resolution(), "max", new Object[] {1, 2}));
+		assertEquals("double", accessor().call(new Resolution(), "clamp", new Object[] {5.5, 1, 10}));
+		assertEquals("long,int,int", accessor().call(new Resolution(), "clamp", new Object[] {5L, 1, 10}));
+	}
+
+	public void testIncomparableSignatures() throws Exception {
+		// Serializable and Comparable are unrelated: neither signature is more specific, as in
+		// Java. The String of the second position used to decide alone
+		ModelException e = assertThrows(ModelException.class, () -> accessor().call(new Resolution(), "q", new Object[] {"x", "y"}));
+		assertTrue(e.getMessage(), e.getMessage().startsWith("Ambiguity between q("));
+		// Every candidate beaten by another one used to throw an IndexOutOfBoundsException
+		e = assertThrows(ModelException.class, () -> accessor().call(new Resolution(), "cyc", new Object[] {new java.util.ArrayList<>(), new java.util.ArrayList<>(), new java.util.ArrayList<>()}));
+		assertTrue(e.getMessage(), e.getMessage().startsWith("Ambiguity between cyc("));
+	}
+
+	public void testNumberSubclassesAreNotConversionTargets() throws Exception {
+		// An Integer used to be accepted for an AtomicInteger, and the invocation failed
+		ModelException e = assertThrows(ModelException.class, () -> accessor().call(new Resolution(), "atomic", new Object[] {1}));
+		assertTrue(e.getMessage(), e.getMessage().startsWith("Cannot find public method atomic("));
+		assertEquals("AtomicInteger", accessor().call(new Resolution(), "atomic", new Object[] {new java.util.concurrent.atomic.AtomicInteger()}));
+		// And made int/AtomicLong an ambiguity for a Double
+		assertEquals("int", accessor().call(new Resolution(), "atomic2", new Object[] {1.5}));
+	}
+
+	public void testStringPrefersStringParametersOverChar() throws Exception {
+		// A one-character String goes to the parameter taking it as is, like a longer one
+		assertEquals("Object", accessor().call(new Resolution(), "c1", new Object[] {"a"}));
+		assertEquals("Object", accessor().call(new Resolution(), "c1", new Object[] {"ab"}));
+		assertEquals("char", accessor().call(new Resolution(), "c1", new Object[] {'a'}));
+		assertEquals("CharSequence", accessor().call(new Resolution(), "c2", new Object[] {"a"}));
+		assertEquals("CharSequence,CharSequence", accessor().call(new Resolution(), "c3", new Object[] {"a", "b"}));
+		// A char parameter alone still takes a one-character String
+		assertEquals("char a", accessor().call(new Widening(), "h", new Object[] {"a"}));
+	}
+
+	public void testPrimitivePreferredOverWrapper() throws Exception {
+		// f(int) and f(Integer) both match an Integer exactly: the reflection order decided
+		assertEquals("int", accessor().call(new Resolution(), "w1", new Object[] {1}));
+		assertEquals("long", accessor().call(new Resolution(), "w2", new Object[] {1L}));
+		assertEquals("int", accessor().call(new Resolution(), "w1", new Object[] {1.5}));
+		assertEquals("Integer", accessor().call(new Resolution(), "w1", new Object[] {null}));
+	}
+
+	public void testPublicOverloadsOfNonPublicClass() throws Exception {
+		// The extra run(Integer) of the implementation is not part of its public API
+		Api api = new HiddenApi();
+		assertEquals("Object", accessor().call(api, "run", new Object[] {1}));
+		assertEquals("String", accessor().call(api, "run", new Object[] {"s"}));
+		assertEquals("String", accessor().call(api, "run", new Object[] {null}));
 	}
 
 	public void testMissingNamesNotCached() throws Exception {

@@ -163,6 +163,15 @@ First public release: Galta is published to Maven Central under the
   (`methodBudget` transpiler option). Transpiling is also much faster on large
   sources (4 s instead of 4 minutes for TypeScript), and unchanged generated
   files are not rewritten.
+- Java interop: overload resolution fixes. `Math.max(1, 2.5)`, `Math.clamp()`
+  and other mixed int/double calls are no longer ambiguous; a function can be
+  passed to an `Object` parameter, is only adapted to functional interfaces,
+  and prefers `Callable` over `Runnable` (`executor.submit(fn)`); `undefined`
+  reaches Java as `null`; `f(char)`/`f(Object)` calls `f(Object)` for `'a'`;
+  `f(int)` wins over `f(Integer)`; a number is no longer accepted for an
+  `AtomicInteger`; unrelated parameter types are an ambiguity, as in Java; a
+  method wins over a getter property of the same name (`shutdown()` next to
+  `isShutdown()`). Member access and calls are 20-40% faster.
 - `JSON.rawJSON` uses the strict parser, `JSON.parse` errors give the position,
   a too deeply nested `JSON.stringify` throws a `RangeError`, and non-ASCII
   characters are written as they are.

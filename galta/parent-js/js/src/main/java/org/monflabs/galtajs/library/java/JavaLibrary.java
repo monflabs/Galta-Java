@@ -71,7 +71,7 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			}
 			@Override
 			public Object call(Object _this, Object[] parameters) {
-				Object result = call( (v,c) -> JavaLibrary.this.convertObject(v, c), _this instanceof JavaClass, _this, parameters);
+				Object result = call( (v,c) -> JavaLibrary.this.convertObject(v, c), _this instanceof JavaClass, _this, undefinedToNull(parameters));
 				return checkClassAccess(result);
 			}
 		}
@@ -83,6 +83,19 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			return new JSMethodCache(method);
 		}
 		// The library's options narrow what a script sees of a Java object
+		// A method of that very name wins over a property derived from a getter (shutdown()
+		// over isShutdown()): a script couldn't call it at all otherwise, while the property
+		// stays readable through its getter
+		@Override
+		protected MemberCache findMembers(Class<?> clazz, String name) {
+			MemberCache m = super.findMembers(clazz, name);
+			for (MemberCache c = m; c != null; c = c.getNextMember()) {
+				if (c instanceof MethodCache) {
+					return c;
+				}
+			}
+			return m;
+		}
 		@Override
 		protected FieldCache findField(Class<?> clazz, String name) {
 			return useFields ? super.findField(clazz, name) : null;
@@ -111,11 +124,10 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 				return ASSIGNABLE.POSSIBLE;
 			}
 			
-			if(c1==Class.class) {
-				if(p2 instanceof JavaClass || p2.getClass()==Class.class) {
-					return ASSIGNABLE.EXACT;
-				}
-				return ASSIGNABLE.NO;
+			// A JavaClass is passed as its Class: to a Class parameter, or to one a Class is
+			// assignable to (Type, Object...)
+			if(p2 instanceof JavaClass) {
+				return c1==Class.class ? ASSIGNABLE.EXACT : c1.isAssignableFrom(Class.class) ? ASSIGNABLE.POSSIBLE : ASSIGNABLE.NO;
 			}
 			
 			Class<?> c2 = p2.getClass();
@@ -135,17 +147,33 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 				return ((String)p2).length() == 1 ? ASSIGNABLE.POSSIBLE : ASSIGNABLE.NO;
 			}
 			// Numbers can be converted
-			if (Number.class.isAssignableFrom(c1) && Number.class.isAssignableFrom(c2)) {
+			if (isNumericTarget(c1) && Number.class.isAssignableFrom(c2)) {
 				return ASSIGNABLE.POSSIBLE;
 			}
-			// If the parameter is a ScriptFuntion, then we assume it can be adapted to any interface
-			if (BuiltinFunction.class.isAssignableFrom(c2)) {
-				if(c1.isInterface()) {
-					return ASSIGNABLE.POSSIBLE;
-				}
+			// A function is adapted to a functional interface (a single abstract method)
+			if (BuiltinFunction.class.isAssignableFrom(c2) && functionalMethod(c1)!=null) {
+				return ASSIGNABLE.POSSIBLE;
 			}
 			// Ok, not compatible
 			return ASSIGNABLE.NO;
+		}
+		// A function passed to two unrelated functional interfaces (Runnable/Callable,
+		// ExecutorService.submit()): the one whose method returns a value is preferred, as a
+		// function always returns one
+		@Override
+		protected int compareUnrelated(Class<?> c1, Class<?> c2, Object arg) {
+			if (arg instanceof BuiltinFunction) {
+				Method m1 = functionalMethod(c1);
+				Method m2 = functionalMethod(c2);
+				if (m1!=null && m2!=null) {
+					boolean v1 = m1.getReturnType()!=Void.TYPE;
+					boolean v2 = m2.getReturnType()!=Void.TYPE;
+					if (v1!=v2) {
+						return v1 ? 1 : -1;
+					}
+				}
+			}
+			return 0;
 		}
 
 	}
@@ -260,7 +288,7 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			return new JavaArrayAccessor(env);
 		}
 
-		return new JavaAccessor(env);
+		return new JavaAccessor(env, clazz);
 	}
 	
 	
@@ -361,6 +389,7 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			// Find and call the proper ctor
 			// Find the best constructor using 2 passes
 			ConstructorCache cache = getClassInfoCache().getConstructors();
+			parameters = undefinedToNull(parameters);
 			ConstructorCache m = cache!=null ? (ConstructorCache) cache.findCallable(true, parameters, true) : null;
 			if (m != null) {
 				// Convert the arguments into a copy (varargs collected into an array): the
@@ -520,6 +549,57 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 	// Java Proxy
 	/////////////////////////////////////////////////////////////////////////////////////
 
+	// The single abstract method of a functional interface, or null for a class or another
+	// interface. The abstract methods redeclaring a public method of Object don't count
+	// (Comparator.equals()), and the overloads of a single name count as one (a generic
+	// method redeclared with a more specific signature).
+	private static final ClassValue<Method[]> FUNCTIONAL_METHOD = new ClassValue<>() {
+		@Override
+		protected Method[] computeValue(Class<?> c) {
+			Method found = null;
+			if (c.isInterface()) {
+				for (Method m : c.getMethods()) {
+					if (!java.lang.reflect.Modifier.isAbstract(m.getModifiers()) || isObjectMethod(m)) {
+						continue;
+					}
+					if (found!=null && !found.getName().equals(m.getName())) {
+						return new Method[] { null };
+					}
+					if (found==null || found.getReturnType()==Void.TYPE) {
+						found = m;
+					}
+				}
+			}
+			return new Method[] { found };
+		}
+	};
+	private static boolean isObjectMethod(Method m) {
+		try {
+			return java.lang.reflect.Modifier.isPublic(Object.class.getMethod(m.getName(), m.getParameterTypes()).getModifiers());
+		} catch (NoSuchMethodException e) {
+			return false;
+		}
+	}
+	static Method functionalMethod(Class<?> c) {
+		return FUNCTIONAL_METHOD.get(c)[0];
+	}
+
+	// undefined reaches Java as null: a copy of the arguments when any is undefined
+	private static Object[] undefinedToNull(Object[] args) {
+		Object[] r = args;
+		if (args!=null) {
+			for (int i = 0; i < args.length; i++) {
+				if (args[i]==RuntimeUtil.UNDEFINED) {
+					if (r==args) {
+						r = args.clone();
+					}
+					r[i] = null;
+				}
+			}
+		}
+		return r;
+	}
+
 	public Object getProxy(Callable function, Class<?> targetClass) {
 		AccessManager accessManager = getAccessManager(); 
 		if(accessManager!=null && !accessManager.canProxy(targetClass)) {
@@ -563,9 +643,13 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 			if (method.isDefault()) {
 				return InvocationHandler.invokeDefault(proxy, method, args);
 			}
-			// How to make sure that this is the only method to override
-			// (check that it is a FunctionalInterface?)
-			return function.call(null, args!=null ? args : RuntimeUtil.EMPTY_PARAMS);
+			Object result = function.call(null, args!=null ? args : RuntimeUtil.EMPTY_PARAMS);
+			Class<?> type = method.getReturnType();
+			if (type==Void.TYPE || result==RuntimeUtil.UNDEFINED) {
+				return null;
+			}
+			// A JS number to the numeric type the method returns (an int for a Comparator)
+			return ClassMetadata.convertObject(result, type);
 		}
 	}
 	
@@ -720,8 +804,29 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 	
 	public class JavaAccessor extends JavaLibraryAccessor {
 
+		// The class this accessor was created for (JSEnvironment keeps one accessor per
+		// class) and its metadata, found once instead of on every member access
+		private final Class<?> accessorClass;
+		private volatile ClassInfoCache accessorClassInfo;
+
 		public JavaAccessor(JSEnvironment env) {
+			this(env, null);
+		}
+		public JavaAccessor(JSEnvironment env, Class<?> clazz) {
 			super(env);
+			this.accessorClass = clazz;
+		}
+
+		// The metadata of a class, without a lookup for this accessor's own class
+		private ClassInfoCache classInfo(Class<?> clazz) {
+			if(clazz==accessorClass) {
+				ClassInfoCache ci = accessorClassInfo;
+				if(ci==null) {
+					accessorClassInfo = ci = classMetadata.getClassInfoCache(clazz);
+				}
+				return ci;
+			}
+			return classMetadata.getClassInfoCache(clazz);
 		}
 		
 		@Override
@@ -733,7 +838,7 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 		// TODO: FOR NOW
 		@Override
 		public PropertyDescriptor getOwnPropertyDescriptor(Object _this, String member) {
-			MemberCache m = classMetadata.getClassInfoCache(_this.getClass()).getMembers(member);
+			MemberCache m = classInfo(_this.getClass()).getMembers(member);
 			if (m != null) {
 				if (m instanceof MethodCache) {
 					return PropertyDescriptor.DESC_JAVA_METHOD;
@@ -756,7 +861,7 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 							v-> newEntry(Integer.toString(v),l.get(v)));
 				}
 				// Should we simplify this as we don't need a 'map' anymore?
-				ClassInfoCache ci =  classMetadata.getClassInfoCache(_this.getClass());
+				ClassInfoCache ci =  classInfo(_this.getClass());
 				boolean instanceReceiver = !(_this instanceof JavaClass);
 				Iterator m = (new ObjectWrapper() {
 					@Override
@@ -800,7 +905,7 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 				member = member.substring(1);
 			}
 			Class<?> clazz = _this instanceof JavaClass jc ? jc.getNativeClass() : _this.getClass();
-			MemberCache m = classMetadata.getClassInfoCache(clazz).getMembers(member);
+			MemberCache m = classInfo(clazz).getMembers(member);
 			if (m != null) {
 				if (m instanceof ValueAccessor acc) {
 					return checkClassAccess(acc.get(_this));
@@ -832,7 +937,7 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 				return true;
 			}
 
-			MemberCache m = classMetadata.getClassInfoCache(_this.getClass()).getMembers(member);
+			MemberCache m = classInfo(_this.getClass()).getMembers(member);
 			if (m != null) {
 				if (m instanceof ValueAccessor) {
 					ValueAccessor acc = (ValueAccessor) m;
@@ -974,10 +1079,15 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 	
 
 	private final Object convertObject(Object value, Class<?> targetClass) {
+		if(value==RuntimeUtil.UNDEFINED) {
+			return null;
+		}
 		if(value instanceof JavaClass jc) {
 			return jc.getNativeClass();
 		}
-		if(value instanceof Callable function) {
+		// A function is proxied to the interface it is passed to - and passed as is to a
+		// parameter it already is an instance of (Object...)
+		if(value instanceof Callable function && targetClass!=null && targetClass.isInterface() && !targetClass.isInstance(value)) {
 			return getProxy(function, targetClass);
 		}
 		return ClassMetadata.convertObject(value, targetClass);

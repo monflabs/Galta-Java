@@ -23,7 +23,20 @@ const p = new Person('Ann', 30);
 
 ## Properties, methods and overloads
 
-Bean properties are exposed as JavaScript properties: `p.name` calls `getName()`, `p.name = 'x'` calls `setName()`. Public fields are accessible as well. Method overloads are resolved from the runtime argument types with these rules (`JavaLibrary.JavaClassMetadata.isAssignable`): an exact class match is preferred; `null` matches any non-primitive parameter (never exactly, so two unrelated reference overloads are an ambiguity); any `Number` can convert to any numeric parameter, the narrowest one reached by widening ranking first (as in Java); a one-character string can be passed as a `char`, and a `Character` as a `String`; a JavaScript function is acceptable for any interface parameter. Bridge methods are ignored, and a varargs method is called with its trailing arguments collected into an array when no overload matches the argument count (see [Reflection](/Utilities/Reflection)).
+Bean properties are exposed as JavaScript properties: `p.name` calls `getName()`, `p.name = 'x'` calls `setName()`. Public fields are accessible as well. A method of the same name wins over a property: `executor.shutdown` is the `shutdown()` method, and `isShutdown()` still reads the property.
+
+Method overloads are resolved from the runtime argument types (`JavaLibrary.JavaClassMetadata.isAssignable`, then the most specific overload, see [Reflection](/Utilities/Reflection)):
+
+- An exact class match is preferred, and `f(int)` over `f(Integer)`.
+- `null` and `undefined` match any non-primitive parameter, never exactly, so two unrelated reference overloads are an ambiguity. `undefined` reaches Java as `null`.
+- A number converts to any numeric parameter (primitive, wrapper, `BigInteger`, `BigDecimal`). The narrowest one reached by widening ranks first, as in Java. When the arguments disagree, the overload they all widen to wins, so `Math.max(1, 2.5)` calls `max(double,double)`.
+- A conversion may lose precision: with `f(Object)` and `f(int)`, `3.7` calls `f(int)` with `3`.
+- A one-character string can be passed as a `char`, but a parameter that takes the string as is ranks first: `f(char)`/`f(Object)` calls `f(Object)` for `'a'` as for `'ab'`. A `Character` can be passed as a `String`.
+- A JavaScript function is adapted to a functional interface (a single abstract method), and passed as is to a parameter it is already an instance of, such as `Object`. Between two functional interfaces, the one whose method returns a value wins, as a function always returns one: `executor.submit(fn)` calls `submit(Callable)`. The function's result is converted to the method's return type, and `undefined` returns `null`.
+- A `Java.type()` class is passed as its `java.lang.Class`, to a `Class` parameter or any type a `Class` is assignable to (`Type`, `Object`).
+- Two parameters of unrelated types make the overloads incomparable, as in Java. A call that has no single most specific overload throws an error "Ambiguity between ...".
+
+Bridge methods are ignored, and a varargs method is called with its trailing arguments collected into an array when no overload matches the argument count. On an instance of a non-public class, the overloads its public types declare are used.
 
 Sample: `doc_examples/JavaInteropExamples.java` (`testBeanPropertiesAndOverloads`)
 
@@ -53,7 +66,7 @@ Static members are only available on the class object returned by `Java.type()`,
 
 ## Functions as functional interfaces
 
-When a Java method takes an interface, a JavaScript function is wrapped in a dynamic proxy (`JavaLibrary.getProxy`). Any single-method interface works: `Runnable`, `Function`, `Comparator`, listeners.
+When a Java method takes an interface, a JavaScript function is wrapped in a dynamic proxy (`JavaLibrary.getProxy`). Any functional interface (a single abstract method) works: `Runnable`, `Function`, `Comparator`, listeners. Another interface, such as `List`, doesn't take a function.
 
 Sample: `doc_examples/JavaInteropExamples.java` (`testFunctionsAsFunctionalInterfaces`)
 
@@ -175,7 +188,8 @@ r
 
 - `Java.type()` needs the fully qualified name; nested classes use `$`.
 - A `java.util.List` is array-like but `Array.isArray()` returns `false`; build a `JSArray` when a script needs a real array.
-- Number arguments convert between numeric types, so `Math.abs(-3)` picks the `int` overload and `Math.abs(-3.5)` the `double` one; ambiguous calls resolve to the first acceptable overload.
+- Number arguments convert between numeric types, so `Math.abs(-3)` picks the `int` overload and `Math.abs(-3.5)` the `double` one. A call with no single most specific overload throws, for example a number for `f(long)`/`f(BigDecimal)`; cast the argument (`Java.type('long')(n)`) to choose.
+- Strings are not converted to numbers or the reverse, and a JavaScript array is not converted to a Java array: build one with `new Int[n]` where `Int = Java.type('int')`.
 - `Java` itself is not available in `JavaScriptEnvironment`.
 
 ## Source

@@ -284,6 +284,7 @@ public class ClassMetadata {
 		int argsLength = args.length;
 		List<CallableCache> candidates = null;
 		List<Class<?>[]> candidateClasses = null;
+		CallableCache exactMatch = null;
 		loop: for (CallableCache m = cache; m != null; m = m.nextCallable) {
 			if (staticMethod!=null && (staticMethod != m.isStatic())) {
 				continue;
@@ -314,9 +315,13 @@ public class ClassMetadata {
 				}
 			}
 
-			// If it matches precisely, then we're good
+			// If it matches precisely, then we're good. f(int) and f(Integer) both match an
+			// Integer exactly: the primitive one is taken, whatever the reflection order
 			if (exact==ASSIGNABLE.EXACT) {
-				return m;
+				if (exactMatch == null || primitiveCount(m) > primitiveCount(exactMatch)) {
+					exactMatch = m;
+				}
+				continue;
 			}
 			if (candidates == null) {
 				candidates = new ArrayList<>();
@@ -324,6 +329,10 @@ public class ClassMetadata {
 			}
 			candidates.add(m);
 			candidateClasses.add(argClasses);
+		}
+
+		if (exactMatch != null) {
+			return exactMatch;
 		}
 
 		// Variable arity: only when no overload applies with its fixed arity
@@ -384,22 +393,45 @@ public class ClassMetadata {
 					break;
 				}
 			}
-			// The same signature can be listed twice (e.g. a covariant bridge method): keep one
-			final Class<?>[] mClasses = candidateClasses.get(i);
-			final List<Class<?>[]> allClasses = candidateClasses;
-			if (maximal && best.stream().noneMatch(b -> java.util.Arrays.equals(allClasses.get(b), mClasses))) {
+			if (!maximal) {
+				continue;
+			}
+			// The same signature can be listed twice (e.g. a covariant bridge method, or
+			// f(int) and f(Integer) as the parameter classes are boxed): keep one, the one
+			// with the most primitive parameters
+			int same = -1;
+			for (int b = 0; b < best.size(); b++) {
+				if (java.util.Arrays.equals(candidateClasses.get(best.get(b)), candidateClasses.get(i))) {
+					same = b;
+					break;
+				}
+			}
+			if (same < 0) {
 				best.add(i);
+			} else if (primitiveCount(candidates.get(i)) > primitiveCount(candidates.get(best.get(same)))) {
+				best.set(same, i);
 			}
 		}
-		if (best.size() > 1) {
-			CallableCache b0 = candidates.get(best.get(0));
-			CallableCache b1 = candidates.get(best.get(1));
+		// No maximal candidate at all (each one is beaten by another) is an ambiguity too
+		if (best.size() != 1) {
+			CallableCache b0 = candidates.get(best.size() > 1 ? best.get(0) : 0);
+			CallableCache b1 = candidates.get(best.size() > 1 ? best.get(1) : 1);
 			throw new ModelException(null, "Ambiguity between {0}{1} and {0}{2}", b0.getName(),
 					methodSignature(b0.argClasses),methodSignature(b1.argClasses));
 		}
 		return candidates.get(best.get(0));
 	}
 
+
+	private static int primitiveCount(CallableCache m) {
+		int n = 0;
+		for (boolean p : m.primitiveArgs) {
+			if (p) {
+				n++;
+			}
+		}
+		return n;
+	}
 
 	// Should we create 3 states of assignable?
 	//    NO, POSSIBLE, EXACT
@@ -432,11 +464,21 @@ public class ClassMetadata {
 			return ((String)p2).length() == 1 ? ASSIGNABLE.POSSIBLE : ASSIGNABLE.NO;
 		}
 		// Numbers can be converted
-		if (Number.class.isAssignableFrom(c1) && Number.class.isAssignableFrom(c2)) {
+		if (isNumericTarget(c1) && Number.class.isAssignableFrom(c2)) {
 			return ASSIGNABLE.POSSIBLE;
 		}
 		// Ok, not compatible
 		return ASSIGNABLE.NO;
+	}
+
+	/**
+	 * Whether a number of another class can be converted to this (boxed) parameter class:
+	 * the numeric primitive wrappers, {@link BigInteger} and {@link BigDecimal}. Any other
+	 * {@link Number} subclass (e.g. AtomicInteger) only takes an instance of itself.
+	 */
+	protected static boolean isNumericTarget(Class<?> c) {
+		return c == Integer.class || c == Long.class || c == Double.class || c == Float.class
+				|| c == Short.class || c == Byte.class || c == BigInteger.class || c == BigDecimal.class;
 	}
 
 	private static String methodSignature(Class<?>[] c) {
@@ -460,27 +502,39 @@ public class ClassMetadata {
 	// handled by the first method could be passed on to the other one without a
 	// compile-time type error."
 	// This method returns 3 values:
-	// 0: incompatible. This leads to an error
+	// 0: neither is more specific (an ambiguity when both are maximal)
 	// 1: a1 is more specific than a2
 	// -1: a2 is more specific than a1
+	// a1 is more specific when each of its parameters is more specific than, or the same as,
+	// the parameter of a2 at the same position. Two parameters of unrelated classes (e.g.
+	// Serializable and Comparable) make the signatures incomparable, as in Java, unless
+	// compareUnrelated() orders them for that argument.
 	// Two numeric primitive (wrapper) parameters are ordered by the Java primitive widening
 	// conversions (byte < short < int < long < float < double, char < int): the
 	// narrower one is more specific, as long as the argument reaches it by widening
 	// (a Short argument picks g(int) over g(long), a Long argument g(double) over g(int)).
 	// When the argument can't widen to either of them (e.g. a Double for g(int)/g(long)),
 	// the wider one, which loses less, is preferred.
-	private static int compareArguments(Class<?>[] a1, Class<?>[] a2, Object[] args) {
+	// When the positions disagree (max(int,int) is more specific for the first argument of
+	// max(1, 2.5), max(double,double) for the second one), the signature that every
+	// numeric argument reaches by widening wins: max(double,double).
+	// A String argument prefers any parameter that takes it as is (String, CharSequence,
+	// Object...) over a char one: f(char)/f(Object) picks f(Object) for 'a' like for 'ab'.
+	private int compareArguments(Class<?>[] a1, Class<?>[] a2, Object[] args) {
 		int result = 0;
+		boolean conflict = false;
 		int length = a1.length;
 		for (int i = 0; i < length; i++) {
 			Class<?> c1 = a1[i];
 			Class<?> c2 = a2[i];
 			if (c1 != c2) {
-				int r = 0;
+				Object arg = args!=null && i<args.length ? args[i] : null;
+				int r;
 				int w1 = widening(c1);
 				int w2 = widening(c2);
-				if (w1 > 0 && w2 > 0) {
-					Object arg = args!=null && i<args.length ? args[i] : null;
+				if (arg instanceof String && (c1 == Character.class) != (c2 == Character.class)) {
+					r = c1 == Character.class ? -1 : 1;
+				} else if (w1 > 0 && w2 > 0) {
 					int wa = arg!=null ? widening(arg.getClass()) : 0;
 					boolean reach1 = wa > 0 && widensTo(wa, w1);
 					boolean reach2 = wa > 0 && widensTo(wa, w2);
@@ -495,16 +549,48 @@ public class ClassMetadata {
 					r = -1;
 				} else if (c2.isAssignableFrom(c1)) {
 					r = 1;
+				} else {
+					r = compareUnrelated(c1, c2, arg);
 				}
-				if (r != 0) {
-					if (result == -r) {
-						return 0;
-					}
+				if (r == 0) {
+					// Incomparable parameters
+					return 0;
+				}
+				if (result == -r) {
+					conflict = true;
+				} else {
 					result = r;
 				}
 			}
 		}
+		if (conflict) {
+			boolean widens1 = widensAll(a1, args);
+			boolean widens2 = widensAll(a2, args);
+			return widens1 == widens2 ? 0 : widens1 ? 1 : -1;
+		}
 		return result;
+	}
+	/**
+	 * Orders two parameter classes, neither assignable to the other, for an argument
+	 * both accept: 1 when c1 is preferred, -1 when c2 is, 0 when they are incomparable
+	 * (the default).
+	 */
+	protected int compareUnrelated(Class<?> c1, Class<?> c2, Object arg) {
+		return 0;
+	}
+	// Whether every numeric argument reaches its numeric parameter by widening
+	private static boolean widensAll(Class<?>[] params, Object[] args) {
+		for (int i = 0; i < params.length; i++) {
+			int w = widening(params[i]);
+			Object arg = args!=null && i<args.length ? args[i] : null;
+			if (w > 0 && arg instanceof Number) {
+				int wa = widening(arg.getClass());
+				if (wa == 0 || !widensTo(wa, w)) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 	// The numeric primitive wrappers, as bit flags
 	private static final int W_BYTE=1, W_SHORT=2, W_CHAR=4, W_INT=8, W_LONG=16, W_FLOAT=32, W_DOUBLE=64;
@@ -574,6 +660,13 @@ public class ClassMetadata {
 
 	public static abstract class MemberCache {
 		MemberCache nextMember;
+
+		/**
+		 * The next member with the same name, of a lower priority.
+		 */
+		public MemberCache getNextMember() {
+			return nextMember;
+		}
 	}
 
 	// The loaders whose classes are never unloaded: the bootstrap loader (null),
@@ -739,7 +832,9 @@ public class ClassMetadata {
 				}
 				Object[] converted = new Object[args.length];
 				for (int i = 0; i < args.length; i++) {
-					converted[i] = convert.apply(args[i], i < n ? argClasses[i] : null);
+					Object a = args[i];
+					// Already of the (boxed) parameter type: nothing to convert
+					converted[i] = i < n && a != null && a.getClass() == argClasses[i] ? a : convert.apply(a, i < n ? argClasses[i] : null);
 				}
 				return converted;
 			}
@@ -931,6 +1026,13 @@ public class ClassMetadata {
 		return null;
 	}
 	
+	// Whether a public instance method is declared by a public, exported class or interface
+	private static boolean hasPublicDeclaration(Method method) {
+		Class<?> c = method.getDeclaringClass();
+		return isAccessibleClass(c) || (!Modifier.isStatic(method.getModifiers())
+				&& findPublicMethod(c, method.getName(), method.getParameterTypes(), new HashSet<>()) != null);
+	}
+
 	public class MethodCache extends CallableCache {
 		Method method;
 		volatile Method publicMethod;
@@ -1561,11 +1663,27 @@ public class ClassMetadata {
 	protected MethodCache findMethod(Class<?> clazz, String name) {
 		MethodCache first = null;
 		Method[] m = clazz.getMethods();
+		// A non-public class (the implementation returned for an interface) exposes the
+		// overloads its public supertypes declare, so that an extra public method of the
+		// implementation doesn't change which overload a call resolves to. When none of
+		// them declares the name, the class' own public methods are exposed as a last resort.
+		boolean publicOnly = false;
+		if (!isAccessibleClass(clazz)) {
+			for (Method method : m) {
+				if (method.getName().equals(name) && hasPublicDeclaration(method)) {
+					publicOnly = true;
+					break;
+				}
+			}
+		}
 		for (int i = 0; i < m.length; i++) {
 			if (!m[i].getName().equals(name)) {
 				continue;
 			}
 			if ((m[i].getModifiers() & Modifier.PUBLIC) == 0) {
+				continue;
+			}
+			if (publicOnly && !hasPublicDeclaration(m[i])) {
 				continue;
 			}
 			// A synthetic bridge method (e.g. compareTo(Object) generated for compareTo(T))
