@@ -70,6 +70,13 @@ public class ASTBreak extends ASTNode {
     
     @Override
 	public void transpileJavaStatement(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b) {
+    	// Leaving a region (a method split out of a large function): its caller
+    	// performs the break - see TranspilerMethodSplitter
+    	int jump = org.monflabs.galtajs.transpiler.context.TranspilerGeneratorRegionContext.findRegionJump(jsContext, this);
+    	if(jump>=0) {
+    		b.println("return org.monflabs.galtajs.rt.transpiler.JSTranspiledRegion.JUMPS[{0}];", Integer.toString(jump));
+    		return;
+    	}
     	if(StringUtil.isEmpty(label)) {
     		b.println("break;");
     	} else {

@@ -105,6 +105,12 @@ public class ASTCase extends ASTNode {
     @Override
 	public void transpileJavaStatement(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b) {
 		b.incIndent();
+		if(jsContext.getMainContext().getWholeListRegion(this)!=null || jsContext.getMainContext().getSplitRegions(this)!=null) {
+			// Statements of a large function moved to regions (see TranspilerMethodSplitter)
+			ASTBlock.transpileBlockStatements(jsContext, b, this, statements);
+			b.decIndent();
+			return;
+		}
 		int count = statements.length;
 		for(int i=0; i<count; i++) {
 			ASTNode node = statements[i];

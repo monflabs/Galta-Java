@@ -43,6 +43,7 @@ public class JSTranspilerOptions {
 		private boolean splitCode;
 		private boolean specializeLoopCounterMath;
 		private boolean debuggable;
+		private int methodBudget = org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.DEFAULT_BUDGET;
 		private Builder() {}
 		public Builder sourceMap(boolean sourceMap) {
 			this.sourceMap = sourceMap;
@@ -103,6 +104,13 @@ public class JSTranspilerOptions {
 			this.debuggable = debuggable;
 			return this;
 		}
+		// The largest size, in AST nodes, of a generated method: a larger function has
+		// some of its statements moved to regions of their own, so that the JIT can
+		// compile its methods (see TranspilerMethodSplitter). 0 disables the splitting.
+		public Builder methodBudget(int methodBudget) {
+			this.methodBudget = methodBudget;
+			return this;
+		}
 		@Override
 		protected JSTranspilerOptions _build() {
 			return new JSTranspilerOptions(this);
@@ -122,6 +130,7 @@ public class JSTranspilerOptions {
 	private boolean commonJS;
 	private boolean specializeLoopCounterMath;
 	private boolean debuggable;
+	private int methodBudget;
 
 	private TranspilerCodeSplitter codeSplitter;
 
@@ -136,6 +145,7 @@ public class JSTranspilerOptions {
 		this.maxSourceInComments = builder.maxSourceInComments;
 		this.specializeLoopCounterMath = builder.specializeLoopCounterMath;
 		this.debuggable = builder.debuggable;
+		this.methodBudget = builder.methodBudget;
 
 		if(builder.splitCode) {
 			this.codeSplitter = new TranspilerCodeSplitter(this);
@@ -171,6 +181,9 @@ public class JSTranspilerOptions {
 	}
 	public boolean isDebuggable() {
 		return debuggable;
+	}
+	public int getMethodBudget() {
+		return methodBudget;
 	}
 	public TranspilerCodeSplitter getCodeSplitter() {
 		return codeSplitter;

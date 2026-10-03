@@ -1840,6 +1840,24 @@ public abstract class ASTFunction extends ASTRootStatementList {
 				? new TranspilerEvalShadowContext(functionContext)
 				: functionContext;
 
+		// A large function: some of its statement lists become regions, so that its
+		// methods stay small enough to be JIT-compiled (see TranspilerMethodSplitter).
+		// Generators and async functions (suspended mid-body), derived constructors
+		// (their returns break to a label) and direct evals are left whole.
+		boolean splittable = functionContext.getOptions().getMethodBudget()>0
+				&& !isGenerator() && !isAsync() && !derivedCtor && !splitForGenerator
+				&& !hasNonStrictDirectEvalInOwnBody() && !hasNonStrictDirectEvalInOwnParams();
+		org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter methodSplitter = splittable ? org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.plan(this, functionContext.getOptions().getMethodBudget()) : null;
+		if(splittable) {
+			functionContext.getMainContext().addMethodSplitter(this, methodSplitter);
+		}
+		if(methodSplitter!=null) {
+			// The closing return below must stay reachable for javac whatever the
+			// regions do
+			b.println("if(true) {");
+			b.incIndent();
+		}
+
 		if(ASTBlock.hasUsingDeclarations(this)) {
 			// A using/await-using declared directly in the function body (no
 			// intervening nested Block) - ASTBlock's own disposal-boundary
@@ -1886,7 +1904,11 @@ public abstract class ASTFunction extends ASTRootStatementList {
 		// silently return undefined). Skip emitting this when the body
 		// already unconditionally exits, or Java's compiler flags it as an
 		// unreachable statement.
-		if(!endsWithUnconditionalExit(statements)) {
+		if(methodSplitter!=null) {
+			b.decIndent();
+			b.println("}");
+		}
+		if(methodSplitter!=null || !endsWithUnconditionalExit(statements)) {
 			if(isClassConstructor()) {
 				b.println("return checkThisBindingOnReturn({0});", JSTranspiler.THIS_VAR);
 			} else {

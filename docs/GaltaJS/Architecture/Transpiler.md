@@ -68,10 +68,21 @@ Java limits a method body and a class constant pool to 64K, which the IIFE build
 
 Four kinds of split exist:
 
-1. **Statement blocks** (`shouldSplitBlock`, `isNodeBlockSplitable`: assignments, calls, function and variable declarations) through `TranspilerGeneratorBlockSplitContext`.
+1. **Statement blocks** of top-level code (`shouldSplitBlock`, `isNodeBlockSplitable`: assignments, calls, function and variable declarations), each run in a `Runnable` through `TranspilerGeneratorBlockSplitContext`. Inside functions, the method regions below replace them.
 2. **Object and array literals** above the thresholds.
-3. **Function classes**: up to 50 functions per container get one class each with the direct-argument fast path; beyond that, a chain of dispatcher classes (`Name_0 extends BuiltinFunctionTranspiler`, `Name_1 extends Name_0`, ...) switches on `index` and loses the fast path (`ASTVarContainer.transpilerDeclareFunctionClasses`).
+3. **Function classes**: up to 50 functions per container get one class each with the direct-argument fast path; beyond that, the functions are spread over a chain of classes (`Name_0 extends BuiltinFunctionTranspiler`, `Name_1 extends Name_0`, ...) of 500 functions each, and lose the direct-argument fast path. Every function object is an instance of the last class, whose `callVoid` routes the function `index` to a `final` dispatch method of at most 200 cases (`callVoid_<class>_<block>`), and whose `isContextElidable()` answers per index from a constant (`ASTVarContainer.transpilerDeclareFunctionClasses`).
 4. **Large `String[]` constants**, split into `X_c0()`, `X_c1()`... static methods merged by `JSTranspiledUnit.mergeStringArrays(...)`. This one is unconditional (not gated by `splitCode`) because it keeps `<clinit>` under the limit.
+
+### Method regions
+
+The JIT never compiles a method larger than 8000 bytes of bytecode, so a large JavaScript function (a lexer's main loop, a big `switch`) would run interpreted forever. `transpiler/context/TranspilerMethodSplitter` keeps the methods of a function under that size, whether or not `splitCode` is set:
+
+- Before a function body is emitted, its AST is weighed: one unit per node, about 15 bytes of bytecode, a nested function counting for little since it is a method of its own. Above the budget (`methodBudget`, 400 units by default), statement lists are chosen to become **regions**: the statements of a block or of a `case`, moved whole, and runs of consecutive statements of a long list. A region's own content is sized the same way.
+- A region is emitted as an anonymous `JSTranspiledRegion` class run at once: its `run()` is a separate method. The JavaScript variables live in `final Object[]` scope arrays, so it captures nothing else. (A lambda would do the same, but javac compiles hundreds of them about twice as slowly.) Generated code calls `jsToString(...)` rather than `toString(...)`, which `Object.toString()` would hide inside an anonymous class.
+- `run()` returns `JSTranspiledRegion.NORMAL` when its statements complete, the value of a JavaScript `return`, or `JUMPS[i]` for a `break`/`continue` that leaves it (`TranspilerGeneratorRegionContext` makes `ASTBreak`/`ASTContinue` emit that). The caller performs the jump or returns the value, so labels, loops, `switch` fall-through and `try`/`finally` keep their meaning across regions.
+- Generators, async functions, derived class constructors and functions with a direct `eval` are left whole, and a block wrapped in a `using` disposal keeps its statements together.
+
+For the TypeScript compiler, this removes all but one of its methods above 8000 bytes, the remaining one being a single statement, and makes it run about 25% faster. The `galtajs.transpiler.methodBudget` system property sets the default budget: running the GaltaJS suite with `-Dgaltajs.transpiler.methodBudget=1` makes every statement list a region, which exercises them all; in the regular build, `EngineRegression3JavaTest` checks their control flow against the interpreter.
 
 ## Compilation and loading
 
@@ -98,7 +109,8 @@ The `org.monflabs.galta:javacompiler` module (`parent-utilities/javacompiler`) p
 | `sourceInCode(boolean)` | Emit each source line as a comment before its statement. |
 | `sourceInComments(boolean)` / `maxSourceInComments(int)` | Numbered source header (default `DEFAULT_SOURCE_INCOMMENTS = 64` lines). |
 | `commonJS(boolean)` | Treat the unit as CommonJS. |
-| `splitCode(boolean)` | Enable the splitting described above (string constants are always split). |
+| `splitCode(boolean)` | Enable the splitting described above (string constants are always split; method regions do not depend on it). |
+| `methodBudget(int)` | The largest size of a generated method, in AST nodes, before statements move to [regions](#method-regions) (default 400; 0 disables them). |
 | `debugInformation(boolean)` | Extra debug metadata. |
 | `mustDeclareVariables(boolean)` | Mirror of the environment flag. |
 | `specializeLoopCounterMath(boolean)` | Experimental, off by default. |

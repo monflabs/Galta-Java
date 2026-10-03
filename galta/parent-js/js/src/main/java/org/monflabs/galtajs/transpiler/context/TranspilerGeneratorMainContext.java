@@ -37,6 +37,11 @@ public class TranspilerGeneratorMainContext extends JSTranspilerGeneratorContext
 
 	private IntList linePositions;
 
+	// The method splitting plan of each function transpiled so far (see
+	// TranspilerMethodSplitter): the functions planned, and their regions
+	private final java.util.Set<ASTNode> plannedFunctions = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+	private final java.util.List<TranspilerMethodSplitter> methodSplitters = new java.util.ArrayList<>();
+
 	public TranspilerGeneratorMainContext(JSTranspiler compiler, String sourceCode, String moduleName) {
 		this.compiler = compiler;
 		this.sourceCode = sourceCode;
@@ -44,6 +49,46 @@ public class TranspilerGeneratorMainContext extends JSTranspilerGeneratorContext
 		this.map = new JSTranspilerMap();
 	}
 	
+	/**
+	 * Records the method splitting plan of a function (null when it needs none).
+	 */
+	public void addMethodSplitter(ASTNode function, TranspilerMethodSplitter splitter) {
+		plannedFunctions.add(function);
+		if(splitter!=null) {
+			methodSplitters.add(splitter);
+		}
+	}
+	/**
+	 * Whether the size of a function's methods is managed by the method splitter.
+	 */
+	public boolean isMethodSplitPlanned(ASTNode function) {
+		return function!=null && plannedFunctions.contains(function);
+	}
+	/**
+	 * The runs of a statement list emitted as regions, or null.
+	 */
+	public java.util.List<TranspilerMethodSplitter.Region> getSplitRegions(ASTNode owner) {
+		for(TranspilerMethodSplitter s: methodSplitters) {
+			java.util.List<TranspilerMethodSplitter.Region> l = s.getRegions(owner);
+			if(l!=null) {
+				return l;
+			}
+		}
+		return null;
+	}
+	/**
+	 * The region of a statement list emitted whole as a region, or null.
+	 */
+	public TranspilerMethodSplitter.Region getWholeListRegion(ASTNode owner) {
+		for(TranspilerMethodSplitter s: methodSplitters) {
+			TranspilerMethodSplitter.Region r = s.getWholeListRegion(owner);
+			if(r!=null) {
+				return r;
+			}
+		}
+		return null;
+	}
+
 	@Override
 	public int generateUniqueId() {
 		return uniqueId++;

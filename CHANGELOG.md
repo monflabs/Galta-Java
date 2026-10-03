@@ -155,6 +155,14 @@ First public release: Galta is published to Maven Central under the
   class. The JavaCC grammar generates without warnings.
 - A decorated private class member (`@dec #x`, `@dec accessor #x`) no longer
   fails the class definition: the decorator context names it `"#x"`.
+- Faster transpiled code (the transpiled TypeScript compiler runs about 40%
+  faster): calls to functions of large scopes go straight to their dispatch
+  block instead of through a chain of classes, functions that need no per-call
+  context skip it there too, and large functions have statement lists moved to
+  regions so that every method stays small enough for the JIT
+  (`methodBudget` transpiler option). Transpiling is also much faster on large
+  sources (4 s instead of 4 minutes for TypeScript), and unchanged generated
+  files are not rewritten.
 - `JSON.rawJSON` uses the strict parser, `JSON.parse` errors give the position,
   a too deeply nested `JSON.stringify` throws a `RangeError`, and non-ASCII
   characters are written as they are.

@@ -714,6 +714,11 @@ public abstract class ASTVarContainer extends ASTNode implements IContextBlockCo
 	// caller bug (see ASTFunction.canSplitFunctionClassesForGenerator, which
 	// guards against ever reaching this with both a non-null filter AND
 	// dispatcher-mode function counts).
+	// The largest number of cases of a generated dispatch method (see the dispatcher mode
+	// of transpilerDeclareFunctionClasses): about 16 bytes of bytecode each, so a block
+	// stays far below the 8000 bytes beyond which the JIT never compiles a method
+	private static final int DISPATCH_BLOCK = 200;
+
 	public void transpilerDeclareFunctionClasses(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, Predicate<ASTFunction> functionFilter) {
 		if(functions==null) {
 			return;
@@ -826,19 +831,75 @@ public abstract class ASTVarContainer extends ASTNode implements IContextBlockCo
 					b.decIndent();
 					b.println("}");
 
-					b.println("@Override");
-					b.println("public Object callVoid({0} {1}, Object {2}, Object[] {3}) {", JSTranspiledFunctionRuntimeContext.class.getSimpleName(), JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
-					b.incIndent();
-						b.println("return switch(index) {");
+					// The dispatch of this chunk's functions: final methods of at most
+					// DISPATCH_BLOCK cases each, so that each stays well under the JIT's
+					// huge method limit (8000 bytes of bytecode: a larger method is never
+					// compiled, and every call through it would run interpreted).
+					String ctxType = JSTranspiledFunctionRuntimeContext.class.getSimpleName();
+					for(int j=0; j*DISPATCH_BLOCK<functionsCount; j++) {
+						int from = fi+j*DISPATCH_BLOCK;
+						int to = Math.min(fi+functionsCount, from+DISPATCH_BLOCK);
+						b.println("final Object callVoid_{0}_{1}({2} {3}, Object {4}, Object[] {5}) {", fidx, j, ctxType, JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
 						b.incIndent();
-						for(int i=0; i<functionsCount; i++) {
-							b.println("case {0} -> f_{0}({1},{2},{3});", fi+i, JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
-						}
-						b.println("default -> super.callVoid({0},{1},{2});", JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
+							b.println("return switch(index) {");
+							b.incIndent();
+							for(int i=from; i<to; i++) {
+								b.println("case {0} -> f_{0}({1},{2},{3});", i, JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
+							}
+							b.println("default -> super.callVoid({0},{1},{2});", JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
+							b.decIndent();
+							b.println("};");
 						b.decIndent();
-						b.println("};");
-					b.decIndent();
-					b.println("}");
+						b.println("}");
+					}
+					// The functions all instantiate the main class: its callVoid routes the
+					// index straight to the dispatch method of its block (two small switches),
+					// where each chunk class used to switch on its own range and fall back
+					// to super.callVoid(): a chain of up to one call per chunk, through
+					// switches too large to be JIT-compiled.
+					if(isMainDispatcher) {
+						// The functions whose body needs no per-call context (see
+						// ASTFunction.isTranspiledContextElidable()), one character per index:
+						// they then skip the context allocation and its ScopedValue push, as
+						// in the one-class-per-function mode
+						StringBuilder elidable = new StringBuilder(functionsSize);
+						boolean anyElidable = false;
+						for(int i=0; i<functionsSize; i++) {
+							boolean e = functions.get(i).isTranspiledContextElidable();
+							anyElidable |= e;
+							elidable.append(e ? '1' : '0');
+						}
+						if(anyElidable) {
+							b.println("private static final String ELIDABLE = \"{0}\";", elidable.toString());
+							b.println("{0}", "@Override protected boolean isContextElidable() { return index < ELIDABLE.length() && ELIDABLE.charAt(index)=='1'; }");
+						}
+						b.println("@Override");
+						b.println("public Object callVoid({0} {1}, Object {2}, Object[] {3}) {", ctxType, JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
+						b.incIndent();
+							b.println("return switch(index / {0}) {", Integer.toString(maxFunctions));
+							b.incIndent();
+							for(int c=0, cs=0; cs<functionsSize; c++, cs+=maxFunctions) {
+								int count = Math.min(maxFunctions, functionsSize-cs);
+								int blocks = (count+DISPATCH_BLOCK-1)/DISPATCH_BLOCK;
+								if(blocks==1) {
+									b.println("case {0} -> callVoid_{0}_0({1},{2},{3});", c, JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
+								} else {
+									b.println("case {0} -> switch((index - {1}) / {2}) {", c, Integer.toString(cs), Integer.toString(DISPATCH_BLOCK));
+									b.incIndent();
+									for(int j=0; j<blocks; j++) {
+										b.println("case {0} -> callVoid_{1}_{0}({2},{3},{4});", j, c, JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
+									}
+									b.println("default -> super.callVoid({0},{1},{2});", JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
+									b.decIndent();
+									b.println("};");
+								}
+							}
+							b.println("default -> super.callVoid({0},{1},{2});", JSTranspiler.MAIN_CONTEXT,JSTranspiler.THIS_VAR,JSTranspiler.FUNCTION_ARGUMENTS);
+							b.decIndent();
+							b.println("};");
+						b.decIndent();
+						b.println("}");
+					}
 
 					// Sibling generator functions in this chunk that need eager
 					// parameter binding (see ASTFunction.needsInitGeneratorParamsSplit)

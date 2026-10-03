@@ -120,7 +120,10 @@ public class EngineRegression3JavaTest extends __BaseTestCase {
 
 	// Runs a script transpiled, against a transpiled global context
 	static Object runTranspiled(JSEnvironment env, String code) throws Exception {
-		String java = new JSTranspiler(env, JSTranspilerOptions.newBuilder().build())
+		return runTranspiled(env, code, JSTranspilerOptions.newBuilder().build());
+	}
+	static Object runTranspiled(JSEnvironment env, String code, JSTranspilerOptions options) throws Exception {
+		String java = new JSTranspiler(env, options)
 				.compileResult("T", "Object", env.createScript(code, "t.js").getProgram(), null)
 				.getJavaCode();
 		MapTargetFactory classes = new MapTargetFactory();
@@ -309,5 +312,88 @@ public class EngineRegression3JavaTest extends __BaseTestCase {
 				throw new Error('delete through with: '+r+' '+deleteWithOuter+' '+o.deleteWithOuter);
 			}
 			""");
+	}
+
+	// Over 50 functions in one scope, the transpiler routes the calls through dispatch
+	// classes: 1200 functions span 3 chunks of 500 and their blocks of 200, each must be
+	// reached, and a context-free (elided) function still recurses and closes correctly
+	public void testTranspiledFunctionDispatch() throws Exception {
+		JSEnvironment env = JavaScriptEnvironment.create();
+		StringBuilder code = new StringBuilder();
+		int n = 1200;
+		for (int i = 0; i < n; i++) {
+			code.append("function f").append(i).append("(){ return ").append(i).append("; }\n");
+		}
+		code.append("function fact(k){ return k<=1 ? 1 : k*fact(k-1); }\n");
+		code.append("function counter(){ var c=0; return function(){ return ++c; }; }\n");
+		code.append("var sum=0; for (var i=0;i<").append(n).append(";i++){ sum += globalThis['f'+i](); }\n");
+		code.append("var c=counter(); c(); c();\n");
+		long expected = (long) n * (n - 1) / 2;
+		code.append("var r = sum + ':' + fact(10) + ':' + c();\n");
+		code.append("if (r !== '").append(expected).append(":3628800:3') throw new Error('dispatch: ' + r);");
+		runTranspiled(env, code.toString());
+	}
+
+	// Large functions have statement lists moved to regions (lambdas run at once):
+	// with a budget of 1, every list is, and the control flow crossing them -
+	// labeled break/continue, switch fall-through, try/finally, return values,
+	// exceptions, per-iteration closures - must behave as when interpreted
+	public void testTranspiledMethodRegions() throws Exception {
+		String code = """
+			function run() {
+				var out = [];
+				outer: for (var i = 0; i < 4; i++) {
+					inner: for (var j = 0; j < 4; j++) {
+						if (j == 1) continue;
+						if (j == 3) continue outer;
+						if (i == 3) break outer;
+						out.push(i + '' + j);
+					}
+				}
+				for (var k = 0; k < 6; k++) {
+					switch (k) {
+						case 0: out.push('a');
+						case 1: out.push('b'); break;
+						case 2: out.push('c'); continue;
+						case 3: { out.push('d'); break; }
+						default: out.push('e');
+					}
+					out.push('k' + k);
+				}
+				function find(list, v) {
+					for (var x of list) {
+						try {
+							if (x === v) { return 'found ' + x; }
+							if (x > 100) { break; }
+						} finally {
+							out.push('f' + x);
+						}
+					}
+					return 'none';
+				}
+				out.push(find([1, 2, 3], 2), find([5, 200, 6], 6));
+				var fns = [];
+				for (let n = 0; n < 3; n++) { let m = n * 10; fns.push(function () { return n + m; }); }
+				out.push(fns.map(function (f) { return f(); }).join('/'));
+				try {
+					(function () { var o = { a: 1, b: 2 }; for (var key in o) { if (key == 'b') throw new Error('in ' + key); } })();
+				} catch (e) { out.push(e.message); }
+				var d = 0;
+				do { d++; if (d == 2) continue; out.push('d' + d); } while (d < 3);
+				blk: { out.push('x'); if (out.length > 0) break blk; out.push('never'); }
+				function sum() { var s = 0; for (var q = 0; q < arguments.length; q++) s += arguments[q]; return s; }
+				var obj = { v: 7, get: function () { return this.v; } };
+				function fact(n) { if (n <= 1) { return 1; } return n * fact(n - 1); }
+				out.push(sum(1, 2, 3), obj.get(), fact(6), (function () { if (true) { return; } })());
+				return out.join(',');
+			}
+			""";
+		JSEnvironment env = JavaScriptEnvironment.create();
+		Object expected = env.evaluateScript(code + "run();");
+		JSTranspilerOptions split = JSTranspilerOptions.newBuilder().methodBudget(1).build();
+		String java = new JSTranspiler(env, split).compileResult("T", "Object", env.createScript(code, "t.js").getProgram(), null).getJavaCode();
+		assertTrue("no region was generated", java.contains("JSTranspiledRegion"));
+		String check = code + "var r = run(); if (r !== " + org.monflabs.json.JsonUtil.encodeString(expected.toString(), '"') + ") throw new Error('regions: ' + r);";
+		runTranspiled(JavaScriptEnvironment.create(), check, split);
 	}
 }

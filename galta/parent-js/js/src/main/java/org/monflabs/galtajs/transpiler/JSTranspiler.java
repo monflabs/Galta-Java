@@ -698,11 +698,7 @@ public class JSTranspiler {
 	}
 
 	public static String asString(JSTranspilerGeneratorContext ctx, ASTNode node) {
-		return convert("toString", ctx, node);
-	}
-	public static String asString(JSTranspilerGeneratorContext ctx, ASTNode node, boolean nulls) {
-		String value = node.transpileJavaExpression(ctx);
-		return StringFormat.format(node.isSequence() ? "toString(deref({0}),{1})" : "toString({0},{1})", value, nulls);
+		return convert("jsToString", ctx, node);
 	}
 
 	public static String asInt32(JSTranspilerGeneratorContext ctx, ASTNode node) {

@@ -1461,6 +1461,11 @@ public abstract class JSTranspiledUnit extends JSScriptUnit {
 	public final String toString(Object v) {
 		return RuntimeUtil.toString(env, v);
 	}
+	// What the generated code calls: an anonymous class (a region, a block split)
+	// inherits Object.toString(), which would hide toString(Object) from its body
+	public final String jsToString(Object v) {
+		return RuntimeUtil.toString(env, v);
+	}
 	public final boolean toBoolean(Object v) {
 		return RuntimeUtil.toBoolean(env, v);
 	}

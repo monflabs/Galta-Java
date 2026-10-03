@@ -321,6 +321,105 @@ loop:	for(int i=0; i<statements.length; i++) {
 	}
 
 	public static void transpileBlockStatements(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, ASTNode container, ASTNode[] statements) {
+		// A list of a large function moved to a region as a whole (see
+		// TranspilerMethodSplitter)
+		org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.Region whole = jsContext.getMainContext().getWholeListRegion(container);
+		if(whole!=null) {
+			emitRegion(jsContext, b, whole, regionContext -> transpileStatementsWithRegions(regionContext, b, container, statements));
+		} else {
+			transpileStatementsWithRegions(jsContext, b, container, statements);
+		}
+	}
+
+	// The statements of a list, with the runs planned as regions emitted as such
+	private static void transpileStatementsWithRegions(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, ASTNode container, ASTNode[] statements) {
+		java.util.List<org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.Region> regions = jsContext.getMainContext().getSplitRegions(container);
+		if(regions==null) {
+			transpileStatements(jsContext, b, container, statements);
+			return;
+		}
+		Block mapBlock = jsContext.getTranspilerMap().getCurrentBlock();
+		int pos = 0;
+		for(org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.Region region: regions) {
+			if(!transpileStatementRange(jsContext, b, mapBlock, statements, pos, region.getFrom())) {
+				// The rest is unreachable
+				return;
+			}
+			emitRegion(jsContext, b, region, regionContext -> transpileStatementRange(regionContext, b, mapBlock, statements, region.getFrom(), region.getTo()));
+			pos = region.getTo();
+		}
+		transpileStatementRange(jsContext, b, mapBlock, statements, pos, statements.length);
+	}
+
+	// Emits statements[from,to); returns false when a statement always leaves the
+	// list (what follows it is unreachable, and not emitted)
+	private static boolean transpileStatementRange(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, Block mapBlock, ASTNode[] statements, int from, int to) {
+		for(int i=from; i<to; i++) {
+			ASTNode node = statements[i];
+			b.debugLocation(node);
+			mapBlock.add(b, node);
+			emitDebugHook(jsContext, b, node);
+			node.transpileJavaStatement(jsContext, b);
+			if(i<statements.length-1 && alwaysLeavesBlock(node)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Emits statements as a region (see TranspilerMethodSplitter): a lambda run at
+	 * once, whose result the caller acts on - continue, perform a break or continue
+	 * that left the region, or return the value a return statement gave.
+	 */
+	public static void emitRegion(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, org.monflabs.galtajs.transpiler.context.TranspilerMethodSplitter.Region region, java.util.function.Consumer<JSTranspilerGeneratorContext> body) {
+		String regionClass = org.monflabs.galtajs.rt.transpiler.JSTranspiledRegion.class.getName();
+		String result = jsContext.generateUniqueId("region");
+		// An anonymous class rather than a lambda: javac compiles large numbers of
+		// lambdas far more slowly (twice the time for the TypeScript compiler)
+		b.println("Object {0} = (new {1}() { public Object run() {", result, regionClass);
+		b.incIndent();
+		// In an if, so that the return below stays reachable for javac whatever
+		// the statements do
+		b.println("if(true) {");
+		b.incIndent();
+		body.accept(new org.monflabs.galtajs.transpiler.context.TranspilerGeneratorRegionContext(jsContext, region));
+		b.decIndent();
+		b.println("}");
+		b.println("return {0}.NORMAL;", regionClass);
+		b.decIndent();
+		b.println("}}).run();");
+		b.println("if({0}!={1}.NORMAL) {", result, regionClass);
+		b.incIndent();
+		java.util.List<java.util.Map.Entry<ASTNode,Integer>> jumps = new java.util.ArrayList<>(region.getEscapes().entrySet());
+		jumps.sort(java.util.Map.Entry.comparingByValue());
+		for(java.util.Map.Entry<ASTNode,Integer> jump: jumps) {
+			b.println("if({0}=={1}.JUMPS[{2}]) {", result, regionClass, Integer.toString(jump.getValue()));
+			b.incIndent();
+			jump.getKey().transpileJavaStatement(jsContext, b);
+			b.decIndent();
+			b.print("} else ");
+		}
+		b.println("{");
+		b.incIndent();
+		b.println("return {0};", result);
+		b.decIndent();
+		b.println("}");
+		b.decIndent();
+		b.println("}");
+	}
+
+	// The function a statement list belongs to (itself, for a function body)
+	private static ASTNode enclosingFunction(ASTNode node) {
+		for(ASTNode n=node; n!=null; n=n.getParent()) {
+			if(n instanceof ASTFunction) {
+				return n;
+			}
+		}
+		return null;
+	}
+
+	private static void transpileStatements(JSTranspilerGeneratorContext jsContext, TranspilerJavaBuilder b, ASTNode container, ASTNode[] statements) {
     	JSTranspilerMap map = jsContext.getTranspilerMap();
 		Block mapBlock = map.getCurrentBlock();
 		
@@ -329,6 +428,11 @@ loop:	for(int i=0; i<statements.length; i++) {
 			int count = statements.length;
 			
 	        TranspilerCodeSplitter splitter = jsContext.getOptions().getCodeSplitter();
+			// In a function whose methods the method splitter sizes, it already keeps
+			// them small, without the cost of a Runnable per run of statements
+			if(splitter!=null && jsContext.getMainContext().isMethodSplitPlanned(enclosingFunction(container))) {
+				splitter = null;
+			}
 
 			if(splitter!=null && splitter.shouldSplitBlock(container, statements)) {
 				for(int pos=0; pos<statements.length; ) {
