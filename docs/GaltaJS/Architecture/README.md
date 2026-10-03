@@ -72,6 +72,7 @@ All paths are relative to `galta/parent-js/js/src/main/java/org/monflabs/galtajs
 - [Async runtime](/GaltaJS/Architecture/AsyncRuntime) - executors, event loop, coroutines, generators, promises, timers.
 - [Modules runtime](/GaltaJS/Architecture/ModulesRuntime) - units, resolvers, linking, top-level await, `import defer`.
 - [Object model](/GaltaJS/Architecture/ObjectModel) - accessors, property storage, arrays, primitives vs wrappers, built-in representations.
+- [Java interop](/GaltaJS/Architecture/JavaInterop) - Java member lookup, overload resolution, argument conversion, function proxies and their caches.
 - [RegExp engines](/GaltaJS/Architecture/RegExpEngines) - the pluggable engine interface, the JDK translation, the Joni port.
 - [Debugger](/GaltaJS/Architecture/Debugger) - debug hooks, the debugger API, the CDP server.
 - [Testing and compliance](/GaltaJS/Architecture/Testing) - test suites, test262, Rhino, benchmarks, documentation samples.

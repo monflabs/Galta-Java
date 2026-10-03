@@ -36,7 +36,7 @@ Method overloads are resolved from the runtime argument types (`JavaLibrary.Java
 - A `Java.type()` class is passed as its `java.lang.Class`, to a `Class` parameter or any type a `Class` is assignable to (`Type`, `Object`).
 - Two parameters of unrelated types make the overloads incomparable, as in Java. A call that has no single most specific overload throws an error "Ambiguity between ...".
 
-Bridge methods are ignored, and a varargs method is called with its trailing arguments collected into an array when no overload matches the argument count. On an instance of a non-public class, the overloads its public types declare are used.
+Bridge methods are ignored, and a varargs method is called with its trailing arguments collected into an array when no overload matches the argument count. On an instance of a non-public class, the overloads its public types declare are used. How the lookup, the resolution and their caches work is described in [Java interop internals](/GaltaJS/Architecture/JavaInterop).
 
 Sample: `doc_examples/JavaInteropExamples.java` (`testBeanPropertiesAndOverloads`)
 

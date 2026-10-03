@@ -76,6 +76,7 @@
     * [Async Runtime](/GaltaJS/Architecture/AsyncRuntime)
     * [Modules Runtime](/GaltaJS/Architecture/ModulesRuntime)
     * [Object Model](/GaltaJS/Architecture/ObjectModel)
+    * [Java Interop](/GaltaJS/Architecture/JavaInterop)
     * [RegExp Engines](/GaltaJS/Architecture/RegExpEngines)
     * [Debugger](/GaltaJS/Architecture/Debugger)
     * [Testing & Compliance](/GaltaJS/Architecture/Testing)
