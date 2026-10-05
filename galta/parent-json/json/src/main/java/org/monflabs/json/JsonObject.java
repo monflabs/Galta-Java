@@ -91,13 +91,578 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 	}
 	
 
-	public boolean isNull(String key);
-	public boolean isBoolean(String key);
-	public boolean isNumber(String key);
-	public boolean isString(String key);
-	public boolean isContainer(String key);
-	public boolean isObject(String key);
-	public boolean isArray(String key);
+
+	
+	///////////////////////////////////////////////////////////////////////////////
+	// 
+	// Possible optimizations
+	//
+	///////////////////////////////////////////////////////////////////////////////
+
+	
+	public default boolean isNull(String key) {
+		Object v=get(key);
+		return v==null;
+	}
+
+	public default boolean isBoolean(String key) {
+		Object v=get(key);
+		return v!=null && v.getClass()==Boolean.class;
+	}
+
+	public default boolean isNumber(String key) {
+		Object v=get(key);
+		return v instanceof Number;
+	}
+
+	public default boolean isString(String key) {
+		Object v=get(key);
+		return v!=null && v.getClass()==String.class;
+	}
+
+	public default boolean isContainer(String key) {
+		Object v=get(key);
+		return v instanceof JsonObject || v instanceof JsonArray;
+	}
+
+	public default boolean isObject(String key) {
+		Object v=get(key);
+		return v instanceof JsonObject;
+	}
+
+	public default boolean isArray(String key) {
+		Object v=get(key);
+		return v instanceof JsonArray;
+	}
+
+	
+	
+	public default boolean getBoolean(String key) {
+		Object v=get(key);
+		if(v instanceof Boolean o) {
+			return o;
+		}
+		// Generate an error message...
+		return JsonUtil.checkBoolean(v, key);
+	}
+
+	public default Number getNumber(String key) {
+		Object v=get(key);
+		if(v instanceof Number o) {
+			return o;
+		}
+		// Generate an error message...
+		return JsonUtil.checkNumber(v, key);
+	}
+
+	public default byte getByte(String key) {
+		Object v=get(key);
+		if(v instanceof Number o) {
+			return JsonUtil.clampToByte(o);
+		}
+		// Generate an error message...
+		return JsonUtil.checkByte(v, key);
+	}
+
+	public default short getShort(String key) {
+		Object v=get(key);
+		if(v instanceof Number o) {
+			return JsonUtil.clampToShort(o);
+		}
+		// Generate an error message...
+		return JsonUtil.checkShort(v, key);
+	}
+
+	public default int getInt(String key) {
+		Object v=get(key);
+		if(v instanceof Number o) {
+			return JsonUtil.clampToInt(o);
+		}
+		// Generate an error message...
+		return JsonUtil.checkInt(v, key);
+	}
+
+	public default long getLong(String key) {
+		Object v=get(key);
+		if(v instanceof Number o) {
+			return JsonUtil.clampToLong(o);
+		}
+		// Generate an error message...
+		return JsonUtil.checkLong(v, key);
+	}
+
+	public default float getFloat(String key) {
+		Object v=get(key);
+		if(v instanceof Number o) {
+			return o.floatValue();
+		}
+		// Generate an error message...
+		return JsonUtil.checkFloat(v, key);
+	}
+
+	public default double getDouble(String key) {
+		Object v=get(key);
+		if(v instanceof Number o) {
+			return o.doubleValue();
+		}
+		// Generate an error message...
+		return JsonUtil.checkDouble(v, key);
+	}
+
+	
+	public default Boolean getBooleanObject(String key) {
+		Object v=get(key);
+		if(v instanceof Boolean o) {
+			return o;
+		}
+		// Generate an error message...
+		return JsonUtil.checkBoolean(v, key);
+	}
+
+	public default Byte getByteObject(String key) {
+		Object v=get(key);
+		if(v instanceof Byte o) {
+			return o;
+		}
+		if(v instanceof Number o) {
+			return JsonUtil.clampToByte(o);
+		}
+		// Generate an error message...
+		return JsonUtil.checkByte(v, key);
+	}
+
+	public default Short getShortObject(String key) {
+		Object v=get(key);
+		if(v instanceof Short o) {
+			return o;
+		}
+		if(v instanceof Number o) {
+			return JsonUtil.clampToShort(o);
+		}
+		// Generate an error message...
+		return JsonUtil.checkShort(v, key);
+	}
+
+	public default Integer getIntObject(String key) {
+		Object v=get(key);
+		if(v instanceof Integer o) {
+			return o;
+		}
+		if(v instanceof Number o) {
+			return JsonUtil.clampToInt(o);
+		}
+		// Generate an error message...
+		return JsonUtil.checkInt(v, key);
+	}
+
+	public default Long getLongObject(String key) {
+		Object v=get(key);
+		if(v instanceof Long o) {
+			return o;
+		}
+		if(v instanceof Number o) {
+			return JsonUtil.clampToLong(o);
+		}
+		// Generate an error message...
+		return JsonUtil.checkLong(v, key);
+	}
+
+	public default Float getFloatObject(String key) {
+		Object v=get(key);
+		if(v instanceof Float o) {
+			return o;
+		}
+		if(v instanceof Number o) {
+			return o.floatValue();
+		}
+		// Generate an error message...
+		return JsonUtil.checkFloat(v, key);
+	}
+
+	public default Double getDoubleObject(String key) {
+		Object v=get(key);
+		if(v instanceof Double o) {
+			return o;
+		}
+		if(v instanceof Number o) {
+			return o.doubleValue();
+		}
+		// Generate an error message...
+		return JsonUtil.checkDouble(v, key);
+	}
+
+	public default BigInteger getBigInteger(String key) {
+		Object v=get(key);
+		if(v instanceof BigInteger o) {
+			return o;
+		}
+		return JsonUtil.checkBigInteger(v, key);
+	}
+	
+	public default BigDecimal getBigDecimal(String key) {
+		Object v=get(key);
+		if(v instanceof BigDecimal o) {
+			return o;
+		}
+		return JsonUtil.checkBigDecimal(v, key);
+	}
+	
+	public default String getString(String key) {
+		Object v=get(key);
+		if(v instanceof String o) {
+			return o;
+		}
+		// Generate an error message...
+		return JsonUtil.checkString(v, key);
+	}
+
+	public default JsonObject getObject(String key) {
+		Object v=get(key);
+		if(v instanceof JsonObject o) {
+			return o;
+		}
+		return JsonUtil.checkObject(v, key);
+	}
+
+	public default JsonArray getArray(String key) {
+		Object v=get(key);
+		if(v instanceof JsonArray a) {
+			return a;
+		}
+		return JsonUtil.checkArray(v, key);
+	}
+
+
+	public default boolean getBoolean(String key, boolean defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Boolean o) {
+				return o;
+			}
+			// Generate an error message...
+			return JsonUtil.checkBoolean(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default Number getNumber(String key, Number defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Number o) {
+				return o;
+			}
+			// Generate an error message...
+			return JsonUtil.checkNumber(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default byte getByte(String key, byte defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Number o) {
+				return JsonUtil.clampToByte(o);
+			}
+			// Generate an error message...
+			return JsonUtil.checkByte(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default short getShort(String key, short defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Number o) {
+				return JsonUtil.clampToShort(o);
+			}
+			// Generate an error message...
+			return JsonUtil.checkShort(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default int getInt(String key, int defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Number o) {
+				return JsonUtil.clampToInt(o);
+			}
+			// Generate an error message...
+			return JsonUtil.checkInt(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default long getLong(String key, long defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Number o) {
+				return JsonUtil.clampToLong(o);
+			}
+			// Generate an error message...
+			return JsonUtil.checkLong(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default float getFloat(String key, float defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Number o) {
+				return o.floatValue();
+			}
+			// Generate an error message...
+			return JsonUtil.checkFloat(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default double getDouble(String key, double defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Number o) {
+				return o.doubleValue();
+			}
+			// Generate an error message...
+			return JsonUtil.checkDouble(v, key);
+		}
+		return defaultValue;
+	}
+
+
+	public default Boolean getBooleanObject(String key, Boolean defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Boolean o) {
+				return o;
+			}
+			// Generate an error message...
+			return JsonUtil.checkBoolean(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default Byte getByteObject(String key, Byte defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Byte o) {
+				return o;
+			}
+			if(v instanceof Number o) {
+				return JsonUtil.clampToByte(o);
+			}
+			// Generate an error message...
+			return JsonUtil.checkByte(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default Short getShortObject(String key, Short defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Short o) {
+				return o;
+			}
+			if(v instanceof Number o) {
+				return JsonUtil.clampToShort(o);
+			}
+			// Generate an error message...
+			return JsonUtil.checkShort(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default Integer getIntObject(String key, Integer defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Integer o) {
+				return o;
+			}
+			if(v instanceof Number o) {
+				return JsonUtil.clampToInt(o);
+			}
+			// Generate an error message...
+			return JsonUtil.checkInt(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default Long getLongObject(String key, Long defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Long o) {
+				return o;
+			}
+			if(v instanceof Number o) {
+				return JsonUtil.clampToLong(o);
+			}
+			// Generate an error message...
+			return JsonUtil.checkLong(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default Float getFloatObject(String key, Float defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Float o) {
+				return o;
+			}
+			if(v instanceof Number o) {
+				return o.floatValue();
+			}
+			// Generate an error message...
+			return JsonUtil.checkFloat(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default Double getDoubleObject(String key, Double defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Double o) {
+				return o;
+			}
+			if(v instanceof Number o) {
+				return o.doubleValue();
+			}
+			// Generate an error message...
+			return JsonUtil.checkDouble(v, key);
+		}
+		return defaultValue;
+	}
+
+
+	
+	public default BigInteger getBigInteger(String key, BigInteger defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof BigInteger o) {
+				return o;
+			}
+			// Generate an error message...
+			return JsonUtil.checkBigInteger(v, key);
+		}
+		return defaultValue;
+	}
+	
+	public default BigDecimal getBigDecimal(String key, BigDecimal defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof BigDecimal o) {
+				return o;
+			}
+			// Generate an error message...
+			return JsonUtil.checkBigDecimal(v, key);
+		}
+		return defaultValue;
+	}
+	
+	public default String getString(String key, String defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof String o) {
+				return o;
+			}
+			// Generate an error message...
+			return JsonUtil.checkString(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default JsonObject getObject(String key, JsonObject defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof JsonObject o) {
+				return o;
+			}
+			// Generate an error message...
+			return JsonUtil.checkObject(v, key);
+		}
+		return defaultValue;
+	}
+
+	public default JsonArray getArray(String key, JsonArray defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof JsonArray a) {
+				return a;
+			}
+			// Generate an error message...
+			return JsonUtil.checkArray(v, key);
+		}
+		return defaultValue;
+	}
+
+
+
+
+	public default JsonObject putNull(String key) {
+		put(key, (Object)null);
+		return this;
+	}
+
+	public default JsonObject put(String key, boolean value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	public default JsonObject put(String key, byte value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	public default JsonObject put(String key, short value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	public default JsonObject put(String key, int value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	public default JsonObject put(String key, long value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	public default JsonObject put(String key, float value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	public default JsonObject put(String key, double value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	
+	public default JsonObject put(String key, Number value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	public default JsonObject put(String key, Boolean value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	public default JsonObject put(String key, String value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	
+	public default JsonObject put(String key, JsonObject value) {
+		put(key, (Object)value);
+		return this;
+	}
+
+	public default JsonObject put(String key, JsonArray value) {
+		put(key, (Object)value );
+		return this;
+	}
 	
 
 	//
@@ -126,28 +691,8 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 		return t;
 	}
 
-	public boolean getBoolean(String key);
-	public byte getByte(String key);
-	public short getShort(String key);
-	public int getInt(String key);
-	public long getLong(String key);
-	public float getFloat(String key);
-	public double getDouble(String key);
 
-	public Boolean getBooleanObject(String key);
-	public Number getNumber(String key);
-	public Byte getByteObject(String key);
-	public Short getShortObject(String key);
-	public Integer getIntObject(String key);
-	public Long getLongObject(String key);
-	public Float getFloatObject(String key);
-	public Double getDoubleObject(String key);
-	public BigInteger getBigInteger(String key);
-	public BigDecimal getBigDecimal(String key);
 	
-	public String getString(String key);
-	public JsonObject getObject(String key);
-	public JsonArray getArray(String key);
 	
 	public default LocalDate getLocalDate(String key) {
 		return JsonUtil.parseLocalDate(getString(key));
@@ -169,28 +714,8 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 	}
 
 
-	public boolean getBoolean(String key, boolean defaultValue);
-	public byte getByte(String key, byte defaultValue);
-	public short getShort(String key, short defaultValue);
-	public int getInt(String key, int defaultValue);
-	public long getLong(String key, long defaultValue);
-	public float getFloat(String key, float defaultValue);
-	public double getDouble(String key, double defaultValue);
 
-	public Boolean getBooleanObject(String key, Boolean defaultValue);
-	public Number getNumber(String key, Number defaultValue);
-	public Byte getByteObject(String key, Byte defaultValue);
-	public Short getShortObject(String key, Short defaultValue);
-	public Integer getIntObject(String key, Integer defaultValue);
-	public Long getLongObject(String key, Long defaultValue);
-	public Float getFloatObject(String key, Float defaultValue);
-	public Double getDoubleObject(String key, Double defaultValue);
-	public BigInteger getBigInteger(String key, BigInteger defaultValue);
-	public BigDecimal getBigDecimal(String key, BigDecimal defaultValue);
 	
-	public String getString(String key, String defaultValue);
-	public JsonObject getObject(String key, JsonObject defaultValue);
-	public JsonArray getArray(String key, JsonArray defaultValue);
 	
 	public default LocalDate getLocalDate(String key, LocalDate defaultValue) {
 		String v = getString(key,null);
@@ -268,21 +793,8 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 		put(key,value);
 		return this;
 	}
-	public JsonObject putNull(String key);
-	public JsonObject put(String key, boolean value);
-	public JsonObject put(String key, byte value);
-	public JsonObject put(String key, short value);
-	public JsonObject put(String key, int value);
-	public JsonObject put(String key, long value);
-	public JsonObject put(String key, float value);
-	public JsonObject put(String key, double value);
 
-	public JsonObject put(String key, Boolean value);
-	public JsonObject put(String key, Number value);
-	public JsonObject put(String key, String value);
 	
-	public JsonObject put(String key, JsonObject value);
-	public JsonObject put(String key, JsonArray value);
 
 	public default JsonObject put(String key, LocalDate value) {
 		put(key, value!=null ? JsonUtil.toString(value) : null);

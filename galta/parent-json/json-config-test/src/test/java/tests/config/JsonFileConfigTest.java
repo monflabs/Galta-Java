@@ -287,9 +287,6 @@ public class JsonFileConfigTest extends ProjectTestCase {
 	}
 	
 	public void testReferences() throws Exception {
-		if(!JsonFactory.get().supportsReferences()) {
-			return;
-		}
 		String content = 
 				""" 
 					{"$ref": "toto.json" } 

@@ -50,10 +50,15 @@ public class ArrayTest extends ProjectTestCase {
 		assertEquals("AA",a.get(0));
 		// java.util.List.get(): no negative index (List contract)...
 		assertThrows(IndexOutOfBoundsException.class, () -> a.get(-3));
-		// ...but the JSON accessors count a negative index from the end
-		assertEquals("AA",a.getString(-3));
-		assertEquals("CC",a.getOrDefault(-1,"x"));
-		assertEquals("CC",a.jsonValues(-1).stringValue());
+		// ...nor the JSON accessors...
+		assertThrows(IndexOutOfBoundsException.class, () -> a.getString(-3));
+		assertEquals("x",a.getOrDefault(-1,"x"));
+		// ...but the at*() methods count a negative index from the end
+		assertEquals("AA",a.at(-3));
+		assertEquals("AA",a.atString(-3));
+		assertEquals("CC",a.atOrDefault(-1,"x"));
+		assertEquals("x",a.atOrDefault(-4,"x"));
+		assertEquals("CC",a.jsonValuesAt(-1).stringValue());
 	}
 
 	public void testGrowTo() {
@@ -105,9 +110,7 @@ public class ArrayTest extends ProjectTestCase {
 		assertEquals(0,a.size());
 		assertFalse(a.has(0));
 
-		assertEquals(0,a.actualIndex(0));
-		assertEquals(1,a.actualIndex(1));
-		assertEquals(-1,a.actualIndex(-1));
+		assertFalse(a.hasAt(-1));
 
 		a.add( true);
 		a.add( (byte)123);
@@ -146,10 +149,13 @@ public class ArrayTest extends ProjectTestCase {
 		assertTrue(a.has(27));
 		assertFalse(a.has(28));
 
-		assertEquals(0,a.actualIndex(0));
-		assertEquals(27,a.actualIndex(27));
-		assertEquals(27,a.actualIndex(-1));
-		assertEquals(0,a.actualIndex(-28));
+		// The regular methods follow the List contract, the at*() methods count from the end
+		assertFalse(a.has(-1));
+		assertTrue(a.hasAt(-1));
+		assertTrue(a.hasAt(-28));
+		assertFalse(a.hasAt(-29));
+		assertNull(a.at(-1));
+		assertEquals(true, a.atBoolean(-28));
 
 		assertEquals(28,a.size());
 		
@@ -452,42 +458,47 @@ public class ArrayTest extends ProjectTestCase {
 		a.add(1);
 		assertEquals(5,a.size());
 
-		assertTrue(a.isNumber(-1));
-		assertTrue(a.isString(-2));
-		assertTrue(a.isBoolean(-3));
-		assertTrue(a.isObject(-4));
-		assertTrue(a.isArray(-5));
+		assertTrue(a.isNumberAt(-1));
+		assertTrue(a.isStringAt(-2));
+		assertTrue(a.isBooleanAt(-3));
+		assertTrue(a.isObjectAt(-4));
+		assertTrue(a.isArrayAt(-5));
 
-		assertFalse(a.isNumber(-2));
-		assertFalse(a.isString(-1));
-		assertFalse(a.isBoolean(-1));
-		assertFalse(a.isObject(-1));
-		assertFalse(a.isArray(-1));
+		assertFalse(a.isNumberAt(-2));
+		assertFalse(a.isStringAt(-1));
+		assertFalse(a.isBooleanAt(-1));
+		assertFalse(a.isObjectAt(-1));
+		assertFalse(a.isArrayAt(-1));
 
-		assertTrue(a.has(-1));
-		assertTrue(a.has(-3));
-		assertFalse(a.has(-6));
+		assertTrue(a.hasAt(-1));
+		assertTrue(a.hasAt(-3));
+		assertFalse(a.hasAt(-6));
 		
-		assertEquals(1,a.getInt(-1));
-		assertEquals("str",a.getString(-2));
-		assertEquals(true,a.getBoolean(-3));
-		assertEquals(JsonObject.create(),a.getObject(-4));
-		assertEquals(JsonArray.create(),a.getArray(-5));
+		assertEquals(1,a.atInt(-1));
+		assertEquals("str",a.atString(-2));
+		assertEquals(true,a.atBoolean(-3));
+		assertEquals(JsonObject.create(),a.atObject(-4));
+		assertEquals(JsonArray.create(),a.atArray(-5));
 		
-		a.set(-1, 2);
+		a.setAt(-1, 2);
 		assertEquals(5,a.size());
 		assertEquals(2,a.getInt(4));
 		
-		a.add(-1, 4);
+		a.addAt(-1, 4);
 		assertEquals(6,a.size());
 		assertEquals(2,a.getInt(5));
 		assertEquals(4,a.getInt(4));
 		
-		// java.util.List.remove(int): no negative index
+		// The regular methods: no negative index (List contract)
+		assertFalse(a.has(-1));
+		assertFalse(a.isNumber(-1));
+		assertThrows(IndexOutOfBoundsException.class, () -> a.getInt(-1));
+		assertThrows(IndexOutOfBoundsException.class, () -> a.set(-1, 3));
+		assertThrows(IndexOutOfBoundsException.class, () -> a.add(-1, 3));
 		assertThrows(IndexOutOfBoundsException.class, () -> a.remove(-1));
 		assertThrows(IndexOutOfBoundsException.class, () -> a.set(-1, (Object)3));
 		assertThrows(IndexOutOfBoundsException.class, () -> a.add(-1, (Object)3));
-		a.remove(a.actualIndex(-1));
+		a.deleteAt(-1);
 		assertEquals(5,a.size());
 		assertEquals(4,a.getInt(4));
 	}

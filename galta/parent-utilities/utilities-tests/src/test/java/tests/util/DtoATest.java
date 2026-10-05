@@ -150,4 +150,21 @@ public class DtoATest extends ProjectTestCase {
 		assertEquals( "1.0e-10", DtoA.toJavaLiteral(1e-10f) );
 		assertEquals( "10000000000", DtoA.toJavaLiteral(1e10f) );
 	}
+
+	// The buffer variant writes the same text as toStandard(double)
+	public void testToStandardInBuffer() {
+		java.util.Random r = new java.util.Random(23);
+		char[] buffer = new char[DtoA.MAX_STANDARD_LENGTH+8];
+		double[] fixed = {0.0, -0.0, 1.0, -1.5, 1e21, 1e-7, 0.1, Double.MIN_VALUE, Double.MAX_VALUE,
+				Double.MIN_NORMAL, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, -123456789.125};
+		for(double d: fixed) {
+			int end = DtoA.toStandard(d, buffer, 5);
+			assertEquals(String.valueOf(d), DtoA.toStandard(d), new String(buffer, 5, end-5));
+		}
+		for(int i=0; i<200000; i++) {
+			double d = i%2==0 ? Double.longBitsToDouble(r.nextLong()) : r.nextDouble()*Math.pow(10, r.nextInt(50)-25);
+			int end = DtoA.toStandard(d, buffer, 3);
+			assertEquals(String.valueOf(d), DtoA.toStandard(d), new String(buffer, 3, end-3));
+		}
+	}
 }

@@ -63,12 +63,48 @@ public class DtoA {
 				return Long.toString(l);
 			}
 		}
-		String s = RyuDouble.doubleToString(Math.abs(value));
-		// Ryu writes at least 2 significant digits for subnormals (4.9e-324): look for a shorter form
-		if(Math.abs(value) < Double.MIN_NORMAL) {
-			s = shorterDouble(Math.abs(value), s);
+		return format(value < 0, shortest(Math.abs(value)));
+	}
+
+	/**
+	 * Writes {@link #toStandard(double)} into a buffer, without creating a String.
+	 * @param buffer receives the text, at least {@link #MAX_STANDARD_LENGTH} free chars from offset
+	 * @return the offset after the text
+	 */
+	public static int toStandard(double value, char[] buffer, int offset) {
+		if (Double.isNaN(value) || Double.isInfinite(value) || value == 0.0) {
+			String s = toStandard(value);
+			s.getChars(0, s.length(), buffer, offset);
+			return offset + s.length();
 		}
-		return format(value < 0, s);
+		if (Math.abs(value) < EXACT_DOUBLE_INT) {
+			long l = (long) value;
+			if (((double) l) == value) {
+				String s = Long.toString(l);
+				s.getChars(0, s.length(), buffer, offset);
+				return offset + s.length();
+			}
+		}
+		return format(value < 0, shortest(Math.abs(value)), buffer, offset);
+	}
+
+	/**
+	 * The maximum length of the text of a double: a sign, at most 17 significant digits,
+	 * and either 21 integer digits, 6 leading zeros or an exponent.
+	 */
+	public static final int MAX_STANDARD_LENGTH = 32;
+
+	// The shortest digits of a positive, finite, non zero double, in the Java format
+	// (Double.toString(), which gives the shortest digits since JDK 19, as Ryu does: they
+	// were checked to be the same on millions of values, and it is about twice faster).
+	// Both write at least 2 significant digits for a subnormal (4.9e-324): a shorter form
+	// is looked for then.
+	private static String shortest(double value) {
+		String s = Double.toString(value);
+		if (value < Double.MIN_NORMAL) {
+			s = shorterDouble(value, RyuDouble.doubleToString(value));
+		}
+		return s;
 	}
 	
 	public static String toStandard(float value) {
@@ -164,10 +200,19 @@ public class DtoA {
 	 * Lay out the digits of a (positive) Ryu/Java formatted number following ECMA-262 Number::toString.
 	 */
 	private static String format(boolean negative, String ryu) {
+		char[] b = new char[MAX_STANDARD_LENGTH];
+		int p = format(negative, ryu, b, 0);
+		return new String(b, 0, p);
+	}
+	// Writes the JavaScript Number::toString form of a number given in the Java format
+	// (digits, a '.', an optional exponent) into b at p, and returns the end offset
+	private static int format(boolean negative, String ryu, char[] b, int p) {
 		// Extract the significant digits and the decimal exponent n, value = 0.digits * 10^n
 		// (working on characters: this is on the path of every non integral number output)
 		int len = ryu.length();
-		char[] digits = new char[len];
+		// A constant size (at most 17 digits, and the "0" of "0.001"), so the JIT can avoid
+		// the allocation
+		char[] digits = new char[24];
 		int count = 0;
 		int intDigits = -1;
 		int i = 0;
@@ -210,9 +255,6 @@ public class DtoA {
 		int n = intDigits - lead + exp;
 		int k = end - lead;
 
-		// At most 21 integer digits, 6 leading zeros, 17 significant digits and an exponent
-		char[] b = new char[k + 32];
-		int p = 0;
 		if (negative) {
 			b[p++] = '-';
 		}
@@ -245,11 +287,16 @@ public class DtoA {
 			}
 			b[p++] = 'e';
 			b[p++] = n - 1 >= 0 ? '+' : '-';
-			String e = Integer.toString(Math.abs(n - 1));
-			e.getChars(0, e.length(), b, p);
-			p += e.length();
+			int e = Math.abs(n - 1);
+			if (e >= 100) {
+				b[p++] = (char) ('0' + e / 100);
+			}
+			if (e >= 10) {
+				b[p++] = (char) ('0' + e / 10 % 10);
+			}
+			b[p++] = (char) ('0' + e % 10);
 		}
-		return new String(b, 0, p);
+		return p;
 	}
 	
 	private static String shorterDouble(double value, String ryu) {

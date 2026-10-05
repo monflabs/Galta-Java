@@ -44,7 +44,6 @@ public interface JsonContainer extends Cloneable {
 	
 	public Collection<Object> values();
 	
-	public Object toNativeJsonPrimitive();
 	public JsonValues jsonValues();
 	
 	@SuppressWarnings("unchecked")
@@ -221,7 +220,7 @@ public interface JsonContainer extends Cloneable {
 				_find(values,v,index,deep);
 			}
     	} else if(value instanceof JsonArray a) {
-    		int idx = a.actualIndex(index);
+    		int idx = index<0 ? index+a.size() : index; // negative: from the end, as in JSON Path
     		if(idx>=0 && idx<a.size()) { // idx is already adjusted: not has(idx)
     			values.add(a.get(idx));
     		}
@@ -239,7 +238,7 @@ public interface JsonContainer extends Cloneable {
 				_findAndSet(val,index,v);
 			}
     	} else if(value instanceof JsonArray a) {
-    		int idx = a.actualIndex(index);
+    		int idx = index<0 ? index+a.size() : index; // negative: from the end, as in JSON Path
     		if(idx>=0 && idx<a.size()) { // idx is already adjusted: not has(idx)
     			a.set(idx,v);
     		}

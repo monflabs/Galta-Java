@@ -33,6 +33,12 @@
 			<artifactId>junit</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Jackson interoperability of the JavaScript values, tested here -->
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>json-jackson</artifactId>
+			<scope>test</scope>
+		</dependency>
 		<dependency>
 			<groupId>org.monflabs.galta</groupId>
 			<artifactId>test</artifactId>

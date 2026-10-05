@@ -103,106 +103,35 @@ public abstract class JsonFactory {
 		}
 	}	
 	
-	/**
-	 * Convert from a native JSON library to a Java value.
-	 * 
-	 * The returned value can be one of:
-	 * <ul>
-	 *   <li>null</li>
-	 *   <li>Boolean</li>
-	 *   <li>Number</li>
-	 *   <li>String</li>
-	 *   <li>JsonObject</li>
-	 *   <li>JsonArray</li>
-	 * </ul>
-	 * 
-	 * @param jsonValue
-	 * @return the java value
-	 */
-	public abstract Object toJavaPrimitive(Object jsonValue);
-
-	
-	/**
-	 * Convert a Java value back to the native JSON one.
-	 * 
-	 * @param javaValue
-	 * @return
-	 */
-	public abstract Object toNativeJsonPrimitive(Object javaValue);
-
-	public abstract Object toNativeNull();
-	public abstract Object toNativeBoolean(boolean value);
-	public abstract Object toNativeNumber(Number value);
-	public abstract Object toNativeByte(byte value);
-	public abstract Object toNativeShort(short value);
-	public abstract Object toNativeInt(int value);
-	public abstract Object toNativeLong(long value);
-	public abstract Object toNativeFloat(float value);
-	public abstract Object toNativeDouble(double value);
-	public abstract Object toNativeBigInteger(BigInteger value);
-	public abstract Object toNativeBigDecimal(BigDecimal value);
-	public abstract Object toNativeString(String value);
-	public abstract Object toNativeObject(JsonObject value);
-	public abstract Object toNativeArray(JsonArray value);
-
-	public Object toNativeBoolean(Boolean value) {
-		if(value==null) {
-			return toNativeNull();
-		} else {
-			return toNativeBoolean(value.booleanValue());
-		}
-	}
-	public Object toNativeByte(Byte value) {
-		if(value==null) {
-			return toNativeNull();
-		} else {
-			return toNativeByte(value.byteValue());
-		}
-	}
-	public Object toNativeShort(Short value) {
-		if(value==null) {
-			return toNativeNull();
-		} else {
-			return toNativeShort(value.shortValue());
-		}
-	}
-	public Object toNativeInt(Integer value) {
-		if(value==null) {
-			return toNativeNull();
-		} else {
-			return toNativeInt(value.intValue());
-		}
-	}
-	public Object toNativeLong(Long value) {
-		if(value==null) {
-			return toNativeNull();
-		} else {
-			return toNativeLong(value.longValue());
-		}
-	}
-	public Object toNativeFloat(Float value) {
-		if(value==null) {
-			return toNativeNull();
-		} else {
-			return toNativeFloat(value.floatValue());
-		}
-	}
-	public Object toNativeDouble(Double value) {
-		if(value==null) {
-			return toNativeNull();
-		} else {
-			return toNativeDouble(value.doubleValue());
-		}
-	}
-
-	public boolean nativeEquals(Object v1, Object v2) {
-		if(v1==null) return v2==null;
-		if(v2==null) return false;
-		return v1.equals(v2);
-
-	}
 
 		
+	//
+	// Export to other libraries
+	//
+
+	/**
+	 * Returned by {@link #exportValue(Object)} for a value JSON cannot represent: it is
+	 * omitted from an object, and written as null in an array.
+	 */
+	public static final Object NO_VALUE = new Object() {
+		@Override
+		public String toString() {
+			return "NO_VALUE";
+		}
+	};
+
+	/**
+	 * The value to write for a value of a container of this factory, when another library
+	 * (Jackson...) writes the container: the value itself by default, or {@link #NO_VALUE}
+	 * for a value JSON cannot represent. A factory whose containers hold other kinds of
+	 * values overrides it: GaltaJS omits undefined, the functions and the symbols, as
+	 * JSON.stringify() does.
+	 */
+	public Object exportValue(Object value) {
+		return value;
+	}
+
+
 	//
 	// Object handling
 	//
@@ -236,8 +165,6 @@ public abstract class JsonFactory {
 	
 	//
 	// Parsing
-	// This default implementation uses a common parser but can be replaced by a library
-	// native implementation.
 	//
 	
 	//
@@ -327,8 +254,6 @@ public abstract class JsonFactory {
 	
 	//
 	// Stringify
-	// This default implementation uses a common parser but can be replaced by a library
-	// native implementation.
 	//
 	
 	public void stringify(Writer writer, Object value) {
@@ -447,115 +372,6 @@ public abstract class JsonFactory {
 	}
 	
 	
-	//
-	// Data types handling
-	//
-	public abstract boolean asBoolean(Object nativeValue);
-	public abstract byte asByte(Object nativeValue);
-	public abstract short asShort(Object nativeValue);
-	public abstract int asInt(Object nativeValue);
-	public abstract long asLong(Object nativeValue);
-	public abstract float asFloat(Object nativeValue);
-	public abstract double asDouble(Object nativeValue);
-	
-	public Boolean asBooleanObject(Object nativeValue) {
-		return asBoolean(nativeValue);
-	}
-	public abstract Number asNumber(Object nativeValue);
-	public Byte asByteObject(Object nativeValue) {
-		return asByte(nativeValue);
-	}
-	public Short asShortObject(Object nativeValue) {
-		return asShort(nativeValue);
-	}
-	public Integer asIntObject(Object nativeValue) {
-		return asInt(nativeValue);
-	}
-	public Long asLongObject(Object nativeValue) {
-		return asLong(nativeValue);
-	}
-	public Float asFloatObject(Object nativeValue) {
-		return asFloat(nativeValue);
-	}
-	public Double asDoubleObject(Object nativeValue) {
-		return asDouble(nativeValue);
-	}
-	public abstract BigInteger asBigInteger(Object nativeValue);
-	public abstract BigDecimal asBigDecimal(Object nativeValue);
-	public abstract String asString(Object nativeValue);
-	public abstract JsonObject asObject(Object nativeValue);
-	public abstract JsonArray asArray(Object nativeValue);
-
-	
-	public final boolean asBoolean(Object nativeValue, boolean defaultValue) {
-		return !isNativeNull(nativeValue) ? asBoolean(nativeValue) : defaultValue;
-	}
-	public final Number asNumber(Object nativeValue, Number defaultValue) {
-		return !isNativeNull(nativeValue) ? asNumber(nativeValue) : defaultValue;
-	}
-	public final byte asByte(Object nativeValue, byte defaultValue) {
-		return !isNativeNull(nativeValue) ? asByte(nativeValue) : defaultValue;
-	}
-	public final short asShort(Object nativeValue, short defaultValue) {
-		return !isNativeNull(nativeValue) ? asShort(nativeValue) : defaultValue;
-	}
-	public final int asInt(Object nativeValue, int defaultValue) {
-		return !isNativeNull(nativeValue) ? asInt(nativeValue) : defaultValue;
-	}
-	public final long asLong(Object nativeValue, long defaultValue) {
-		return !isNativeNull(nativeValue) ? asLong(nativeValue) : defaultValue;
-	}
-	public final float asFloat(Object nativeValue, float defaultValue) {
-		return !isNativeNull(nativeValue) ? asFloat(nativeValue) : defaultValue;
-	}
-	public final double asDouble(Object nativeValue, double defaultValue) {
-		return !isNativeNull(nativeValue) ? asDouble(nativeValue) : defaultValue;
-	}
-	
-	public final Boolean asBooleanObject(Object nativeValue, Boolean defaultValue) {
-		return !isNativeNull(nativeValue) ? (Boolean)asBoolean(nativeValue) : defaultValue;
-	}
-	public final Byte asByteObject(Object nativeValue, Byte defaultValue) {
-		return !isNativeNull(nativeValue) ? (Byte)asByte(nativeValue) : defaultValue;
-	}
-	public final Short asShortObject(Object nativeValue, Short defaultValue) {
-		return !isNativeNull(nativeValue) ? (Short)asShort(nativeValue) : defaultValue;
-	}
-	public final Integer asIntObject(Object nativeValue, Integer defaultValue) {
-		return !isNativeNull(nativeValue) ? (Integer)asInt(nativeValue) : defaultValue;
-	}
-	public final Long asLongObject(Object nativeValue, Long defaultValue) {
-		return !isNativeNull(nativeValue) ? (Long)asLong(nativeValue) : defaultValue;
-	}
-	public final Float asFloatObject(Object nativeValue, Float defaultValue) {
-		return !isNativeNull(nativeValue) ? (Float)asFloat(nativeValue) : defaultValue;
-	}
-	public final Double asDoubleObject(Object nativeValue, Double defaultValue) {
-		return !isNativeNull(nativeValue) ? (Double)asDouble(nativeValue) : defaultValue;
-	}
-	public final BigInteger asBigInteger(Object nativeValue, BigInteger defaultValue) {
-		return !isNativeNull(nativeValue) ? asBigInteger(nativeValue) : defaultValue;
-	}
-	public final BigDecimal asBigDecimal(Object nativeValue, BigDecimal defaultValue) {
-		return !isNativeNull(nativeValue) ? asBigDecimal(nativeValue) : defaultValue;
-	}
-	public final String asString(Object nativeValue, String defaultValue) {
-		return !isNativeNull(nativeValue) ? asString(nativeValue) : defaultValue;
-	}
-	public final JsonObject asObject(Object nativeValue, JsonObject defaultValue) {
-		return !isNativeNull(nativeValue) ? asObject(nativeValue) : defaultValue;
-	}
-	public final JsonArray asArray(Object nativeValue, JsonArray defaultValue) {
-		return !isNativeNull(nativeValue) ? asArray(nativeValue) : defaultValue;
-	}
-	
-	public abstract boolean isNativeNull(Object nativeValue);
-	public abstract boolean isNativeBoolean(Object nativeValue);
-	public abstract boolean isNativeNumber(Object nativeValue);
-	public abstract boolean isNativeString(Object nativeValue);
-	public abstract boolean isNativeContainer(Object nativeValue);
-	public abstract boolean isNativeObject(Object nativeValue);
-	public abstract boolean isNativeArray(Object nativeValue);
 	
 	
 	//
@@ -565,25 +381,6 @@ public abstract class JsonFactory {
 	public abstract <T> T deepClone(Object value);
 	
 	
-	//
-	// Capabilities
-	//
-	
-	public boolean supportsNullKeys() {
-		return false;
-	}
-
-	public boolean supportsNaN() {
-		return false;
-	}
-
-	public boolean supportsInfinity() {
-		return false;
-	}
-
-	public boolean supportsReferences() {
-		return false;
-	}
 	
 	
 	//

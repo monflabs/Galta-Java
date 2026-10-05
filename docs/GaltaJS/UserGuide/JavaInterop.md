@@ -135,6 +135,10 @@ const back = Java.from(ints);                      // Java array -> JS array
 // -> [ "[1, 2, 3]", 2, true, "10,20,30", "x-y", 2 ]
 ```
 
+### Jackson
+
+With the `json-jackson` module, Jackson maps Java objects to JavaScript objects and back: register `new GaltaJsonModule(env.getJsonFactory())` in an `ObjectMapper`, and `mapper.convertValue(order, JsonObject.class)` gives a JavaScript object a script can use, `mapper.convertValue(value, Order.class)` a Java object from a script value, with Jackson's mapping rules and annotations. See [Jackson](/GaltaJSON/Modules/Jackson).
+
 ## The `$` prefix: reaching the Java object behind a value
 
 Every JavaScript value is a Java object. With `supportJavaNative` on, a member name starting with `$` bypasses the JavaScript semantics and accesses the Java member of the underlying object: `(42).$getClass()`, `list.$size()`, `str.$length()`.

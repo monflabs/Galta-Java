@@ -4,7 +4,7 @@ The core `json` artifact has no third-party dependency. Everything else is packa
 
 | Module (`artifactId`) | Adds | Third-party dependency |
 |---|---|---|
-| [`json-serialization`](/GaltaJSON/Modules/Serialization) | Java objects to and from JSON, by reflection or custom adapters. | none |
+| [`json-jackson`](/GaltaJSON/Modules/Jackson) | Jackson interoperability: Jackson reads and writes GaltaJSON values, and maps Java objects to and from them. | `com.fasterxml.jackson.core:jackson-databind` 2.22.3 |
 | [`json-config`](/GaltaJSON/Modules/Config) | Application settings in JSON files: typed reads, updates with auto-save, `$ref`, encrypted values. | none |
 | [`json-impexp`](/GaltaJSON/Modules/ImportExport) | Import, export and replication of JSON documents between files, zips, in-memory containers and streams. | none |
 | [`json-impexp-fastcsv`](/GaltaJSON/Modules/ImportExport#csv) | CSV source and target for `json-impexp`. | `de.siegmar:fastcsv` 4.4.0 |
@@ -13,7 +13,7 @@ The core `json` artifact has no third-party dependency. Everything else is packa
 | [`json-jsonpath-jayway`](/GaltaJSON/Modules/JsonPathJayway) | Jayway JsonPath over GaltaJSON values. | `com.jayway.jsonpath:json-path` 3.0.0 |
 | [`json-jsonschema-jsonschemafriend`](/GaltaJSON/Modules/JsonSchema) | JSON Schema validation. | `org.metaeffekt.bundle.jsonschemafriend:ae-jsonschemafriend-core` 0.12.5-1 |
 
-All of them work on the values described in [Values](/GaltaJSON/Values): a YAML file, a CSV row, a configuration or a serialized Java object is a regular `JsonObject` that the rest of the library, and the GaltaJS engine, can use as is.
+All of them work on the values described in [Values](/GaltaJSON/Values): a YAML file, a CSV row, a configuration or a Java object mapped by Jackson is a regular `JsonObject` that the rest of the library, and the GaltaJS engine, can use as is.
 
 ## Samples
 
@@ -21,7 +21,7 @@ Every code sample in these pages is a JUnit test, run with the module's test sui
 
 | Page | Test class |
 |---|---|
-| [Serialization](/GaltaJSON/Modules/Serialization) | `json-serialization`: `doc_examples/serialization/SerializationExamples.java` |
+| [Jackson](/GaltaJSON/Modules/Jackson) | `json-jackson`: `doc_examples/jackson/JacksonExamples.java` |
 | [Configuration](/GaltaJSON/Modules/Config) | `json-config-test`: `doc_examples/config/ConfigExamples.java` |
 | [Import & Export](/GaltaJSON/Modules/ImportExport) | `json-impexp`: `doc_examples/impexp/ImportExportExamples.java`; `json-impexp-fastcsv`: `doc_examples/csv/CsvExamples.java` |
 | [Memory Database](/GaltaJSON/Modules/MemoryDb) | `json-memdb`: `doc_examples/memdb/MemoryDbExamples.java` |

@@ -20,7 +20,7 @@ rest follows.
 | Area | Artifacts |
 |---|---|
 | Utilities | `utilities`, `filesystem` (java.nio file systems: memory, sandboxed, ZIP, classpath), `javacompiler` (runtime Java compilation), `test` (JUnit support) |
-| JSON | `json` (parser, values, JSONPath, JSON Pointer, schema), `json-serialization`, `json-config`, `json-impexp`, `json-impexp-fastcsv`, `json-memdb`, `json-yaml-snakeyaml`, `json-jsonpath-jayway`, `json-jsonschema-jsonschemafriend` |
+| JSON | `json` (parser, values, JSONPath, JSON Pointer, schema), `json-jackson`, `json-config`, `json-impexp`, `json-impexp-fastcsv`, `json-memdb`, `json-yaml-snakeyaml`, `json-jsonpath-jayway`, `json-jsonschema-jsonschemafriend` |
 | GaltaJS | `js` (the engine), `js-transpiler-maven` (Maven plugin), `js-template`, `js-vb`, `js-debugger`, `js-playground` |
 | UI | `ui-commons`, `ui-swing`, `ui-swing-ide`, `playground-core`, `playground-ui-swing` |
 

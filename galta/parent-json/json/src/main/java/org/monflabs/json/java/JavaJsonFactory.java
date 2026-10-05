@@ -37,23 +37,6 @@ public class JavaJsonFactory extends JsonFactory {
 	protected JavaJsonFactory() {
 	}
 	
-	@Override
-	public boolean supportsNaN() {
-		return true;
-	}
-
-	@Override
-	public boolean supportsInfinity() {
-		return true;
-	}
-
-	@Override
-	public boolean supportsReferences() {
-		return true;
-	}
-
-
-	
 	//
 	// Object handling
 	//
@@ -82,204 +65,6 @@ public class JavaJsonFactory extends JsonFactory {
 
 	
 	//
-	// Check the native values
-	//
-	@Override
-	public boolean asBoolean(Object nativeValue) {
-		if(nativeValue instanceof Boolean b) {
-			return b.booleanValue();
-		}
-		throw new JsonException(null, "Value {0} is not a Boolean", nativeValue);
-	}
-	@Override
-	public Number asNumber(Object nativeValue) {
-		if(nativeValue instanceof Number n) {
-			return n;
-		}
-		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
-	}
-	@Override
-	public byte asByte(Object nativeValue) {
-		if(nativeValue instanceof Number n) {
-			// Saturated, like JsonObject.getInt(): 1e10 is not wrapped to a negative value
-			return JsonUtil.clampToByte(n);
-		}
-		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
-	}
-	@Override
-	public short asShort(Object nativeValue) {
-		if(nativeValue instanceof Number n) {
-			// Saturated, like JsonObject.getInt(): 1e10 is not wrapped to a negative value
-			return JsonUtil.clampToShort(n);
-		}
-		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
-	}
-	@Override
-	public int asInt(Object nativeValue) {
-		if(nativeValue instanceof Number n) {
-			// Saturated, like JsonObject.getInt(): 1e10 is not wrapped to a negative value
-			return JsonUtil.clampToInt(n);
-		}
-		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
-	}
-	@Override
-	public long asLong(Object nativeValue) {
-		if(nativeValue instanceof Number n) {
-			// Saturated, like JsonObject.getInt(): 1e10 is not wrapped to a negative value
-			return JsonUtil.clampToLong(n);
-		}
-		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
-	}
-	@Override
-	public float asFloat(Object nativeValue) {
-		if(nativeValue instanceof Number n) {
-			return n.floatValue();
-		}
-		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
-	}
-	@Override
-	public double asDouble(Object nativeValue) {
-		if(nativeValue instanceof Number n) {
-			return n.doubleValue();
-		}
-		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
-	}
-	@Override
-	public BigInteger asBigInteger(Object nativeValue) {
-		if(nativeValue instanceof Number n) {
-			return JsonUtil.bigIntegerValue(n, true);
-		}
-		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
-	}
-	@Override
-	public BigDecimal asBigDecimal(Object nativeValue) {
-		if(nativeValue instanceof Number n) {
-			return JsonUtil.bigDecimalValue(n, true);
-		}
-		throw new JsonException(null, "Value {0} is not a Number", nativeValue);
-	}
-	@Override
-	public String asString(Object nativeValue) {
-		if(nativeValue instanceof String s) {
-			return s;
-		}
-		throw new JsonException(null, "Value {0} is not a String", nativeValue);
-	}
-	@Override
-	public JsonObject asObject(Object nativeValue) {
-		if(nativeValue instanceof JsonObject o) {
-			return o;
-		}
-		throw new JsonException(null, "Value {0} is not an Object", nativeValue);
-	}
-	@Override
-	public JsonArray asArray(Object nativeValue) {
-		if(nativeValue instanceof JsonArray a) {
-			return a;
-		}
-		throw new JsonException(null, "Value {0} is not an Array", nativeValue);
-	}
-	
-	@Override
-	public Object toJavaPrimitive(Object jsonValue) {
-		return jsonValue;
-	}
-	
-	@Override
-	public Object toNativeJsonPrimitive(Object javaValue) {
-		return javaValue;
-	}
-
-	
-	@Override
-	public Object toNativeNull() {
-		return null;
-	}
-	@Override
-	public Object toNativeBoolean(boolean value) {
-		return value;
-	}
-	@Override
-	public Object toNativeNumber(Number value) {
-		return value;
-	}
-	@Override
-	public Object toNativeByte(byte value) {
-		return value;
-	}
-	@Override
-	public Object toNativeShort(short value) {
-		return value;
-	}
-	@Override
-	public Object toNativeInt(int value) {
-		return value;
-	}
-	@Override
-	public Object toNativeLong(long value) {
-		return value;
-	}
-	@Override
-	public Object toNativeFloat(float value) {
-		return value;
-	}
-	@Override
-	public Object toNativeDouble(double value) {
-		return value;
-	}
-	@Override
-	public Object toNativeBigInteger(BigInteger value) {
-		return value;
-	}
-	@Override
-	public Object toNativeBigDecimal(BigDecimal value) {
-		return value;
-	}
-	@Override
-	public Object toNativeString(String value) {
-		return value;
-	}
-	@Override
-	public Object toNativeObject(JsonObject value) {
-		return value;
-	}
-	@Override
-	public Object toNativeArray(JsonArray value) {
-		return value;
-	}
-	
-	@Override
-	public boolean isNativeNull(Object value) {
-		return value==null;
-	}
-	@Override
-	public boolean isNativeBoolean(Object value) {
-		return value!=null && value.getClass()==Boolean.class;
-	}
-	@Override
-	public boolean isNativeNumber(Object value) {
-		return value instanceof Number;
-	}
-	@Override
-	public boolean isNativeString(Object value) {
-		return value!=null && value.getClass()==String.class;
-	}
-	@Override
-	public boolean isNativeContainer(Object value) {
-		return value instanceof JsonObject || value instanceof JsonArray;
-	}
-	@Override
-	public boolean isNativeObject(Object value) {
-		return value instanceof JsonObject;
-	}
-	@Override
-	public boolean isNativeArray(Object value) {
-		return value instanceof JsonArray;
-	}
-
-	
-	
-	//
 	// Json Clone
 	//
 	
@@ -291,7 +76,7 @@ public class JavaJsonFactory extends JsonFactory {
 	@SuppressWarnings("unchecked")
 	@Override
 	public  <T> T deepClone(Object value) {
-		return (T)toJavaPrimitive(_deepClone(toNativeJsonPrimitive(value), 0, null));
+		return (T)_deepClone(value, 0, null);
 	}
 	// The containers on the current path, tracked once the recursion is deep (a cycle
 	// always gets deep): no cost for the usual documents
@@ -339,7 +124,7 @@ public class JavaJsonFactory extends JsonFactory {
 	}
 	private void copyReference(JsonContainer from, JsonContainer to) {
 		String ref = from.getReference();
-		if(ref!=null && supportsReferences()) {
+		if(ref!=null) {
 			to.setReference(ref);
 		}
 	}

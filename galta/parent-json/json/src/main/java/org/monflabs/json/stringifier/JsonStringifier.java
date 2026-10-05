@@ -28,6 +28,7 @@ import org.monflabs.json.JsonObject;
 import org.monflabs.json.JsonUtil;
 import org.monflabs.json.java.JsonObjectAsLinkedMap;
 import org.monflabs.json.jsonreference.JsonReference;
+import org.monflabs.util.DtoA;
 import org.monflabs.util.StringUtil;
 
 
@@ -546,11 +547,44 @@ public abstract class JsonStringifier {
     	}
     }
     private void outStringLiteral(String s) throws IOException {
-        out('\"');
         int len = s.length();
-        int run = 0; // Start of the current run of plain characters
+        // Fast path, when the buffer has room for the whole literal: the string is copied at
+        // once, then checked in place. Most strings need no escape: they are then written.
+        final char[] b = buffer;
+        final int start = bufferLength;
+        if(len+2 <= b.length-start) {
+        	b[start] = '\"';
+        	s.getChars(0, len, b, start+1);
+        	final int end = start+1+len;
+        	final boolean escapeNonAscii = this.escapeNonAscii;
+        	for(int i=start+1; i<end; i++) {
+        		char c = b[i];
+        		if(c<128) {
+        			if(PLAIN_CHAR[c] || (c==127 && !escapeNonAscii)) {
+        				continue;
+        			}
+        		} else if(!escapeNonAscii && !Character.isSurrogate(c)) {
+        			continue;
+        		}
+        		// A character to escape: the copied text before it is kept, the general path
+        		// writes the rest
+        		bufferLength = i;
+        		outStringRest(s, i-(start+1));
+        		return;
+        	}
+        	b[end] = '\"';
+        	bufferLength = end+1;
+        	return;
+        }
+        out('\"');
+        outStringRest(s, 0);
+    }
+    // Writes a string from an index, escaped, and the closing quote
+    private void outStringRest(String s, int from) throws IOException {
+        int len = s.length();
+        int run = from; // Start of the current run of plain characters
         final boolean escapeNonAscii = this.escapeNonAscii;
-        for(int i=0; i<len; i++) {
+        for(int i=from; i<len; i++) {
             char c = s.charAt(i);
             if(c<128) {
             	if(PLAIN_CHAR[c] || (c==127 && !escapeNonAscii)) {
@@ -654,6 +688,14 @@ public abstract class JsonStringifier {
     				outLong(l);
     				return;
     			}
+    		}
+    		// Written into the buffer, without a String
+    		if(buffer.length-bufferLength < DtoA.MAX_STANDARD_LENGTH) {
+    			bufferFull(DtoA.MAX_STANDARD_LENGTH);
+    		}
+    		if(buffer.length-bufferLength >= DtoA.MAX_STANDARD_LENGTH) {
+    			bufferLength = DtoA.toStandard(v, buffer, bufferLength);
+    			return;
     		}
     	}
     	if(n instanceof java.math.BigInteger || n instanceof java.math.BigDecimal

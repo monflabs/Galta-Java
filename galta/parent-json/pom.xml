@@ -29,7 +29,7 @@
 		<module>json-impexp</module>
 		<module>json-impexp-fastcsv</module>
 		<module>json-memdb</module>
-		<module>json-serialization</module>
+		<module>json-jackson</module>
 		<module>json-config</module>
 		<module>json-config-test</module>
 	</modules>

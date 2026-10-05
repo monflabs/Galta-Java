@@ -49,9 +49,6 @@ public class JsonReferenceTest extends ProjectTestCase {
 	}
 	
 	public void testExample1() { 
-		if(!JsonFactory.get().supportsReferences()) {
-			return;
-		}
 		checkResolve(
 """
 {
@@ -97,9 +94,6 @@ public class JsonReferenceTest extends ProjectTestCase {
 	}
 	
 	public void testExample2() { 
-		if(!JsonFactory.get().supportsReferences()) {
-			return;
-		}
 		// The other members of a reference object are ignored: the whole object is replaced
 		checkResolve(
 """
@@ -121,9 +115,6 @@ public class JsonReferenceTest extends ProjectTestCase {
 	}
 	
 	public void testExample3() { 
-		if(!JsonFactory.get().supportsReferences()) {
-			return;
-		}
 		checkResolve(
 """
 {
@@ -158,9 +149,6 @@ Map.of("./user.json",
 	}
 	
 	public void testExample4() { 
-		if(!JsonFactory.get().supportsReferences()) {
-			return;
-		}
 		checkResolve(
 """
 {
@@ -183,9 +171,6 @@ Map.of("https://example.com/schemas/common.json",
 	}
 	
 	public void testExample5() { 
-		if(!JsonFactory.get().supportsReferences()) {
-			return;
-		}
 		checkResolve(
 """
 {
@@ -212,9 +197,6 @@ Map.of("https://example.com/schemas/address.json",
 	}
 	
 	public void testExampleF1() {
-		if(!JsonFactory.get().supportsReferences()) {
-			return;
-		}
 		try {
 			checkResolve(
 """
@@ -231,9 +213,6 @@ Map.of("https://example.com/schemas/address.json",
 	}
 	
 	public void testExampleSerialization() throws Exception {
-		if(!JsonFactory.get().supportsReferences()) {
-			return;
-		}
 		
 		String source = 
 		"""
@@ -263,9 +242,6 @@ Map.of("https://example.com/schemas/address.json",
 	}
 
 	public void testBrowse() throws Exception {
-		if(!JsonFactory.get().supportsReferences()) {
-			return;
-		}
 		
 		JsonObject o = JsonObject.parse(
 """

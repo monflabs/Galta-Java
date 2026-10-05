@@ -16,6 +16,9 @@
 package org.monflabs.galtajs.jsonfactory;
 
 import org.monflabs.galtajs.JSEnvironment;
+import org.monflabs.galtajs.rt.RuntimeUtil;
+import org.monflabs.galtajs.rt.builtins.Callable;
+import org.monflabs.galtajs.rt.builtins.primitives.symbol.Symbol;
 import org.monflabs.galtajs.rt.builtins.primitives.array.BuiltinArray;
 import org.monflabs.galtajs.rt.builtins.primitives.object.BuiltinObject;
 import org.monflabs.json.JsonArray;
@@ -67,6 +70,20 @@ public class GaltaJsJsonFactory extends JavaJsonFactory {
 
 
 	
+	//
+	// Export to other libraries
+	//
+
+	// Like JSON.stringify(): undefined, a function and a symbol are not JSON values
+	@Override
+	public Object exportValue(Object value) {
+		if(value==RuntimeUtil.UNDEFINED || value instanceof Symbol || (value instanceof Callable c && c.isCallable())) {
+			return NO_VALUE;
+		}
+		return value;
+	}
+
+
 	//
 	// Object handling
 	//

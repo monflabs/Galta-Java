@@ -24,7 +24,6 @@ import org.monflabs.json.JsonObject;
 import org.monflabs.json.JsonUtil;
 import org.monflabs.util.BaseException;
 import org.monflabs.util.StringMatcher;
-import org.monflabs.util.StringUtil;
 
 /**
  * JsonPointer &amp; extension.
@@ -99,11 +98,27 @@ public class JsonPointer {
 		if(path==null || path.isEmpty()) {
 			return EMPTY;
 		}
-		if(path.charAt(0)=='/') {
-			path = path.substring(1);
+		if(path.length()>MAX_CACHED_LENGTH) {
+			return parse(path, path.charAt(0)=='/' ? 1 : 0);
 		}
-		return new JsonPointer(parse(path), false);
+		int h = path.hashCode();
+		int slot = (h ^ (h>>>16)) & (CACHE_SIZE-1);
+		Parsed e = PARSED[slot];
+		if(e!=null && e.text().equals(path)) {
+			return e.pointer();
+		}
+		JsonPointer pointer = parse(path, path.charAt(0)=='/' ? 1 : 0);
+		PARSED[slot] = new Parsed(path, pointer);
+		return pointer;
 	}
+
+	// The last parsed pointers: the same pointer strings come back often (configuration,
+	// $ref, patches). Pointers are immutable, so they can be shared. Direct-mapped and
+	// lock-free: an entry has final fields only, and a collision replaces it.
+	private static final int CACHE_SIZE = 256;
+	private static final int MAX_CACHED_LENGTH = 256;
+	private record Parsed(String text, JsonPointer pointer) {}
+	private static final Parsed[] PARSED = new Parsed[CACHE_SIZE];
 
 	/**
 	 * Parse the URI fragment representation of a JSON pointer (RFC 6901 section 6):
@@ -210,30 +225,50 @@ public class JsonPointer {
 	private final int size;
 	// Member names never address array elements (JSON Path semantics)
 	private final boolean memberNames;
+	// The parts of a pointer created from its parts or parsed (final fields are safely
+	// published without the cost of a volatile write), else built on demand in cache
+	private final Object[] fixedParts;
 	private volatile Object[] cache;
+	// How each part addresses an array (see arrayAddress()): known when parsed, else
+	// computed on demand
+	private final int[] fixedIndexes;
+	private volatile int[] indexes;
+	// Computed on demand (0: not computed yet), a benign race
+	private int hash;
+	private String string;
 
 	private JsonPointer(Object[] parts, boolean memberNames) {
+		this(parts, null, memberNames);
+	}
+	private JsonPointer(Object[] parts, int[] indexes, boolean memberNames) {
 		this.parent = null;
-		this.cache = parts;
+		this.fixedParts = parts;
+		this.fixedIndexes = indexes;
 		this.size = parts.length;
 		this.last = size>0 ? parts[size-1] : null;
 		this.memberNames = memberNames;
 	}
 	private JsonPointer(JsonPointer parent, Object last) {
 		this.parent = parent;
+		this.fixedParts = null;
+		this.fixedIndexes = null;
 		this.last = last;
 		this.size = parent.size+1;
 		this.memberNames = parent.memberNames;
 	}
 
 	private Object[] parts() {
-		Object[] p = cache;
+		Object[] p = fixedParts;
+		if(p!=null) {
+			return p;
+		}
+		p = cache;
 		if(p==null) {
 			p = new Object[size];
 			JsonPointer c = this;
 			int i = size-1;
 			Object[] cc;
-			while((cc=c.cache)==null) {
+			while((cc=c.fixedParts!=null ? c.fixedParts : c.cache)==null) {
 				p[i--] = c.last;
 				c = c.parent;
 			}
@@ -245,12 +280,160 @@ public class JsonPointer {
 		return p;
 	}
 
+	// The array addressing of a part: an index (negative: from the end, extension),
+	// APPEND for "-" (past the last element) or NONE (not an index)
+	private static final int NONE = Integer.MIN_VALUE;
+	private static final int APPEND = Integer.MIN_VALUE+1;
+
+	private int[] knownIndexes() {
+		int[] idx = fixedIndexes;
+		return idx!=null ? idx : indexes;
+	}
+
+	private int[] indexes() {
+		int[] idx = fixedIndexes;
+		if(idx!=null) {
+			return idx;
+		}
+		idx = indexes;
+		if(idx==null) {
+			Object[] parts = parts();
+			idx = new int[parts.length];
+			for(int i=0; i<parts.length; i++) {
+				idx[i] = arrayAddress(parts[i], memberNames);
+			}
+			indexes = idx;
+		}
+		return idx;
+	}
+
+	// The member name of a part: the reference token
+	private static String name(Object part) {
+		return part instanceof String s ? s : part.toString();
+	}
+
+	// The hash of the reference token of a part, the same as name(part).hashCode()
+	// without creating the string of an index
+	private static int tokenHash(Object part) {
+		if(part instanceof String s) {
+			return s.hashCode();
+		}
+		if(part==LASTKEY) {
+			return '-';
+		}
+		int n = (Integer)part;
+		if(n==0) {
+			return '0';
+		}
+		long v = n;
+		boolean negative = v<0;
+		if(negative) {
+			v = -v;
+		}
+		int h = 0;
+		int power = 1;
+		while(v>0) {
+			h += ('0'+(int)(v%10))*power;
+			power *= 31;
+			v /= 10;
+		}
+		if(negative) {
+			h += '-'*power;
+		}
+		return h;
+	}
+
+	// Whether two parts are the same reference token: the index 0 and the member "0",
+	// "-" and the past-the-end part
+	private static boolean sameToken(Object p1, Object p2) {
+		if(p1==p2) {
+			return true;
+		}
+		if(p1 instanceof String s1) {
+			return p2 instanceof String s2 ? s1.equals(s2) : sameToken(s1, p2);
+		}
+		if(p2 instanceof String s2) {
+			return sameToken(s2, p1);
+		}
+		return p1.equals(p2);
+	}
+	private static boolean sameToken(String s, Object nonString) {
+		if(nonString==LASTKEY) {
+			return s.length()==1 && s.charAt(0)=='-';
+		}
+		// A canonical integer, as an index is written
+		if(s.isEmpty()) {
+			return false;
+		}
+		char c = s.charAt(0);
+		if((c<'0' || c>'9') && c!='-') {
+			return false;
+		}
+		Integer i = parseInteger(s);
+		return i!=null && i.equals(nonString);
+	}
+
+	// How a part addresses an array. For a JSON pointer, it only depends on the text of
+	// the reference token: "0", "-" or "-1" behave the same as a String or as parsed.
+	// For a pointer from a JSON Path, only the Integer parts are indexes.
+	private static int arrayAddress(Object p, boolean memberNames) {
+		if(p==LASTKEY) {
+			return APPEND;
+		}
+		if(p instanceof Integer n) {
+			return n>APPEND ? n : NONE;
+		}
+		if(!memberNames && p instanceof String s && !s.isEmpty()) {
+			char c = s.charAt(0);
+			if(c=='-' && s.length()==1) {
+				return APPEND;
+			}
+			if((c>='0' && c<='9') || (NEGATIVE_INDEXES && c=='-')) {
+				Integer i = parseInteger(s);
+				if(i!=null && i>APPEND) {
+					return i;
+				}
+			}
+		}
+		return NONE;
+	}
+
+	// The index of an existing element of an array of that size, or -1
+	private static int existingIndex(int address, int size) {
+		if(address<0) {
+			if(address<=APPEND || !NEGATIVE_INDEXES) {
+				return -1;
+			}
+			address += size;
+			if(address<0) {
+				return -1;
+			}
+		}
+		return address<size ? address : -1;
+	}
+	// The insertion index in an array of that size (size appends), or -1
+	private static int insertionIndex(int address, int size) {
+		if(address==APPEND) {
+			return size;
+		}
+		if(address<0) {
+			if(address==NONE || !NEGATIVE_INDEXES) {
+				return -1;
+			}
+			address += size;
+			if(address<0) {
+				return -1;
+			}
+		}
+		return address<=size ? address : -1;
+	}
+
 	public boolean contains(JsonPointer p) {
-		Object[] parts = parts();
-		if(parts.length>=p.size) {
+		if(size>=p.size) {
+			Object[] parts = parts();
 			Object[] pparts = p.parts();
 			for(int i=0; i<pparts.length; i++) {
-				if(!samePart(pparts[i],parts[i])) {
+				if(!sameToken(pparts[i], parts[i])) {
 					return false;
 				}
 			}
@@ -258,36 +441,42 @@ public class JsonPointer {
 		}
 		return false;
 	}
-	
-	// A part is a reference token: the index 0 and the member "0" are the same token
-	private static boolean samePart(Object p1, Object p2) {
-		return p1.toString().equals(p2.toString());
-	}
 
+	// Two pointers are equal when they have the same reference tokens: the index 0 and
+	// the member "0" are the same token
 	@Override
 	public int hashCode() {
-		// Order dependent: /a/b and /b/a must not collide systematically
-		int h = 1;
-		Object[] parts = parts();
-		for(int i=0; i<parts.length; i++) {
-			h = 31*h + parts[i].toString().hashCode();
+		int h = hash;
+		if(h==0) {
+			// Order dependent: /a/b and /b/a must not collide systematically
+			h = 1;
+			Object[] parts = parts();
+			for(int i=0; i<parts.length; i++) {
+				h = 31*h + tokenHash(parts[i]);
+			}
+			hash = h;
 		}
 		return h;
 	}
 	
 	@Override
 	public boolean equals(Object o) {
-		if(o instanceof JsonPointer p) {
-			if(size==p.size) {
-				Object[] parts = parts();
-				Object[] pparts = p.parts();
-				for(int i=0; i<parts.length; i++) {
-					if(!samePart(parts[i],pparts[i])) {
-						return false;
-					}
-				}
-				return true;
+		if(o==this) {
+			return true;
+		}
+		if(o instanceof JsonPointer p && size==p.size) {
+			int h1 = hash, h2 = p.hash;
+			if(h1!=0 && h2!=0 && h1!=h2) {
+				return false;
 			}
+			Object[] parts = parts();
+			Object[] pparts = p.parts();
+			for(int i=size-1; i>=0; i--) {
+				if(!sameToken(parts[i], pparts[i])) {
+					return false;
+				}
+			}
+			return true;
 		}
 		return false;
 	}
@@ -324,18 +513,24 @@ public class JsonPointer {
 	}
 
 	public String toJsonPointerString() {
-		Object[] parts = parts();
-		StringBuilder b = new StringBuilder();
-		for(int i=0; i<parts.length; i++) {
-			Object p = parts[i];
-			b.append('/');
-			if(p instanceof Number n) {
-				b.append(n.toString());
-			} else {
-				b.append(escape(parts[i].toString()));
+		String str = string;
+		if(str==null) {
+			Object[] parts = parts();
+			StringBuilder b = new StringBuilder(size*8);
+			for(int i=0; i<parts.length; i++) {
+				b.append('/');
+				Object p = parts[i];
+				if(p instanceof String name) {
+					escape(b, name);
+				} else if(p instanceof Integer n) {
+					b.append(n.intValue());
+				} else {
+					b.append('-');
+				}
 			}
+			string = str = b.toString();
 		}
-		return b.toString();
+		return str;
 	}
 
 	public String toJsonPathString() {
@@ -408,16 +603,19 @@ public class JsonPointer {
 	
 	public boolean exists(Object v) {
 		Object[] parts = parts();
+		// A pointer built child by child is often read once: its array addressing is
+		// computed on the way rather than stored
+		int[] indexes = knownIndexes();
 		for(int i=0; i<parts.length; i++) {
-			Object key = parts[i];
 			if(v instanceof JsonObject o) {
-				String ks = key.toString();
-				if(!o.containsKey(ks)) {
+				String k = name(parts[i]);
+				Object n = o.get(k);
+				if(n==null && !o.containsKey(k)) {
 					return false;
 				}
-				v = o.get(ks);
+				v = n;
 			} else if(v instanceof JsonArray a) {
-				int index = existingIndex(a, key, memberNames);
+				int index = existingIndex(indexes!=null ? indexes[i] : arrayAddress(parts[i], memberNames), a.size());
 				if(index<0) {
 					return false;
 				}
@@ -431,16 +629,18 @@ public class JsonPointer {
 	
 	public Object read(Object v) {
 		Object[] parts = parts();
+		// A pointer built child by child is often read once: its array addressing is
+		// computed on the way rather than stored
+		int[] indexes = knownIndexes();
 		for(int i=0; i<parts.length; i++) {
-			Object key = parts[i];
 			if(v instanceof JsonObject o) {
-				String ks = key.toString();
-				if(!o.containsKey(ks)) {
+				// A missing member and a null value both read as null: one lookup
+				v = o.get(name(parts[i]));
+				if(v==null) {
 					return null;
 				}
-				v = o.get(ks);
 			} else if(v instanceof JsonArray a) {
-				int index = existingIndex(a, key, memberNames);
+				int index = existingIndex(indexes!=null ? indexes[i] : arrayAddress(parts[i], memberNames), a.size());
 				if(index<0) {
 					return null;
 				}
@@ -459,33 +659,30 @@ public class JsonPointer {
 	 */
 	public boolean add(Object v, Object value) {
 		Object[] parts = parts();
-		for(int i=0; i<parts.length; i++) {
-			Object key = parts[i];
+		int[] indexes = indexes();
+		int lastIndex = indexes.length-1;
+		for(int i=0; i<=lastIndex; i++) {
 			if(v instanceof JsonObject o) {
-				String ks = key.toString();
-				if(i==parts.length-1) {
-					o.put(ks, value);
+				if(i==lastIndex) {
+					o.put(name(parts[i]), value);
 					return true;
 				}
-				v = o.get(ks);
+				v = o.get(name(parts[i]));
 			} else if(v instanceof JsonArray a) {
-				if(i==parts.length-1) {
-					if(key==LASTKEY) {
+				if(i==lastIndex) {
+					// index == size appends (RFC 6902)
+					int index = insertionIndex(indexes[i], a.size());
+					if(index<0) {
+						return false;
+					}
+					if(index==a.size()) {
 						a.add(value);
 					} else {
-						int index = partIndex(a, key, memberNames);
-						if(NEGATIVE_INDEXES && index<0 && index!=Integer.MIN_VALUE) {
-							index = a.size() + index;
-						}
-						// index == size appends (RFC 6902)
-						if(index<0 || index>a.size()) {
-							return false;
-						}
 						a.add(index,value);
 					}
 					return true;
 				}
-				int index = existingIndex(a, key, memberNames);
+				int index = existingIndex(indexes[i], a.size());
 				if(index<0) {
 					return false;
 				}
@@ -502,32 +699,34 @@ public class JsonPointer {
 	 * It creates the necessary parts when they do not exist (properties &amp; indexes).
 	 * An array index can address an existing element or the one right after the last
 	 * element (its size, or "-"), which appends. Larger indexes are rejected rather
-	 * than padding the array with nulls (RFC 6902 'add' semantics).
+	 * than padding the array with nulls (RFC 6902 'add' semantics). Nothing is changed
+	 * when the value can't be set.
 	 */
 	public boolean setValue(Object v, Object value) {
 		Object[] parts = parts();
-		for(int i=0; i<parts.length; i++) {
-			Object key = parts[i];
+		int[] indexes = indexes();
+		int lastIndex = indexes.length-1;
+		for(int i=0; i<=lastIndex; i++) {
 			if(v instanceof JsonObject o) {
-				String ks = key.toString();
-				if(i==parts.length-1) {
-					o.put(ks, value);
+				String k = name(parts[i]);
+				if(i==lastIndex) {
+					o.put(k, value);
 					return true;
 				}
-				v = o.get(ks);
+				v = o.get(k);
 				if(v==null) {
-					v = createPart(i);
-					o.put(ks, v);
+					if(!canCreate(parts, indexes, i)) {
+						return false;
+					}
+					v = createPart(parts, i);
+					o.put(k, v);
 				}
 			} else if(v instanceof JsonArray a) {
-				int index = key==LASTKEY ? a.size() : partIndex(a, key, memberNames);
-				if(NEGATIVE_INDEXES && index<0 && index!=Integer.MIN_VALUE) {
-					index = a.size() + index;
-				}
-				if(index<0 || index>a.size()) {
+				int index = insertionIndex(indexes[i], a.size());
+				if(index<0) {
 					return false;
 				}
-				if(i==parts.length-1) {
+				if(i==lastIndex) {
 					if(index==a.size()) {
 						a.add(value);
 					} else {
@@ -536,12 +735,18 @@ public class JsonPointer {
 					return true;
 				}
 				if(index==a.size()) {
-					v = createPart(i);
+					if(!canCreate(parts, indexes, i)) {
+						return false;
+					}
+					v = createPart(parts, i);
 					a.add(v);
 				} else {
 					v = a.get(index);
 					if(v==null) {
-						v = createPart(i);
+						if(!canCreate(parts, indexes, i)) {
+							return false;
+						}
+						v = createPart(parts, i);
 						a.set(index, v);
 					}
 				}
@@ -551,15 +756,23 @@ public class JsonPointer {
 		}
 		return false;
 	}
-	private Object createPart(int index) {
-		Object[] parts = parts();
-		// The next index determines the type Object/Array
-		Object p = parts[index+1];
-		if(p instanceof Number) {
+	// The container created for the part at index: the next part determines its type
+	private static Object createPart(Object[] parts, int index) {
+		if(parts[index+1] instanceof Number) {
 			return JsonArray.create();
 		} else {
 			return JsonObject.create();
 		}
+	}
+	// Whether the containers created from the part at index on can hold the value: a new
+	// array is empty, so the part addressing it must be 0 or "-"
+	private static boolean canCreate(Object[] parts, int[] indexes, int index) {
+		for(int j=index+1; j<parts.length; j++) {
+			if(parts[j] instanceof Number && indexes[j]!=0 && indexes[j]!=APPEND) {
+				return false;
+			}
+		}
+		return true;
 	}
 	
 	
@@ -569,27 +782,26 @@ public class JsonPointer {
 	 */
 	public boolean replace(Object v, Object value) {
 		Object[] parts = parts();
-		for(int i=0; i<parts.length; i++) {
-			Object key = parts[i];
+		int[] indexes = indexes();
+		int lastIndex = indexes.length-1;
+		for(int i=0; i<=lastIndex; i++) {
 			if(v instanceof JsonObject o) {
-				String ks = key.toString();
-				if(!o.containsKey(ks)) {
+				String k = name(parts[i]);
+				Object n = o.get(k);
+				if(n==null && !o.containsKey(k)) {
 					return false;
 				}
-				if(i==parts.length-1) {
-					if(o.containsKey(ks)) {
-						o.put(ks, value);
-						return true;
-					}
-					return false;
+				if(i==lastIndex) {
+					o.put(k, value);
+					return true;
 				}
-				v = o.get(ks);
+				v = n;
 			} else if(v instanceof JsonArray a) {
-				int index = existingIndex(a, key, memberNames);
+				int index = existingIndex(indexes[i], a.size());
 				if(index<0) {
 					return false;
 				}
-				if(i==parts.length-1) {
+				if(i==lastIndex) {
 					a.set(index, value);
 					return true;
 				}
@@ -603,24 +815,26 @@ public class JsonPointer {
 	
 	public boolean remove(Object v) {
 		Object[] parts = parts();
-		for(int i=0; i<parts.length; i++) {
-			Object key = parts[i];
+		int[] indexes = indexes();
+		int lastIndex = indexes.length-1;
+		for(int i=0; i<=lastIndex; i++) {
 			if(v instanceof JsonObject o) {
-				String ks = key.toString();
-				if(!o.containsKey(ks)) {
+				String k = name(parts[i]);
+				Object n = o.get(k);
+				if(n==null && !o.containsKey(k)) {
 					return false;
 				}
-				if(i==parts.length-1) {
-					o.remove(ks);
+				if(i==lastIndex) {
+					o.remove(k);
 					return true;
 				}
-				v = o.get(ks);
+				v = n;
 			} else if(v instanceof JsonArray a) {
-				int index = existingIndex(a, key, memberNames);
+				int index = existingIndex(indexes[i], a.size());
 				if(index<0) {
 					return false;
 				}
-				if(i==parts.length-1) {
+				if(i==lastIndex) {
 					a.remove(index);
 					return true;
 				}
@@ -631,95 +845,97 @@ public class JsonPointer {
 		}
 		return false;
 	}
-
-	/**
-	 * The raw index a part designates in an array, possibly negative (extension),
-	 * or Integer.MIN_VALUE if the part is not an index ("-", a member name).
-	 */
-	private static int partIndex(JsonArray a, Object key, boolean memberNames) {
-		if(key==LASTKEY) {
-			return Integer.MIN_VALUE;
-		}
-		if(key instanceof Integer n) {
-			return n;
-		}
-		if(!memberNames && key instanceof String s && !s.isEmpty()) {
-			// RFC 6901: a reference token is an index if it is a canonical number
-			char c = s.charAt(0);
-			if(c>='0' && c<='9') {
-				Integer i = parseInteger(s);
-				if(i!=null && i>=0) {
-					return i;
-				}
-			}
-		}
-		return Integer.MIN_VALUE;
-	}
-	/**
-	 * The index of an existing element, or -1 if the part does not designate one.
-	 */
-	private static int existingIndex(JsonArray a, Object key, boolean memberNames) {
-		int index = partIndex(a, key, memberNames);
-		if(index==Integer.MIN_VALUE) {
-			return -1;
-		}
-		if(NEGATIVE_INDEXES && index<0) {
-			index = a.size() + index;
-		}
-		if(index<0 || index>=a.size()) {
-			return -1;
-		}
-		return index;
-	}
 	
 	
 	//
 	// JsonPointer parser
 	//
 	
-    private static Object[] parse(String s) {
-        if( s==null ) {
-            return StringUtil.EMPTY_STRING_ARRAY;
-        }
-        // Iterative: a pointer can have a very large number of segments
-        List<Object> result = new ArrayList<>();
-        int pos = 0;
-        for(;;) {
-            int newPos = s.indexOf('/',pos);
-            if(newPos<0) {
-                result.add(partValue(s.substring(pos)));
-                return result.toArray();
-            }
-            result.add(partValue(s.substring(pos, newPos)));
-            pos = newPos+1;
-        }
-    }
-    private static Object partValue(String s) {
-    	int length = s.length();
-    	if(length>0) {
-    		char c = s.charAt(0);
-	    	if(length==1 && c=='-') {
-	    		return LASTKEY;
-	    	}
-	    	if((c>='0' && c<='9') || (NEGATIVE_INDEXES && c=='-')) {
-	    		Integer i = parseInteger(s);
-	    		if(i!=null) {
-	    			return i;
-	    		}
-	    	}
-	    	return unescape(s);
-    	}
-    	return s;
-    }
+	// Parses the reference tokens from start: each token is scanned once, and the
+	// array addressing of the parts is computed with them
+	private static JsonPointer parse(String s, int start) {
+		int length = s.length();
+		int count = 1;
+		boolean escapes = false;
+		for(int i=start; i<length; i++) {
+			char c = s.charAt(i);
+			if(c=='/') {
+				count++;
+			} else if(c=='~') {
+				escapes = true;
+			}
+		}
+		Object[] parts = new Object[count];
+		int[] indexes = new int[count];
+		int pos = start;
+		for(int p=0; p<count; p++) {
+			// The end of the token, and the hash of its text for the token cache
+			int end = pos;
+			int h = 0;
+			for(char c; end<length && (c=s.charAt(end))!='/'; end++) {
+				h = 31*h + c;
+			}
+			Object part;
+			int address = NONE;
+			int tokenLength = end-pos;
+			char c = tokenLength>0 ? s.charAt(pos) : 0;
+			if(tokenLength==1 && c=='-') {
+				part = LASTKEY;
+				address = APPEND;
+			} else if((c>='0' && c<='9') || (NEGATIVE_INDEXES && c=='-')) {
+				// An escaped token is never a number: parseInteger() rejects the '~'
+				Integer i = parseInteger(s, pos, end);
+				if(i!=null) {
+					part = i;
+					address = i>APPEND ? i : NONE;
+				} else {
+					part = escapes ? unescape(s, pos, end) : token(s, pos, end, h);
+				}
+			} else if(tokenLength==0) {
+				part = "";
+			} else {
+				part = escapes ? unescape(s, pos, end) : token(s, pos, end, h);
+			}
+			parts[p] = part;
+			indexes[p] = address;
+			pos = end+1;
+		}
+		return new JsonPointer(parts, indexes, false);
+	}
+	// The last member names seen in parsed pointers: the same names come back (the keys of
+	// a document), and reusing them saves creating the strings and computing their hash
+	// when they are looked up. Direct-mapped and lock-free: strings are immutable.
+	private static final int TOKEN_CACHE_SIZE = 512;
+	private static final int MAX_CACHED_TOKEN = 32;
+	private static final String[] TOKENS = new String[TOKEN_CACHE_SIZE];
+
+	// h is the hash of the token, as String.hashCode() computes it
+	private static String token(String s, int start, int end, int h) {
+		int length = end-start;
+		if(length>MAX_CACHED_TOKEN) {
+			return s.substring(start, end);
+		}
+		int slot = (h ^ (h>>>16)) & (TOKEN_CACHE_SIZE-1);
+		String t = TOKENS[slot];
+		if(t!=null && t.length()==length && s.regionMatches(start, t, 0, length)) {
+			return t;
+		}
+		t = s.substring(start, end);
+		TOKENS[slot] = t;
+		return t;
+	}
+
 	/**
 	 * Parse a canonical integer: no leading zeros, no "-0". Anything else is a
 	 * member name ("01", "-0", "-01").
 	 */
 	private static Integer parseInteger(String s) {
-		int l = s.length();
-		char c = s.charAt(0);
+		return parseInteger(s, 0, s.length());
+	}
+	private static Integer parseInteger(String s, int start, int l) {
+		char c = s.charAt(start);
 		boolean neg = false;
-		int firstIndex = 0;
+		int firstIndex = start;
 		if(NEGATIVE_INDEXES) {
 			if(c=='-') {
 				neg = true;
@@ -731,7 +947,7 @@ public class JsonPointer {
 		}
 		if(s.charAt(firstIndex)=='0') {
 			// "0" only; "01", "-0" and "-01" are not canonical integers
-			return (!neg && l==1) ? 0 : null;
+			return (!neg && l-start==1) ? 0 : null;
 		}
 		long res = 0;
 		for(int i=firstIndex; i<l; i++) {
@@ -746,22 +962,24 @@ public class JsonPointer {
 		}
 		return (int)(neg ? -res : res);
 	}
-	private static String unescape(String s) {
-		int pos = s.indexOf('~');
-		if(pos<0) {
-			return s;
+	private static String unescape(String str, int start, int end) {
+		int pos = str.indexOf('~', start);
+		if(pos<0 || pos>=end) {
+			return str.substring(start, end);
 		}
+		String s = str.substring(start, end);
 		int length = s.length();
-		StringBuilder b = new StringBuilder(length+8);
-		for(int i=0; i<length; i++) {
+		StringBuilder b = new StringBuilder(length);
+		b.append(s, 0, pos-start);
+		for(int i=pos-start; i<length; i++) {
 			char c = s.charAt(i);
 			if(c=='~') {
 				if(i+1<length) {
 					char c2 = s.charAt(++i);
 					if(c2=='0') {
-						b.append("~");
+						b.append('~');
 					} else if(c2=='1') {
-						b.append("/");
+						b.append('/');
 					} else {
 						throw new JsonException(null,"Invalid JSON pointer escape sequence ~{0} in {1}",c2,s);
 					}
@@ -774,9 +992,12 @@ public class JsonPointer {
 		}
 		return b.toString();
 	}
-	private static String escape(String s) {
+	private static void escape(StringBuilder b, String s) {
+		if(s.indexOf('~')<0 && s.indexOf('/')<0) {
+			b.append(s);
+			return;
+		}
 		int length = s.length();
-		StringBuilder b = new StringBuilder(length+8);
 		for(int i=0; i<length; i++) {
 			char c = s.charAt(i);
 			if(c=='~') {
@@ -787,7 +1008,6 @@ public class JsonPointer {
 				b.append(c);
 			}
 		}
-		return b.toString();
 	}
 	
 	//

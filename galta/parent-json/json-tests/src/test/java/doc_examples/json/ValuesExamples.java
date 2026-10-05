@@ -212,18 +212,19 @@ public class ValuesExamples extends ProjectTestCase {
 	public void testArrayIndexes() {
 		JsonArray a = JsonArray.of("a", "b", "c", "d");
 
-		// The JSON accessors count a negative index from the end...
-		assertEquals("d", a.getString(-1));
-		assertEquals("c", a.getString(-2));
-		// ...not the java.util.List methods, which keep the List contract
-		assertThrows(IndexOutOfBoundsException.class, () -> a.get(-1));
-		assertTrue(a.has(-4));
-		assertFalse(a.has(4));
-		assertFalse(a.has(-5));
+		// The methods follow the java.util.List contract: no negative index...
+		assertThrows(IndexOutOfBoundsException.class, () -> a.getString(-1));
+		assertFalse(a.has(-1));
+		// ...the at*() methods count a negative index from the end
+		assertEquals("d", a.atString(-1));
+		assertEquals("c", a.atString(-2));
+		assertTrue(a.hasAt(-4));
+		assertFalse(a.hasAt(4));
+		assertFalse(a.hasAt(-5));
 
-		a.set(-1, "D");                    // set(int, String): a JSON accessor
-		a.remove(a.actualIndex(-2));       // removes "c"
-		a.add(-1, "x");                    // add(int, String): inserts before the last item
+		a.setAt(-1, "D");                  // set(size()-1, "D")
+		a.deleteAt(-2);                    // removes "c"
+		a.addAt(-1, "x");                  // inserts before the last item
 		assertEquals("[\"a\",\"b\",\"x\",\"D\"]", a.stringify());
 
 		assertEquals("z", a.getString(10, "z"));    // out of range: the default

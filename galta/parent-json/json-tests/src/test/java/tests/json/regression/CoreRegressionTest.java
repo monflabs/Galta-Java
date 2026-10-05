@@ -48,14 +48,6 @@ public class CoreRegressionTest extends ProjectTestCase {
 		return paths.getJsonPath(jsonPath).read(JsonFactory.get().parse(json)).toJsonArray();
 	}
 
-	public void testNativeEqualsNulls() {
-		JsonFactory f = JsonFactory.get();
-		assertTrue(f.nativeEquals(null, null));
-		assertFalse(f.nativeEquals(null, "x"));
-		assertFalse(f.nativeEquals("x", null));
-		assertTrue(f.nativeEquals("x", "x"));
-	}
-
 	public void testStringifySharedEmptyContainers() throws Exception {
 		// The same empty object/array referenced twice is not a cycle
 		JsonObject e = JsonObject.create();
@@ -409,15 +401,14 @@ public class CoreRegressionTest extends ProjectTestCase {
 	}
 
 	public void testAsIntegerClamps() {
-		JsonFactory f = JsonFactory.get();
-		assertEquals(Integer.MAX_VALUE, f.asInt(1e10));
-		assertEquals(Integer.MIN_VALUE, f.asInt(-1e10));
-		assertEquals(Integer.MAX_VALUE, f.asInt(Long.MAX_VALUE));
-		assertEquals(Long.MAX_VALUE, f.asLong(new java.math.BigInteger("100000000000000000000000")));
-		assertEquals(Short.MAX_VALUE, f.asShort(100000));
-		assertEquals(Byte.MIN_VALUE, f.asByte(-1000));
-		assertEquals(42, f.asByte(42));
-		assertEquals(0, f.asInt(Double.NaN));
+		assertEquals(Integer.MAX_VALUE, JsonUtil.clampToInt(1e10));
+		assertEquals(Integer.MIN_VALUE, JsonUtil.clampToInt(-1e10));
+		assertEquals(Integer.MAX_VALUE, JsonUtil.clampToInt(Long.MAX_VALUE));
+		assertEquals(Long.MAX_VALUE, JsonUtil.clampToLong(new java.math.BigInteger("100000000000000000000000")));
+		assertEquals(Short.MAX_VALUE, JsonUtil.clampToShort(100000));
+		assertEquals(Byte.MIN_VALUE, JsonUtil.clampToByte(-1000));
+		assertEquals(42, JsonUtil.clampToByte(42));
+		assertEquals(0, JsonUtil.clampToInt(Double.NaN));
 	}
 
 	public void testPrettyPrintAllMembersSkipped() throws Exception {

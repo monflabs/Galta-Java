@@ -434,7 +434,7 @@ ascii.stringify("é 😀");            // "\u00e9 \ud83d\ude00"   (pure ASCII)
 
 ### NaN and Infinity
 
-The default factory supports them (`supportsNaN()` and `supportsInfinity()` are `true`): they can be stored, and the lenient parser reads the bare words `NaN`, `Infinity` and `-Infinity`. They are not JSON numbers, so the stringifier writes them as `null`, like `JSON.stringify()`: the output is always valid JSON.
+`NaN` and the infinities can be stored, and the lenient parser reads the bare words `NaN`, `Infinity` and `-Infinity`. They are not JSON numbers, so the stringifier writes them as `null`, like `JSON.stringify()`: the output is always valid JSON.
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testNaNAndInfinity`)
 
@@ -442,7 +442,6 @@ Sample: `doc_examples/json/ParsingExamples.java` (`testNaNAndInfinity`)
 JsonArray a = JsonArray.of(Double.NaN, Double.POSITIVE_INFINITY, 1.0);
 a.stringify();                               // [null,null,1]
 a.equals(JsonArray.parse("[NaN,Infinity,1]"));   // true
-JsonFactory.get().supportsNaN();             // true
 ```
 
 ## The default factory
@@ -475,7 +474,7 @@ try {
 }
 ```
 
-A custom factory usually extends `JavaJsonFactory` (its constructor is protected) to change the [number options](/GaltaJSON/Parsing#number-options), or overrides `configureJsonStringifier(JsonStringifier)` to apply options to every `stringify` call of the factory.
+A custom factory usually extends `JavaJsonFactory` (its constructor is protected) to change the [number options](/GaltaJSON/Parsing#number-options), or overrides `configureJsonStringifier(JsonStringifier)` to apply options to every `stringify` call of the factory. `exportValue(Object)` tells another library writing the containers of the factory ([Jackson](/GaltaJSON/Modules/Jackson)) how to write a value: as is by default, or `JsonFactory.NO_VALUE` for a value JSON can't represent, left out of an object and written as `null` in an array (GaltaJS returns it for `undefined`, the functions and the symbols).
 
 ## Gotchas
 

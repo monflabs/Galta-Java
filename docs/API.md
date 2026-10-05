@@ -21,7 +21,7 @@ To use a module, import `galta-bom` and declare it without a version - see
 | Module | Javadoc | Content |
 |---|---|---|
 | `json` | [json](api/json/index.html ':ignore') | Parser and stringifier, JSON containers, JSONPath, JSON Pointer, JSON Reference, schema metadata |
-| `json-serialization` | [json-serialization](api/json-serialization/index.html ':ignore') | Mapping between Java objects and JSON values |
+| `json-jackson` | [json-jackson](api/json-jackson/index.html ':ignore') | Jackson interoperability: reading, writing and mapping GaltaJSON values with Jackson |
 | `json-config` | [json-config](api/json-config/index.html ':ignore') | JSON-file configuration with `$ref` composition and encrypted values |
 | `json-impexp` | [json-impexp](api/json-impexp/index.html ':ignore') | Import, export and replication of JSON documents |
 | `json-impexp-fastcsv` | [json-impexp-fastcsv](api/json-impexp-fastcsv/index.html ':ignore') | CSV source and target, based on FastCSV |

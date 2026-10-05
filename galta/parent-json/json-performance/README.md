@@ -35,6 +35,14 @@ The results of a run before and after the parser/stringifier optimizations are k
 `benchmarks/results` (`baseline.csv` and `after.csv`: score, error and allocated bytes per
 operation for each benchmark; run with `-rf json` to get the full JMH output).
 
+`benchmarks/results/2026-10-04.csv` holds the run of the second optimization pass (the
+Eisel-Lemire number parsing, the shortest double digits written straight into the buffer,
+strings copied then scanned), in microseconds per operation: the Galta parse and stringify
+benchmarks before and after, and Jackson on the same machine. The `deep` stringify
+benchmarks are missing from it: their setup fails with recent Gson, which limits the nesting
+to 255 levels. The comparison in the [GaltaJSON overview](../../../docs/GaltaJSON/README.md)
+comes from this run.
+
 ## Legacy benchmarks
 
 `performance/parsing` and `performance/accessors` hold the older micro-benchmarks, which

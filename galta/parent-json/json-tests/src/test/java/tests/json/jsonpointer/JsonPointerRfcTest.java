@@ -150,6 +150,47 @@ public class JsonPointerRfcTest extends ProjectTestCase {
 		assertFalse(JsonPointer.of("/list/-9").setValue(doc, 0));
 	}
 
+	public void testSetValueChangesNothingOnFailure() {
+		// The missing "x" used to be created as an empty array before the index 1 was
+		// found invalid for it
+		JsonObject doc = JsonObject.create();
+		assertFalse(JsonPointer.of("/x/1").setValue(doc, 9));
+		assertFalse(JsonPointer.of("/x/0/y/-1").setValue(doc, 9));
+		assertEquals("{}", doc.stringify());
+		assertTrue(JsonPointer.of("/x/0/y/-").setValue(doc, 9));
+		assertEquals("{\"x\":[{\"y\":[9]}]}", doc.stringify());
+	}
+
+	public void testBehaviorOnlyDependsOnTheToken() {
+		// Equal pointers behave the same: "-" and "-1" as member names used to be
+		// ignored on arrays, while the parsed "/-" appends and "/-1" is the last item
+		JsonArray a = JsonArray.of(1);
+		assertTrue(JsonPointer.EMPTY.getChild("-").add(a, 2));
+		assertTrue(JsonPointer.ofParts("-").setValue(a, 3));
+		assertEquals("[1,2,3]", a.stringify());
+		assertEquals(3, JsonPointer.ofParts("-1").read(a));
+		assertEquals(JsonPointer.of("/-1"), JsonPointer.ofParts("-1"));
+		// A JSON Path member name still never addresses an array
+		assertNull(JsonPointer.ofJsonPath("$['0']").read(a));
+	}
+
+	public void testParsedPointersAreShared() {
+		// Pointers are immutable: a pointer string parsed again gives the same pointer
+		JsonPointer p = JsonPointer.of("/a/0/b");
+		assertSame(p, JsonPointer.of("/a/0/b"));
+		assertEquals(p, JsonPointer.of("a/0/b"));
+		assertEquals(p.hashCode(), JsonPointer.ofParts("a", "0", "b").hashCode());
+		// Many distinct pointers, beyond what is kept: all parsed right
+		JsonObject doc = JsonObject.create();
+		for(int i=0; i<2000; i++) {
+			assertTrue(JsonPointer.of("/k"+(i%700)+"/v"+i).setValue(doc, i));
+		}
+		for(int i=0; i<2000; i++) {
+			assertEquals(i, JsonPointer.of("/k"+(i%700)+"/v"+i).read(doc));
+			assertEquals("/k"+(i%700)+"/v"+i, JsonPointer.of("/k"+(i%700)+"/v"+i).toString());
+		}
+	}
+
 	public void testAddNegativeIntermediate() {
 		JsonObject doc = JsonObject.parse("{\"list\":[{\"a\":1},{\"a\":2}]}");
 		assertTrue(JsonPointer.of("/list/-1/b").add(doc, 3));

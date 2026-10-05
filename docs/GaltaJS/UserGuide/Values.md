@@ -175,6 +175,8 @@ ctx.getGlobalThis().setOwnProperty("cfg", JSObject.of(env, "port", 8080));
 assertEquals("{\"port\":8080}", env.createScript("JSON.stringify(cfg)", "j.js").executeWithContext(ctx));
 ```
 
+From Java, a JavaScript object or array has all the helpers of a `JsonObject` or a `JsonArray` (`getInt()`, `getString()`, `put()`, `atString(-1)`, `filter()`...), with the same behavior as on a Java container: see [Values](/GaltaJSON/Values). The containers put inside a JavaScript object must be JavaScript ones, created with the environment's factory (`env.getJsonFactory()`, or the object's own `factory()`): a Java `JsonArray` inside a JavaScript object makes `JSON.stringify()` fail. To map Java objects to JavaScript objects and back, use Jackson with the [`json-jackson`](/GaltaJSON/Modules/Jackson) module.
+
 A plain `JsonObject` from another factory must not be handed to a script: the engine requires its objects to be `JSObject`s and throws a `TypeError` otherwise. Parse with the environment's factory or copy into `JSObject.of(...)`.
 
 ## How it works

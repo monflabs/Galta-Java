@@ -40,47 +40,25 @@ public class KeywordTest extends ProjectTestCase {
 
 	public void testNaN() throws Exception {
 		String s = "{t:NaN}";
-		try {
-			JsonObject o = (JsonObject)JsonFactory.get().parse(s);
-			if(JsonFactory.get().supportsNaN()) {
-				assertEquals(o.get("t"), Double.NaN);
-			}
-			assertTrue(JsonFactory.get().supportsNaN());
-		} catch(Exception ex) {
-			assertFalse(JsonFactory.get().supportsNaN());
-		}
+		JsonObject o = (JsonObject)JsonFactory.get().parse(s);
+		assertEquals(o.get("t"), Double.NaN);
 	}
 
 	public void testInfinity() throws Exception {
 		String s = "{t:Infinity}";
-		try {
-			JsonObject o = (JsonObject)JsonFactory.get().parse(s);
-			assertEquals(o.get("t"), Double.POSITIVE_INFINITY);
-			assertTrue(JsonFactory.get().supportsInfinity());
-		} catch(Exception ex) {
-			assertFalse(JsonFactory.get().supportsInfinity());
-		}
+		JsonObject o = (JsonObject)JsonFactory.get().parse(s);
+		assertEquals(o.get("t"), Double.POSITIVE_INFINITY);
 	}
 
 	public void testInfinityP() throws Exception {
 		String s = "{t:+Infinity}";
-		try {
-			JsonObject o = (JsonObject)JsonFactory.get().parse(s);
-			assertEquals(o.get("t"), Double.POSITIVE_INFINITY);
-			assertTrue(JsonFactory.get().supportsInfinity());
-		} catch(Exception ex) {
-			assertFalse(JsonFactory.get().supportsInfinity());
-		}
+		JsonObject o = (JsonObject)JsonFactory.get().parse(s);
+		assertEquals(o.get("t"), Double.POSITIVE_INFINITY);
 	}
 
 	public void testInfinityN() throws Exception {
 		String s = "{t:-Infinity}";
-		try {
-			JsonObject o = (JsonObject)JsonFactory.get().parse(s);
-			assertEquals(o.get("t"), Double.NEGATIVE_INFINITY);
-			assertTrue(JsonFactory.get().supportsInfinity());
-		} catch(Exception ex) {
-			assertFalse(JsonFactory.get().supportsInfinity());
-		}
+		JsonObject o = (JsonObject)JsonFactory.get().parse(s);
+		assertEquals(o.get("t"), Double.NEGATIVE_INFINITY);
 	}
 }

@@ -33,7 +33,6 @@ import tests.json.factory.JsonParserTest;
 import tests.json.factory.JsonStringifierTest;
 import tests.json.factory.JsonStringifyTest;
 import tests.json.factory.KeywordTest;
-import tests.json.factory.NativeCheckTest;
 import tests.json.factory.NumberTest;
 import tests.json.factory.StringParsingTest;
 import tests.json.factory._CurrentFactoryTest;
@@ -52,12 +51,6 @@ import tests.json.navigator.WorldCupQueryTest;
 import tests.json.object.ObjectAsMapTest;
 import tests.json.object.ObjectPropertyTest;
 import tests.json.object.ObjectTest;
-import tests.json.serialization.BaseTypesTest;
-import tests.json.serialization.JsonTypesTest;
-import tests.json.serialization.ParameterizedListTest;
-import tests.json.serialization.ParameterizedMapTest;
-import tests.json.serialization.ParameterizedSetTest;
-import tests.json.serialization.ParameterizedTypesTest;
 import tests.json.serializers.SerializersTest;
 import tests.json.streams.ArrayStreamsTest;
 import tests.json.streams.CsvStreamsTest;
@@ -111,7 +104,6 @@ public class JsonTestSuite  {
 		suite.addTestSuite(JsonStringifierTest.class);
 		suite.addTestSuite(JsonStringifyTest.class);
 		suite.addTestSuite(KeywordTest.class);
-		suite.addTestSuite(NativeCheckTest.class);
 		suite.addTestSuite(NumberTest.class);
 		suite.addTestSuite(StringParsingTest.class);
 		suite.addTestSuite(tests.json.factory.ParserEdgeCasesTest.class);
@@ -195,15 +187,8 @@ public class JsonTestSuite  {
 		suite.addTestSuite(ObjectPropertyTest.class);
 		suite.addTestSuite(ObjectTest.class);
 		suite.addTestSuite(tests.json.object.CollectionContractTest.class);
-		suite.addTestSuite(tests.json.object.AbstractJsonObjectTest.class);
 		
 		// Serialization
-		suite.addTestSuite(BaseTypesTest.class);
-		suite.addTestSuite(JsonTypesTest.class);
-		suite.addTestSuite(ParameterizedListTest.class);
-		suite.addTestSuite(ParameterizedSetTest.class);
-		suite.addTestSuite(ParameterizedMapTest.class);
-		suite.addTestSuite(ParameterizedTypesTest.class);
 		
 		// Serializers
 		suite.addTestSuite(SerializersTest.class);

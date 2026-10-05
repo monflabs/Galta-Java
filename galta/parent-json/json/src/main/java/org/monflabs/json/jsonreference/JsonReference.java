@@ -191,6 +191,13 @@ public class JsonReference {
 		final Set<Object> walked = Collections.newSetFromMap(new IdentityHashMap<>());
 		// The references being followed (normalized url#fragment), to detect cycles
 		final Set<String> inProgress = new HashSet<>();
+		// What the references resolved to, by normalized url#fragment: a value designated
+		// by many references (a schema definition) is located once
+		final Map<String,Located> resolved = new HashMap<>();
+		// The normalized URLs, and the URLs resolved against a document URL: parsing a
+		// URI is costly, and the same URLs come back for every reference
+		final Map<String,String> normalized = new HashMap<>();
+		final Map<String,String> resolvedUrls = new HashMap<>();
 
 		Context(JsonFactory factory, Resolver resolver, boolean keepReferences, boolean schema) {
 			this.factory = factory;
@@ -198,6 +205,30 @@ public class JsonReference {
 			this.keepReferences = keepReferences;
 			this.schema = schema;
 			this.rootKey = normalize(resolver.getBaseUrl());
+		}
+
+		String normalized(String url) {
+			if(StringUtil.isEmpty(url)) {
+				return "";
+			}
+			String n = normalized.get(url);
+			if(n==null) {
+				n = normalize(url);
+				normalized.put(url, n);
+			}
+			return n;
+		}
+
+		String resolveUrl(String documentUrl, String url) {
+			String key = documentUrl+'\u0000'+url;
+			String r = resolvedUrls.get(key);
+			if(r==null) {
+				r = resolver.resolveUrl(documentUrl, url);
+				if(r!=null) {
+					resolvedUrls.put(key, r);
+				}
+			}
+			return r;
 		}
 
 		void register(String key, Object doc) {
@@ -270,7 +301,7 @@ public class JsonReference {
 			if(!isReference(value)) {
 				return new Located(value, url);
 			}
-			List<String> added = new ArrayList<>();
+			List<String> added = null;
 			try {
 				while(isReference(value)) {
 					String r = (String)((JsonObject)value).get(REF_PROP);
@@ -281,11 +312,21 @@ public class JsonReference {
 						u = r.substring(0,anchor).trim();
 						fragment = decodeFragment(r.substring(anchor+1).trim(), r);
 					}
-					String docUrl = StringUtil.isEmpty(u) ? url : resolver.resolveUrl(url, u);
-					String key = normalize(docUrl);
+					String docUrl = StringUtil.isEmpty(u) ? url : resolveUrl(url, u);
+					String key = normalized(docUrl);
 					String chainKey = key+"#"+fragment;
+					// Already resolved: the end of the chain, which is not a reference
+					Located known = resolved.get(chainKey);
+					if(known!=null) {
+						value = known.value;
+						url = known.url;
+						break;
+					}
 					if(!inProgress.add(chainKey)) {
 						throw new JsonException(null,"Circular $ref '{0}'", r);
+					}
+					if(added==null) {
+						added = new ArrayList<>(2);
 					}
 					added.add(chainKey);
 					Object doc = document(docUrl, key, r);
@@ -293,17 +334,25 @@ public class JsonReference {
 					value = l.value;
 					url = l.url;
 				}
-				return new Located(value, url);
+				Located result = new Located(value, url);
+				if(added!=null) {
+					for(String k: added) {
+						resolved.put(k, result);
+					}
+				}
+				return result;
 			} finally {
-				inProgress.removeAll(added);
+				if(added!=null) {
+					inProgress.removeAll(added);
+				}
 			}
 		}
 
 		private Object document(String docUrl, String key, String ref) {
-			if(documents.containsKey(key)) {
-				return documents.get(key);
+			Object doc = documents.get(key);
+			if(doc!=null || documents.containsKey(key)) {
+				return doc;
 			}
-			Object doc;
 			try {
 				doc = resolver.apply(factory, docUrl);
 			} catch(JsonException ex) {
@@ -342,10 +391,11 @@ public class JsonReference {
 				}
 				if(cur instanceof JsonObject o) {
 					String ks = part.toString();
-					if(!o.containsKey(ks)) {
+					Object n = o.get(ks);
+					if(n==null && !o.containsKey(ks)) {
 						throw new JsonException(null,"Cannot resolve $ref '{0}'", ref);
 					}
-					cur = o.get(ks);
+					cur = n;
 				} else if(cur instanceof JsonArray a) {
 					int index = arrayIndex(part);
 					if(index<0 || index>=a.size()) {
@@ -373,7 +423,7 @@ public class JsonReference {
 						String idUrl = hash>=0 ? id.substring(0,hash) : id;
 						String idFragment = hash>=0 ? id.substring(hash+1) : "";
 						if(!idUrl.isEmpty()) {
-							base = normalize(resolver.resolveUrl(base, idUrl));
+							base = normalized(resolveUrl(base, idUrl));
 							documents.putIfAbsent(base, o);
 						}
 						// draft 6/7 "$id": "#name" is an anchor

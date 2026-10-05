@@ -174,6 +174,44 @@ public class FastPathsTest extends ProjectTestCase {
 		}
 	}
 
+	// Literals of 16 to 19 significant digits, any exponent: the Eisel-Lemire path must give
+	// the bits Double.parseDouble() gives, and the default factory the type and value of
+	// the general path (a BigDecimal when the double can't hold the literal)
+	public void testLongDecimalsMatchParseDouble() {
+		JsonFactory doubles = new JavaJsonFactory() {
+			@Override
+			public OVERFLOW_DECIMAL overflowDecimal() { return OVERFLOW_DECIMAL.DOUBLE; }
+		};
+		JsonFactory f = JsonFactory.get();
+		Random r = new Random(17);
+		java.util.List<String> literals = new java.util.ArrayList<>(java.util.List.of(
+			"9007199254740993e0", "9007199254740993.0", "9007199254740992.5", "1.7976931348623157e308",
+			"2.2250738585072014e-308", "2.2250738585072011e-308", "0.10000000000000000555", "123456789012345678.9",
+			"1.0000000000000000", "4.9406564584124654e-324", "1.7976931348623159e308", "9999999999999999999e-30"));
+		for(int i=0; i<40000; i++) {
+			int digits = 16+r.nextInt(4);
+			StringBuilder b = new StringBuilder();
+			if(r.nextBoolean()) b.append('-');
+			b.append(1+r.nextInt(9));
+			for(int k=1; k<digits; k++) b.append(r.nextInt(10));
+			int point = r.nextInt(digits+1);
+			if(point<digits) b.insert(b.length()-(digits-point), '.');
+			if(r.nextBoolean()) b.append('e').append(r.nextInt(640)-330);
+			String lit = b.toString().replace("-.", "-0.");
+			if(lit.startsWith(".")) lit = "0"+lit;
+			if(lit.indexOf('.')<0 && lit.indexOf('e')<0) lit = lit+".0"; // a decimal, not an integer
+			literals.add(lit);
+		}
+		for(String lit: literals) {
+			Object v = ((JsonArray)doubles.parse("["+lit+"]")).get(0);
+			assertEquals(lit, Double.doubleToRawLongBits(Double.parseDouble(lit)), Double.doubleToRawLongBits((Double)v));
+			Object expected = f.parseDecimal(lit);
+			Object parsed = ((JsonArray)f.parse("["+lit+"]")).get(0);
+			assertEquals(lit, expected.getClass(), parsed.getClass());
+			assertEquals(lit, expected, parsed);
+		}
+	}
+
 	//
 	// Parser: key cache
 	//

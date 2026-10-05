@@ -906,6 +906,22 @@ public abstract class JsonParser {
 						checkStrict("A control character in a string");
 					}
 					sb.append((char) c);
+					// The plain characters that follow in the buffer are copied at once
+					final char[] b = buffer;
+					final int l = bufferLength;
+					final int start = bufferPos;
+					int p = start;
+					while(p<l) {
+						char x = b[p];
+						if(x==sep || x=='\\' || x<0x20) {
+							break;
+						}
+						p++;
+					}
+					if(p>start) {
+						sb.append(b, start, p-start);
+						bufferPos = p;
+					}
 			}
 		}
 	}
@@ -1126,10 +1142,14 @@ public abstract class JsonParser {
 			return null;
 		}
 		long v = 0;
-		for(; i<len; i++) {
-			int digit = b[i]-'0';
-			// Up to 18 digits always fit, the 19th one may overflow: the general path then
-			// decides (BigInteger or double), as well as for Long.MIN_VALUE
+		// Up to 18 digits always fit, the 19th one may overflow: the general path then
+		// decides (BigInteger or double), as well as for Long.MIN_VALUE
+		int last = digits==19 ? len-1 : len;
+		for(; i<last; i++) {
+			v = v*10 + (b[i]-'0');
+		}
+		if(last<len) {
+			int digit = b[last]-'0';
 			if(v>(Long.MAX_VALUE-digit)/10) {
 				return null;
 			}
@@ -1167,12 +1187,15 @@ public abstract class JsonParser {
 	
 	/**
 	 * Convert a decimal literal the parser already validated, when the factory gives
-	 * doubles, without a String and Double.parseDouble(). Only for the literals with at
-	 * most 15 significant digits and a small exponent (Clinger's fast path): the mantissa
-	 * and the power of ten are exact doubles, so a single multiplication or division gives
-	 * the correctly rounded value, the one Double.parseDouble() returns. Such a value
-	 * always fits a double, so the result is the one JsonFactory.parseDecimal() returns.
-	 * Returns null when the fast path doesn't apply.
+	 * doubles, without a String and Double.parseDouble(), for the literals with at most 19
+	 * significant digits. With at most 15 digits and a small exponent (Clinger's fast path),
+	 * the mantissa and the power of ten are exact doubles, so a single multiplication or
+	 * division gives the correctly rounded value. The others use the Eisel-Lemire algorithm
+	 * ({@link DecimalToDouble}), which gives the correctly rounded value too: the one
+	 * Double.parseDouble() returns. The result is the one JsonFactory.parseDecimal() returns:
+	 * when the factory keeps a BigDecimal for a value a double can't hold, a literal of more
+	 * than 15 digits is checked against the shortest digits of the double.
+	 * Returns null when the fast path doesn't apply (the general path then decides).
 	 */
 	private Number readDecimalFast(MSB sb) {
 		if(jsonFactory.defaultDecimal()!=JsonFactory.DECIMAL.DOUBLE) {
@@ -1206,7 +1229,7 @@ public abstract class JsonParser {
 			if(significant==0 && digit==0) {
 				continue; // Leading zero
 			}
-			if(significant==15) {
+			if(significant==19) {
 				return null;
 			}
 			mantissa = mantissa*10+digit;
@@ -1234,16 +1257,67 @@ public abstract class JsonParser {
 		double d;
 		if(mantissa==0) {
 			d = 0.0;
-		} else if(e==0) {
+		} else if(significant<=15 && e==0) {
 			d = mantissa;
-		} else if(e>0 && e<=22) {
+		} else if(significant<=15 && e>0 && e<=22) {
 			d = mantissa*POW10[e];
-		} else if(e<0 && e>=-22) {
+		} else if(significant<=15 && e<0 && e>=-22) {
 			d = mantissa/POW10[-e];
 		} else {
-			return null;
+			d = DecimalToDouble.toDouble(mantissa, e, false);
+			if(Double.isNaN(d)) {
+				// A subnormal, an underflow or an overflow: the general path decides
+				return null;
+			}
+			// A normal double holds 15 significant digits: a longer literal may lose some,
+			// and the factory then keeps it as a BigDecimal
+			if(significant>15 && jsonFactory.overflowDecimal()==JsonFactory.OVERFLOW_DECIMAL.BIGDEC
+					&& !isShortest(mantissa, e, d)) {
+				return null;
+			}
 		}
 		return Double.valueOf(negative ? -d : d);
+	}
+
+	/**
+	 * Whether w * 10^e (w unsigned) is exactly the value of the shortest decimal form of the
+	 * double d (positive): the double then holds the literal without any loss. The same as
+	 * comparing the literal with Double.toString(d) as BigDecimal values.
+	 */
+	private static boolean isShortest(long w, int e, double d) {
+		while(Long.remainderUnsigned(w, 10)==0) {
+			w = Long.divideUnsigned(w, 10);
+			e++;
+		}
+		String s = Double.toString(d);
+		long digits = 0;
+		int fraction = 0;
+		boolean dot = false;
+		int len = s.length();
+		int i = 0;
+		for(; i<len; i++) {
+			char c = s.charAt(i);
+			if(c=='.') {
+				dot = true;
+			} else if(c=='E') {
+				break;
+			} else {
+				digits = digits*10 + (c-'0');
+				if(dot) {
+					fraction++;
+				}
+			}
+		}
+		int exponent = i<len ? Integer.parseInt(s, i+1, len, 10) : 0;
+		exponent -= fraction;
+		if(digits==0) {
+			return false;
+		}
+		while(digits%10==0) {
+			digits /= 10;
+			exponent++;
+		}
+		return digits==w && exponent==e;
 	}
 	
 	private int readDigits(MSB sb) throws JsonException, IOException {
@@ -1435,6 +1509,13 @@ public abstract class JsonParser {
 				b = t;
 			}
 			b[p++] = c;
+		}
+		public void append(char[] src, int pos, int len) {
+			if (p+len>b.length) {
+				b = java.util.Arrays.copyOf(b, Math.max(b.length*2+1, p+len));
+			}
+			System.arraycopy(src, pos, b, p, len);
+			p += len;
 		}
 
 		@Override

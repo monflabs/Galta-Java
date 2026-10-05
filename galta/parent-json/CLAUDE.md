@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `json-jsonpath-jayway` | `json-jsonpath-jayway` | JSONPath via Jayway |
 | `json-yaml-snakeyaml` | `json-yaml-snakeyaml` | YAML support via SnakeYAML |
 | `json-jsonschema-jsonschemafriend` | `json-jsonschema-jsonschemafriend` | JSON Schema validation |
-| `json-serialization` | `json-serialization` | Object ↔ JSON serialization |
+| `json-jackson` | `json-jackson` | Jackson module: Jackson reads/writes `JsonObject`/`JsonArray`, maps Java objects to/from them |
 | `json-impexp` | `json-impexp` | Generic import/export framework |
 | `json-impexp-fastcsv` | `json-impexp-fastcsv` | CSV import/export via FastCSV |
 | `json-memdb` | `json-memdb` | In-memory JSON-backed store |
@@ -37,17 +37,13 @@ Package root: `org.monflabs.json`
 
 ### Design Notes
 
-- `JsonObject` and `JsonArray` are **interfaces**, not classes. The default implementation is in `json/java/` (`JsonObjectAsLinkedMap`, `JsonArrayAsArrayList`, created by `JavaJsonFactory`). Third-party adapters would wrap foreign types behind the same interfaces (`AbstractJsonObject` is the base for that; no such adapter module exists today).
+- `JsonObject` and `JsonArray` are **interfaces**, not classes. Every helper (typed getters and setters, `is*` tests, conversions, the `at*()` negative-index methods, the stream-like functions of arrays) is a `default` method built on the `Map`/`List` methods (`get`, `put`, `add`, `set`, `size`...): an implementation only provides the storage. The default implementation is in `json/java/` (`JsonObjectAsLinkedMap`, `JsonArrayAsArrayList` and their `Checked` variants, created by `JavaJsonFactory`); GaltaJS has its own (`JsonObjectAsScriptMap`, `JSArrayImpl`). There is no adapter over other JSON libraries: the values are always plain Java ones (`String`, `Number`, `Boolean`, `null`, `JsonObject`, `JsonArray`).
 - The GaltaJS engine uses `JsonObject`/`JsonArray` as its native Object/Array types, so changes to these interfaces affect the JS engine.
 
-## `json-serialization`
+## `json-jackson`
 
-Serializes plain Java objects and records to/from `JsonObject`. Constraints: classes need a no-arg constructor (records use their canonical constructor); circular references are not supported. Uses reflection; field (or record component) names map directly to JSON keys. The scalar types share `ScalarClassAdapter`/`ScalarFieldAdapter` and the primitive arrays `PrimitiveArrayClassAdapter`. `SimpleRegistry` is thread safe (lock-free lookups, creation under a lock, adapters published only when their initialization succeeds) and creates its built-in adapters (scalars, `java.time`/`UUID`/`URI`/`Date` via `StringValueClassAdapter`, `Optional`, `Number`, collections) on each `build()`. A JSON null assigns null (an error for a primitive); errors inside a graph are `SerializationException`s carrying a `$.a[1].b` path; `CycleGuard` also enforces the max depth. User docs: `docs/GaltaJSON/Modules/Serialization.md`, samples in `doc_examples/serialization/SerializationExamples.java`.
+`GaltaJsonModule` (a Jackson `SimpleModule`) registers a deserializer for `JsonContainer`/`JsonObject`/`JsonArray` that builds the containers with the module's `JsonFactory` (the environment's factory for GaltaJS, so they are JavaScript objects) and applies the factory's number rules (`parseInteger`/`parseDecimal` on the literal text; a `BigDecimal` from a Java object is kept), and a serializer that asks each container's own `factory().exportValue()` how to write a value (`JsonFactory.NO_VALUE`: left out of an object, `null` in an array; GaltaJS's factory returns it for undefined, functions and symbols, so the output equals `JSON.stringify()`). Cycles are a `JsonMappingException`. Java objects are mapped by Jackson (`convertValue`): this replaced the former bespoke `json-serialization` module. Jackson's version is pinned in the module's pom, not in monflabs-parent (it would override the Jackson of Spring Boot based peers). User docs: `docs/GaltaJSON/Modules/Jackson.md`, samples in `doc_examples/jackson/JacksonExamples.java`.
 
 ## `json-config`
 
 Configuration backed by JSON files (`JsonFileConfig`) or held in memory: typed reads with defaults, updates saved back atomically, `$ref` to split it across resource files (fragment references are written back), encrypted values (`KeyEncryptor`, bound to their key path) and read-only configurations. User docs: `docs/GaltaJSON/Modules/Config.md`.
-
-## Adapter Pattern
-
-A third-party adapter would implement `JsonObject`/`JsonArray` by wrapping the underlying library's types, so callers work with a single API regardless of the JSON backend. The modules that integrate third-party libraries today (`json-jsonpath-jayway`, `json-yaml-snakeyaml`, `json-jsonschema-jsonschemafriend`) instead adapt the library to the core types.

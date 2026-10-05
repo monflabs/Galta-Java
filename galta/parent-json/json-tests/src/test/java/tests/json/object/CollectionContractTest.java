@@ -87,14 +87,22 @@ public class CollectionContractTest extends ProjectTestCase {
 		assertThrows(IndexOutOfBoundsException.class, () -> a.remove(-1));
 		assertThrows(IndexOutOfBoundsException.class, () -> a.listIterator(-1));
 		assertThrows(IndexOutOfBoundsException.class, () -> a.subList(-1, 1));
-		// JSON accessors: from the end
-		assertEquals("c", a.getString(-1));
-		assertTrue(a.isString(-3));
-		a.setValue(-1, "C");
-		a.addValue(-1, "x");
-		a.set(-1, "D");
+		// The JSON accessors follow the List contract too
+		assertThrows(IndexOutOfBoundsException.class, () -> a.getString(-1));
+		assertThrows(IndexOutOfBoundsException.class, () -> a.set(-1, "x"));
+		assertThrows(IndexOutOfBoundsException.class, () -> a.addValue(-1, "x"));
+		assertFalse(a.has(-1));
+		assertFalse(a.isString(-3));
+		assertEquals("z", a.getString(-1, "z"));
+		// The at*() methods: from the end
+		assertEquals("c", a.atString(-1));
+		assertTrue(a.isStringAt(-3));
+		a.setValueAt(-1, "C");
+		a.addValueAt(-1, "x");
+		a.setAt(-1, "D");
 		assertEquals("[\"a\",\"b\",\"x\",\"D\"]", a.stringify());
-		assertEquals(3, a.actualIndex(-1));
+		assertEquals("D", a.deleteAt(-1));
+		assertEquals("[\"a\",\"b\",\"x\"]", a.stringify());
 	}
 
 	public void testNullKeysAreRejected() {

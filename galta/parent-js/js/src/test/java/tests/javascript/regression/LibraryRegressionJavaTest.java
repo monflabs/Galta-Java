@@ -219,6 +219,53 @@ public class LibraryRegressionJavaTest extends __BaseTestCase {
 		assertEquals("[[Ljava.lang.String;", env.evaluateScript("Java.to([], 'java.lang.String[][]').$getClass().getName()"));
 	}
 
+	// The JsonObject/JsonArray helpers on JavaScript values behave as on Java ones: a
+	// JavaScript array answers undefined to get() past its end, the typed getters still
+	// throw an IndexOutOfBoundsException; numbers saturate and errors name the key
+	public void testJsonHelpersOnJavaScriptValues() {
+		JSEnvironment env = org.monflabs.galtajs.environments.GaltaJSEnvironment.create();
+		org.monflabs.json.JsonArray a = (org.monflabs.json.JsonArray)env.evaluateScript("[1,,3]");
+		assertThrows(IndexOutOfBoundsException.class, () -> a.getInt(3));
+		assertThrows(IndexOutOfBoundsException.class, () -> a.getString(-1));
+		assertEquals(9, a.getInt(5, 9));
+		assertEquals(3, a.atInt(-1));
+		org.monflabs.json.JsonObject o = (org.monflabs.json.JsonObject)env.evaluateScript("({n: 300, s: 'x'})");
+		assertEquals((byte)127, o.getByte("n"));
+		org.monflabs.json.JsonException e = assertThrows(org.monflabs.json.JsonException.class, () -> o.getInt("s"));
+		assertTrue(e.getMessage(), e.getMessage().contains("\"s\""));
+		o.put("b", 2).put("l", o.factory().arrayOf(1, 2));
+		assertEquals("{\"n\":300,\"s\":\"x\",\"b\":2,\"l\":[1,2]}", o.stringify());
+	}
+
+	public record Item(String name, int quantity) {}
+
+	// Jackson reads and writes the JavaScript values through json-jackson, with the factory of
+	// the environment: what it reads are JavaScript objects, and what it writes from a script
+	// value is what JSON.stringify() writes (undefined, functions and symbols left out)
+	public void testJacksonWithJavaScriptValues() throws Exception {
+		java.util.Map<String,Object> holder = new java.util.HashMap<>();
+		org.monflabs.galtajs.library.StaticLibrary globals = new org.monflabs.galtajs.library.StaticLibrary();
+		globals.addStaticGlobal("h", holder);
+		JSEnvironment env = org.monflabs.galtajs.environments.GaltaJSEnvironment.newBuilder().registerLibrary(globals).build();
+		com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+				.registerModule(new org.monflabs.json.jackson.GaltaJsonModule(env.getJsonFactory()));
+
+		// Writing a script value
+		Object o = env.evaluateScript("var o = {a: 1, s: 'x', u: undefined, f() {}, sym: Symbol('k'), n: NaN, d: 1.5,"
+				+ " list: [1, undefined, () => 1, Symbol('l'), {b: null}], nested: {c: [true]}}; h.set('o', o); o");
+		assertEquals(env.evaluateScript("JSON.stringify(h.get('o'))"), mapper.writeValueAsString(o));
+
+		// Reading into JavaScript values: usable by scripts as their own objects
+		holder.put("read", mapper.readValue("{\"x\": [1, 2, {\"y\": \"z\"}], \"big\": 12345678901}", org.monflabs.json.JsonObject.class));
+		assertEquals("1,2,z,true", env.evaluateScript("var r = h.get('read'); [r.x[0], r.x[1], r.x[2].y, Array.isArray(r.x)].join()"));
+		assertEquals("{\"x\":[1,2,{\"y\":\"z\"}],\"big\":12345678901}", env.evaluateScript("JSON.stringify(h.get('read'))"));
+
+		// A Java object to a script and back
+		holder.put("item", mapper.convertValue(new Item("pen", 3), org.monflabs.json.JsonObject.class));
+		env.evaluateScript("var i = h.get('item'); i.quantity = i.quantity * 2");
+		assertEquals(new Item("pen", 6), mapper.convertValue(holder.get("item"), Item.class));
+	}
+
 	// setInterval without a delay, or with 0, repeats until cleared
 	public void testIntervalWithoutDelayRepeats() {
 		JSEnvironment env = JavaScriptEnvironment.newBuilder().registerLibrary(new HostLibrary()).build();

@@ -66,7 +66,6 @@ public class JsonParserTest extends ProjectTestCase {
     	o.put("null",1);
     	checkValue("{null:1}", o);
     	// A null key is rejected by every way of storing one
-    	assertFalse( JsonFactory.get().supportsNullKeys() );
     	JsonObject n = JsonFactory.get().createObject();
     	assertThrows( NullPointerException.class, () -> n.put(null,1) );
     	assertThrows( NullPointerException.class, () -> n.putValue(null,1) );

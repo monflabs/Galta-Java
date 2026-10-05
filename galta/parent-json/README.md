@@ -16,7 +16,7 @@ GaltaJSON is also the data model of the GaltaJS engine: a JavaScript object
 Libraries, published to Maven Central:
 
 - [json](json/README.md) - the core library: parser and stringifier, `JsonObject`/`JsonArray`, JSON Path, JSON Pointer, `$ref` resolution, schema metadata
-- [json-serialization](json-serialization/README.md) - Java objects and records to and from JSON values
+- [json-jackson](json-jackson/README.md) - Jackson interoperability: reading, writing and mapping GaltaJSON values with Jackson
 - [json-config](json-config/README.md) - application settings in JSON files, with `$ref` composition and encrypted values
 - [json-impexp](json-impexp/README.md) - import, export and replication of JSON documents between files, zips, containers and streams
 - [json-impexp-fastcsv](json-impexp-fastcsv/README.md) - CSV source and target for `json-impexp`, based on FastCSV

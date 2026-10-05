@@ -57,6 +57,8 @@ o.keySet();     // [z, a]: insertion order is kept
 a.size();       // 1
 ```
 
+The typed getters, the conversions, the fluent setters and the other helpers are `default` methods of the `JsonObject` and `JsonArray` interfaces, built on the `Map` and `List` methods: an implementation only provides the storage, and they behave the same on every implementation. On a GaltaJS JavaScript object, `getByte()` saturates (`300` gives `127`) and a type error names the key, as on a Java container; on a JavaScript array, a getter without a default throws an `IndexOutOfBoundsException` for an index out of range, although `get()` answers `undefined` there, as JavaScript does.
+
 A container accepts any Java object; only the [checked factory](/GaltaJSON/Parsing#checked-and-custom-factories) restricts it to JSON values. Other factories exist (the GaltaJS engine has its own, where a JavaScript object *is* a `JsonObject`), so code that creates containers should go through `JsonObject.create()` / `JsonArray.create()` or `factory().createObject()` rather than `new`.
 
 ## Creating objects and arrays
@@ -284,23 +286,39 @@ config.getObject("limits").getInt("max");                       // 10
 
 ## Array indexes
 
-A negative index counts from the end in the JSON accessors: the typed getters (`getString(-1)`...), `set(index, value)`/`setValue`, `add(index, value)`/`addValue`, `has`, `getOrDefault` and `jsonValues(index)`. The `java.util.List` methods (`get(int)`, `set(int, Object)`, `add(int, Object)`, `remove(int)`) keep the `List` contract and throw `IndexOutOfBoundsException` for a negative index; `actualIndex(i)` converts one. `has(index)` tells whether an index is in range; the getters with a default return it for an out-of-range index, while the getters without a default throw an `IndexOutOfBoundsException` (where a missing object key throws a `JsonException`). The tests `isNull(index)`, `isString(index)`... never throw: like for a missing key, an index out of range has no value, so `isNull` is `true` and the others `false`. `firstValue()` and `lastValue()` throw on an empty array; `firstValueOrDefault()` / `lastValueOrDefault()` do not.
+The index of every `JsonArray` method follows the `java.util.List` contract, from `0` to `size()-1`: the typed getters (`getString(i)`...), `set`/`setValue`, `add(index, value)`/`addValue`, `remove(int)`, `has`, `getOrDefault`, the `is*` tests, the `as*` conversions and `jsonValues(index)`. `has(index)` tells whether an index is in range, and a negative index never is. The getters with a default return it for an index out of range; the getters without a default throw an `IndexOutOfBoundsException`, where a missing object key throws a `JsonException`. The tests `isNull(index)`, `isString(index)`... never throw: like for a missing key, an index out of range has no value, so `isNull` is `true` and the others `false`. `firstValue()` and `lastValue()` throw on an empty array; `firstValueOrDefault()` / `lastValueOrDefault()` do not.
+
+Each of these methods has an `at` counterpart that also takes a negative index, counted from the end: `-1` is the last item, `-size()` the first one. The counterpart translates the index and calls the regular method, so it behaves the same otherwise:
+
+| Regular method | Negative indexes |
+|---|---|
+| `get(i)`, `getOrDefault(i, d)` | `at(i)`, `atOrDefault(i, d)` |
+| `getString(i)`, `getInt(i, d)`, `getObject(i)`... | `atString(i)`, `atInt(i, d)`, `atObject(i)`... |
+| `has(i)`, `isNull(i)`, `isString(i)`... | `hasAt(i)`, `isNullAt(i)`, `isStringAt(i)`... |
+| `asInt(i)`, `asString(i, d)`... | `asIntAt(i)`, `asStringAt(i, d)`... |
+| `jsonValues(i)` | `jsonValuesAt(i)` |
+| `add(i, v)`, `addValue(i, v)`, `addNull(i)` | `addAt(i, v)`, `addValueAt(i, v)`, `addNullAt(i)`: `-1` inserts before the last item |
+| `set(i, v)`, `setValue(i, v)`, `setNull(i)` | `setAt(i, v)`, `setValueAt(i, v)`, `setNullAt(i)` |
+| `remove(i)` | `deleteAt(i)` |
+
+`slice()` and the query methods (`find(index)`, JSON Path `[-1]`) count a negative index from the end too, as slicing and JSON Path do.
 
 Sample: `doc_examples/json/ValuesExamples.java` (`testArrayIndexes`)
 
 ```java
 JsonArray a = JsonArray.of("a", "b", "c", "d");
 
-a.getString(-1);    // "d"
-a.get(-1);          // throws IndexOutOfBoundsException: the List method
-a.getString(-2);    // "c"
-a.has(-4);          // true
-a.has(4);           // false
-a.has(-5);          // false
+a.getString(-1);    // throws IndexOutOfBoundsException: List contract
+a.has(-1);          // false
+a.atString(-1);     // "d"
+a.atString(-2);     // "c"
+a.hasAt(-4);        // true
+a.hasAt(4);         // false
+a.hasAt(-5);        // false
 
-a.set(-1, "D");
-a.remove(a.actualIndex(-2));   // removes "c"
-a.add(-1, "x");     // inserts before the last item
+a.setAt(-1, "D");   // set(size()-1, "D")
+a.deleteAt(-2);     // removes "c"
+a.addAt(-1, "x");   // inserts before the last item
 // ["a","b","x","D"]
 
 a.getString(10, "z");   // "z": out of range, so the default

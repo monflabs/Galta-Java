@@ -675,8 +675,8 @@ public class JsonValues implements Iterable<JsonValues> {
 		switch (type) {
 			case VALUE -> {
 				if (value instanceof JsonArray c) {
-					if(c.has(index)) {
-						return of(c.get(c.actualIndex(index)));
+					if(c.hasAt(index)) {
+						return of(c.at(index));
 					}
 				}
 			}
@@ -687,11 +687,11 @@ public class JsonValues implements Iterable<JsonValues> {
 				for (int i = 0; i < sz; i++) {
 					Object value = l.get(i);
 					if (value instanceof JsonArray c) {
-						if (c.has(index)) { // negative indexes count from the end, as for a single array
+						if (c.hasAt(index)) { // negative indexes count from the end, as for a single array
 							if(r==null) {
 								r = new JsonValues();
 							}
-							r._add(c.get(c.actualIndex(index)));
+							r._add(c.at(index));
 						}
 					}
 				}
@@ -708,8 +708,8 @@ public class JsonValues implements Iterable<JsonValues> {
 			if (value instanceof JsonArray a) {
 				for (int k = 0; k < indexes.length; k++) {
 					int idx = indexes[k];
-					if(a.has(idx)) {
-						r._add(a.get(a.actualIndex(idx)));
+					if(a.hasAt(idx)) {
+						r._add(a.at(idx));
 					}
 				}
 			}
@@ -952,7 +952,7 @@ public class JsonValues implements Iterable<JsonValues> {
 				_find(values, v, index, deep);
 			}
 		} else if (value instanceof JsonArray a) {
-			int idx = a.actualIndex(index);
+			int idx = index<0 ? index+a.size() : index; // negative: from the end, as in JSON Path
 			if (a.has(idx)) {
 				values._add(a.get(idx));
 			}
@@ -971,7 +971,7 @@ public class JsonValues implements Iterable<JsonValues> {
 				_findAndSet(val, index, v);
 			}
 		} else if (value instanceof JsonArray a) {
-			int idx = a.actualIndex(index);
+			int idx = index<0 ? index+a.size() : index; // negative: from the end, as in JSON Path
 			if (a.has(idx)) {
 				a.set(idx, v);
 			}

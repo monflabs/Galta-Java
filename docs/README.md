@@ -22,7 +22,7 @@ The Galta project is split into many sub-projects, organized in a hierarchy and 
 - [Playground](playground/ ':ignore') - try GaltaJS in your browser: the playground application, running on CheerpJ.
 - [GaltaJSON](/GaltaJSON/) - the JSON library:
   - [Guide](/GaltaJSON/) - values, parsing, JSON Path, pointers, collections, schema metadata.
-  - [Add-on Modules](/GaltaJSON/Modules/) - serialization, configuration, import/export, in-memory database, YAML, Jayway JsonPath, JSON Schema validation.
+  - [Add-on Modules](/GaltaJSON/Modules/) - Jackson interoperability, configuration, import/export, in-memory database, YAML, Jayway JsonPath, JSON Schema validation.
 - [Utilities](/Utilities/) - the general-purpose libraries everything else builds on: strings, numbers, dates, collections, I/O, file systems, reflection, generators, in-memory Java compilation and test support.
 - [GaltaJS](/GaltaJS/) - the JavaScript engine:
   - [User's Guide](/GaltaJS/UserGuide/) - embedding and configuring the engine, executing code, Java interop, async, modules...

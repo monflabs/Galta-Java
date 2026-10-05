@@ -37,6 +37,24 @@ public class JsonReferenceResolveTest extends ProjectTestCase {
 		return JsonReference.resolve(JsonFactory.get(), root, new JsonReference.Resolver(root), keep);
 	}
 
+	public void testManyReferencesToOneTarget() {
+		// A target designated by many references is located once, and they all get it
+		StringBuilder b = new StringBuilder("{\"defs\":{\"t\":{\"v\":1}},\"list\":[");
+		for(int i=0; i<50; i++) {
+			b.append(i>0 ? "," : "").append("{\"$ref\":\"#/defs/t\"},{\"$ref\":\"#/alias\"}");
+		}
+		JsonObject root = JsonObject.parse(b.append("],\"alias\":{\"$ref\":\"#/defs/t\"}}").toString());
+		resolve(root, false);
+		Object target = root.getObject("defs").get("t");
+		for(Object o: root.getArray("list")) {
+			assertSame(target, o);
+		}
+		assertSame(target, root.get("alias"));
+		// A cycle is still detected after other references resolved
+		JsonObject cyclic = JsonObject.parse("{\"ok\":{\"$ref\":\"#/t\"},\"t\":1,\"a\":{\"$ref\":\"#/b\"},\"b\":{\"$ref\":\"#/a\"}}");
+		assertThrows(JsonException.class, () -> resolve(cyclic, false));
+	}
+
 	public void testUnresolvableReference() {
 		// An error, not a silent null
 		JsonObject o = JsonObject.parse("{\"a\":{\"$ref\":\"#/nope\"}}");

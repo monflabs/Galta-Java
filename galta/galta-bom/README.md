@@ -37,7 +37,7 @@ All entries use the `org.monflabs.galta` group id and the BOM's own version.
 - Utilities: `utilities`, `filesystem`, `javacompiler`, `test`
 - JSON: `json`, `json-config`, `json-impexp`, `json-impexp-fastcsv`,
   `json-jsonpath-jayway`, `json-jsonschema-jsonschemafriend`, `json-memdb`,
-  `json-serialization`, `json-yaml-snakeyaml`
+  `json-jackson`, `json-yaml-snakeyaml`
 - UI and playground: `ui-commons`, `ui-swing`, `ui-swing-ide`,
   `playground-core`, `playground-ui-swing`
 - GaltaJS: `js`, `js-debugger`, `js-template`, `js-vb`, `js-playground`

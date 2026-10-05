@@ -75,17 +75,18 @@ public class CoreModelFixesTest extends ProjectTestCase {
 		assertEquals(Short.valueOf(Short.MIN_VALUE), a.getShortObject(1));
 		assertEquals(Byte.MAX_VALUE, a.getByte(0, (byte)0));
 		assertEquals(Short.MIN_VALUE, a.getShort(1, (short)0));
-		assertEquals(Byte.valueOf(Byte.MAX_VALUE), a.getByteObject(-1, null));
-		assertEquals(Short.valueOf(Short.MIN_VALUE), a.getShortObject(-2, null));
+		assertEquals(Byte.valueOf(Byte.MAX_VALUE), a.atByteObject(-1, null));
+		assertEquals(Short.valueOf(Short.MIN_VALUE), a.atShortObject(-2, null));
+		// A negative index is out of range for the regular methods: the default
+		assertNull(a.getByteObject(-1, null));
 
 		assertEquals(Byte.MAX_VALUE, JsonUtil.checkByte(300));
 		assertEquals(Short.MIN_VALUE, JsonUtil.checkShort(-70000));
 		assertEquals(Byte.MAX_VALUE, JsonUtil.clampToByte(Long.MAX_VALUE));
 		assertEquals(Short.MIN_VALUE, JsonUtil.clampToShort(Double.NEGATIVE_INFINITY));
-		// The factory's strict conversions (used by AbstractJsonObject) too
-		assertEquals(Byte.MAX_VALUE, JavaJsonFactory.instance.asByte(300));
-		assertEquals(Integer.MAX_VALUE, JavaJsonFactory.instance.asInt(Long.MAX_VALUE));
-		assertEquals(Long.MAX_VALUE, JavaJsonFactory.instance.asLong(BigInteger.TEN.pow(30)));
+		assertEquals(Byte.MAX_VALUE, JsonUtil.clampToByte(300));
+		assertEquals(Integer.MAX_VALUE, JsonUtil.clampToInt(Long.MAX_VALUE));
+		assertEquals(Long.MAX_VALUE, JsonUtil.clampToLong(BigInteger.TEN.pow(30)));
 	}
 
 	//
@@ -303,8 +304,9 @@ public class CoreModelFixesTest extends ProjectTestCase {
 		e = assertThrows(JsonException.class, () -> o.getArray("n", null));
 		assertTrue(e.getMessage(), e.getMessage().contains("key \"n\""));
 		JsonArray a = JsonArray.of("x", 1);
-		e = assertThrows(JsonException.class, () -> a.getBoolean(-1));
-		assertTrue(e.getMessage(), e.getMessage().contains("index -1"));
+		e = assertThrows(JsonException.class, () -> a.getBoolean(1));
+		assertTrue(e.getMessage(), e.getMessage().contains("index 1"));
+		assertThrows(IndexOutOfBoundsException.class, () -> a.getBoolean(-1));
 		e = assertThrows(JsonException.class, () -> a.getObject(0));
 		assertTrue(e.getMessage(), e.getMessage().contains("index 0"));
 		// An index out of range is still an IndexOutOfBoundsException for the getters
@@ -402,7 +404,8 @@ public class CoreModelFixesTest extends ProjectTestCase {
 		assertEquals(Long.valueOf(9), a.getLongObject(100, 9L));
 		assertEquals(Double.valueOf(9), a.getDoubleObject(-100, 9.0));
 		assertEquals(Boolean.FALSE, a.getBooleanObject(8, false));
-		assertEquals(Float.valueOf(1.5f), a.getFloatObject(-6, null));
+		assertEquals(Float.valueOf(1.5f), a.atFloatObject(-6, null));
+		assertNull(a.getFloatObject(-6, null));
 		assertThrows(JsonException.class, () -> a.getIntObject(7));
 		assertThrows(JsonException.class, () -> a.getBooleanObject(1));
 		assertThrows(JsonException.class, () -> a.getDoubleObject(8));

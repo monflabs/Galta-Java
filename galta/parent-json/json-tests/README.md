@@ -3,7 +3,7 @@
 > Not published to Maven Central: the test suite of the core [json](../json/README.md) library.
 
 The module has no main code. The tested libraries (`json`, and the
-`json-jsonpath-jayway`, `json-yaml-snakeyaml`, `json-serialization` and
+`json-jsonpath-jayway`, `json-yaml-snakeyaml` and
 `json-jsonschema-jsonschemafriend` add-ons, which have tests here too) are
 compile dependencies, so the JaCoCo aggregate report covers them. Surefire runs
 two suites:

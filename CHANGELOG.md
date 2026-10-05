@@ -75,6 +75,43 @@ First public release: Galta is published to Maven Central under the
   fragments are written back and encrypted, a resource referenced twice is
   shared, symlinks can't escape the folder, and a failed save leaves the
   configuration unchanged.
+- JSON Pointer is faster: reading through a parsed pointer about 25%,
+  parsing a new pointer string 1.4x, parsing and reading 1.6x (now faster than
+  Jackson for both reading and parse-and-read), parsing the same string again
+  almost free (the last pointers are kept), printing 2x, hashing and comparing
+  without allocating. A part such as `"-"`
+  or `"-1"` built with `getChild()`/`ofParts()` now behaves on arrays like the
+  same token parsed (equal pointers behave the same), and a `setValue()` that
+  fails no longer leaves the containers it created. `$ref` resolution is
+  1.3x to 2x faster: each target is located once, and URLs are normalized once.
+- `JsonArray` indexes follow the `java.util.List` contract in every method: a
+  negative index is out of range for the typed getters, setters, `add`, `has`,
+  the `is*` tests and the `as*` conversions too. Negative indexes, counted from
+  the end, move to `at` counterparts that call the regular methods: `at()`,
+  `atString()`, `atInt()`..., `hasAt()`, `isNullAt()`..., `asIntAt()`...,
+  `addAt()`, `setAt()` and `deleteAt()`. `actualIndex()` is removed.
+- The layer that let `JsonFactory` sit on top of other JSON libraries is
+  removed, as Galta's own containers are the only ones: the `toNative*()`,
+  `isNative*()`, `as*(nativeValue)`, `toJavaPrimitive()`, `nativeEquals()` and
+  `JsonContainer.toNativeJsonPrimitive()` methods, the `supportsNaN()`,
+  `supportsInfinity()`, `supportsReferences()` and `supportsNullKeys()` flags
+  (NaN, infinities and references are always supported, null keys never), and
+  `AbstractJsonObject`. `JsonFactoryService` stays: GaltaJS plugs its factory in
+  with it.
+- `JsonObject` and `JsonArray` hold every helper as a `default` method built on
+  the `Map`/`List` methods: the typed getters and setters, the `is*` tests and
+  the array functions (`filter`, `map`, `slice`...). The implementations only
+  provide the storage. The JavaScript objects now share the Java behavior:
+  `getByte()`/`getInt()` saturate instead of wrapping (300 is 127 as a byte),
+  and their errors name the key.
+- New `json-jackson` module, replacing `json-serialization` (removed): register
+  its `GaltaJsonModule` in a Jackson `ObjectMapper`, and `JsonObject`/`JsonArray`
+  are read and written by Jackson, can be fields of Java objects, and convert to
+  and from Java objects (`convertValue`) and `JsonNode`. The containers come from
+  the module's factory, with its number rules; with a GaltaJS environment's factory
+  they are JavaScript objects, and writing a script value gives what
+  `JSON.stringify()` gives (new `JsonFactory.exportValue()`). To migrate from
+  `SimpleRegistry`: `mapper.convertValue(value, MyClass.class)`.
 
 ### Utilities
 

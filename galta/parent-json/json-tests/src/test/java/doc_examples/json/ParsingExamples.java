@@ -325,7 +325,6 @@ public class ParsingExamples extends ProjectTestCase {
 		// Stored and parsed (lenient mode), but never written: not JSON numbers
 		assertEquals("[null,null,1]", a.stringify());
 		assertEquals(a, JsonArray.parse("[NaN,Infinity,1]"));
-		assertTrue(JsonFactory.get().supportsNaN());
 	}
 
 	public void testCircularReference() {

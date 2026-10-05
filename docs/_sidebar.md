@@ -14,7 +14,7 @@
   * [Schema Metadata](/GaltaJSON/Schema)
   * Add-on Modules
     * [Overview](/GaltaJSON/Modules/)
-    * [Serialization](/GaltaJSON/Modules/Serialization)
+    * [Jackson](/GaltaJSON/Modules/Jackson)
     * [Configuration](/GaltaJSON/Modules/Config)
     * [Import & Export](/GaltaJSON/Modules/ImportExport)
     * [Memory Database](/GaltaJSON/Modules/MemoryDb)
