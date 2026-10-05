@@ -14,10 +14,11 @@ The JavaScript engine is intimately linked to the JSON library: it borrows some 
 
 Galta is designed to minimize its external dependencies. The initial reason was to fully control what is used, with which version, and to run on constrained environments (RoboVM, Java AOT compilers, CheerpJ in the browser...). That is why it does not use well established libraries like Guava. This constraint could be relaxed nowadays but keeping the dependencies minimal is still a good thing.
 
-The Galta project is split into many sub-projects, organized in a hierarchy and published as Maven artifacts (`groupId` `org.monflabs.galta`). The dependencies are transitive, so a consumer only references the JSON or the JavaScript library, plus optional modules when needed. All the libraries work well in a fat jar if a single jar file is preferred.
+The Galta project is split into many sub-projects, organized in a hierarchy and published to Maven Central (`groupId` `org.monflabs.galta`). The dependencies are transitive, so a consumer only references the JSON or the JavaScript library, plus optional modules when needed: see [Getting Started](/GettingStarted).
 
 ## Documentation
 
+- [Getting Started](/GettingStarted) - adding the libraries to a project from Maven Central, the list of artifacts, first steps.
 - [API Reference](/API) - the javadoc of every published module.
 - [Playground](playground/ ':ignore') - try GaltaJS in your browser: the playground application, running on CheerpJ.
 - [GaltaJSON](/GaltaJSON/) - the JSON library:
@@ -30,13 +31,11 @@ The Galta project is split into many sub-projects, organized in a hierarchy and 
   - [Extensions](/GaltaJS/Extensions/) - what GaltaJS adds on top of ECMAScript.
   - [Architecture](/GaltaJS/Architecture/) - how the interpreter, the transpiler, the async runtime and the object model work.
   - [Known ECMAScript Gaps](/GaltaJS/KnownGaps) - the living list of spec deviations found with test262.
+- Build & Release - for working on Galta itself:
+  - [Building and Releasing](/BuildAndRelease) - requirements, profiles, versioning and publishing.
+  - [Generating the Documentation](/Documentation) - viewing the docsify site locally, and how it is wired.
 
 Every Java and JavaScript sample in the documentation is backed by a JUnit test in a `doc_examples` folder of the module it documents, run by every build of that module.
-
-## The project
-
-- [Building and Releasing](/BuildAndRelease) - requirements, profiles, versioning and publishing.
-- [Generating the Documentation](/Documentation) - viewing the docsify site locally, and how it is wired.
 
 ## License
 

@@ -5,7 +5,7 @@ the module's own javadoc; the pages are generated from the sources the site was
 published from (see [Generating the Documentation](/Documentation)).
 
 To use a module, import `galta-bom` and declare it without a version - see
-[Using Galta in another project](/BuildAndRelease#using-galta-in-another-project).
+[Using the BOM](/GettingStarted?id=using-the-bom).
 
 ## Utilities
 
@@ -38,6 +38,10 @@ To use a module, import `galta-bom` and declare it without a version - see
 | `js-debugger` | [js-debugger](api/js-debugger/index.html ':ignore') | Swing debugger speaking the Chrome DevTools Protocol |
 | `js-template` | [js-template](api/js-template/index.html ':ignore') | JSP-like text templates |
 | `js-vb` | [js-vb](api/js-vb/index.html ':ignore') | Expression-language value bindings |
+| `js-precompiled-beautify-js` | [js-precompiled-beautify-js](api/js-precompiled-beautify-js/index.html ':ignore') | The js-beautify JavaScript formatter, transpiled to Java (`BeautifyJs`) |
+| `js-precompiled-beautify-css` | [js-precompiled-beautify-css](api/js-precompiled-beautify-css/index.html ':ignore') | The js-beautify CSS formatter, transpiled to Java (`BeautifyCss`) |
+| `js-precompiled-beautify-html` | [js-precompiled-beautify-html](api/js-precompiled-beautify-html/index.html ':ignore') | The js-beautify HTML formatter, transpiled to Java (`BeautifyHtml`) |
+| `js-precompiled-typescript` | [js-precompiled-typescript](api/js-precompiled-typescript/index.html ':ignore') | The TypeScript compiler, transpiled to Java (`Typescript`) |
 
 ## UI & Playground
 

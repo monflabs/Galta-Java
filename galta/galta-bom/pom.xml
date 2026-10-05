@@ -187,6 +187,26 @@
 			</dependency>
 			<dependency>
 				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-precompiled-beautify-css</artifactId>
+				<version>${revision}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-precompiled-beautify-html</artifactId>
+				<version>${revision}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-precompiled-beautify-js</artifactId>
+				<version>${revision}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.monflabs.galta</groupId>
+				<artifactId>js-precompiled-typescript</artifactId>
+				<version>${revision}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.monflabs.galta</groupId>
 				<artifactId>js-vb</artifactId>
 				<version>${revision}</version>
 			</dependency>

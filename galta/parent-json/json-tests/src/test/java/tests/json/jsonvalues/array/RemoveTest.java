@@ -64,12 +64,12 @@ public class RemoveTest extends ProjectTestCase {
 	public void testRemove() throws Exception {
 		JsonValues p1 = json.getAndFlat("phoneNumbers");
 		
-		JsonValues f1 = p1.remove( v -> v.get("type").eq("home") );
+		JsonValues f1 = p1.reject( v -> v.get("type").eq("home") );
 		assertEquals(2,f1._size());
 		assertEquals("mobile",f1.slice(0).get("type").stringValue());
 		assertEquals("work",f1.slice(1).get("type").stringValue());
 
-		JsonValues f2 = p1.remove( v -> v.get("type").in("home","mobile") );
+		JsonValues f2 = p1.reject( v -> v.get("type").in("home","mobile") );
 		assertEquals(1,f2._size());
 		assertEquals("work",f2.slice(0).get("type").stringValue());
 	}	

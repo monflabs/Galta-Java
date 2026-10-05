@@ -180,7 +180,7 @@ public class JsonValuesContractTest extends ProjectTestCase {
 		JsonValues items = doc.jsonValues().path("$.items[*]", true);
 		JsonValues odd = items.filter(v -> v.get("a").intValue() % 2 == 1);
 		assertEquals(List.of(JsonPointer.of("/items/0"), JsonPointer.of("/items/2")), odd.getPointers());
-		JsonValues even = items.remove(v -> v.get("a").intValue() % 2 == 1);
+		JsonValues even = items.reject(v -> v.get("a").intValue() % 2 == 1);
 		assertEquals(List.of(JsonPointer.of("/items/1")), even.getPointers());
 	}
 }

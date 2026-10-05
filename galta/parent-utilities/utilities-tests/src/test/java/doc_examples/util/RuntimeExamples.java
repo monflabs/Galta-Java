@@ -17,7 +17,6 @@ import org.monflabs.util.ObjectBuilderException;
 import org.monflabs.util.builder.Required;
 import org.monflabs.util.generators.Generator;
 import org.monflabs.util.generators.GeneratorImpl;
-import org.monflabs.util.performance.PerformanceWatch;
 import org.monflabs.util.profiler.Aggregator;
 import org.monflabs.util.profiler.Profiler;
 import org.monflabs.util.profiler.ProfilerSnapshot;
@@ -157,19 +156,6 @@ public class RuntimeExamples extends ProjectTestCase {
 		}
 		// When stopped, profile() simply runs the block
 		assertEquals("x", Profiler.profile("idle", () -> "x"));
-	}
-
-	public void testPerformanceWatch() throws Exception {
-		PerformanceWatch w = new PerformanceWatch("sum {0}", 1000);
-		int[] runs = {0};
-		w.run(() -> runs[0]++, 5, 2);          // 5 measured iterations after 2 warm-up runs
-		assertEquals(7, runs[0]);
-		assertEquals(5, w.getIterations().size());
-		assertTrue(w.getTotalWallTime() >= w.getAverageWallTime());
-
-		w.startIteration();                    // or measure by hand
-		w.endIteration();
-		assertEquals(6, w.getIterations().size());
 	}
 
 	public void testConsole() throws Exception {

@@ -75,17 +75,17 @@ operation, JDK 21, one machine: the ratios matter, not the absolute values):
 | Parse, records (~5 MB) | 14,654 | 21,107 |
 | Parse, numbers | 1,285 | 1,355 |
 | Parse, strings with escapes | 203 | 240 |
-| Stringify, records (~50 KB) | 123 | 108 |
-| Stringify, records (~5 MB) | 13,369 | 11,577 |
-| Stringify, numbers | 955 | 721 |
-| Stringify, strings with escapes | 304 | 209 |
+| Stringify, records (~50 KB) | 97 | 110 |
+| Stringify, records (~5 MB) | 10,185 | 11,638 |
+| Stringify, numbers | 753 | 683 |
+| Stringify, strings with escapes | 149 | 209 |
 
-Parsing is faster than Jackson; stringifying is close on usual documents and
-behind on numeric and string heavy content, where it writes JavaScript's exact
-number text. The price of a library of its own is its maintenance, which is
-why its behavior is pinned by tests: each documented sample is a test, the
-parser and the stringifier have differential tests against reference
-implementations, and test262 checks the JavaScript side.
+Parsing and stringifying are faster than Jackson, except on number heavy content,
+where the stringifier writes JavaScript's exact number text (about 10% behind).
+The price of a library of its own is its maintenance, which is why its behavior
+is pinned by tests: each documented sample is a test, the parser and the
+stringifier have differential tests against reference implementations, and
+test262 checks the JavaScript side.
 
 ## Getting it
 

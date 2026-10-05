@@ -11,10 +11,6 @@
 	<name>GaltaJS Precompiled js-beautify CSS</name>
 	<description>js-beautify CSS formatter, transpiled to Java with GaltaJS.</description>
 
-	<properties>
-		<!-- Not published: excluded from the Maven Central bundle (see the root pom central profile) -->
-		<maven.deploy.skip>true</maven.deploy.skip>
-	</properties>
 
 
 	<dependencies>
@@ -66,6 +62,7 @@
 				</executions>
 				<configuration>
 					<sourceDirectory>${basedir}/js</sourceDirectory>
+					<jsPackage>org.monflabs.galtajs.precompiled.beautifycss</jsPackage>
 					<includes>
 					    <include>**/*.js</include>
 					</includes>

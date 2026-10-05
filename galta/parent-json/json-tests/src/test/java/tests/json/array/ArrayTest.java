@@ -498,9 +498,35 @@ public class ArrayTest extends ProjectTestCase {
 		assertThrows(IndexOutOfBoundsException.class, () -> a.remove(-1));
 		assertThrows(IndexOutOfBoundsException.class, () -> a.set(-1, (Object)3));
 		assertThrows(IndexOutOfBoundsException.class, () -> a.add(-1, (Object)3));
-		a.deleteAt(-1);
+		a.removeAt(-1);
 		assertEquals(5,a.size());
 		assertEquals(4,a.getInt(4));
+	}
+
+	// The same helpers as JsonObject: getValue/getValueOrDefault, asNumber with a Number
+	// default, isObject/isArray
+	public void testObjectParity() {
+		JsonArray a = JsonArray.of("x", null, 3);
+
+		assertEquals("x", a.<String>getValue(0));
+		assertThrows(org.monflabs.json.JsonException.class, () -> a.getValue(1));      // null
+		assertThrows(IndexOutOfBoundsException.class, () -> a.getValue(3));              // out of range
+		assertEquals("d", a.getValueOrDefault(1, "d"));                                 // null
+		assertEquals("d", a.getValueOrDefault(3, "d"));                                 // out of range
+		assertEquals(Integer.valueOf(3), a.<Integer>getValueOrDefault(2, 0));
+		// getOrDefault: the default for an index out of range only, like Map.getOrDefault
+		assertNull(a.getOrDefault(1, "d"));
+		assertEquals("d", a.getOrDefault(3, "d"));
+
+		assertEquals(Integer.valueOf(3), a.<Integer>atValue(-1));
+		assertEquals("d", a.atValueOrDefault(-2, "d"));
+
+		assertEquals(3, a.asNumber(2, (Number)7.5).intValue());
+		assertEquals(7.5, a.asNumber(5, (Number)7.5));
+		assertEquals(7.5, a.asNumberAt(-9, (Number)7.5));
+
+		assertTrue(a.isArray());
+		assertFalse(a.isObject());
 	}
 	
 	public void testAsMethods() {

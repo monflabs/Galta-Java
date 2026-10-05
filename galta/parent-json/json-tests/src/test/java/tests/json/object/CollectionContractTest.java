@@ -101,7 +101,7 @@ public class CollectionContractTest extends ProjectTestCase {
 		a.addValueAt(-1, "x");
 		a.setAt(-1, "D");
 		assertEquals("[\"a\",\"b\",\"x\",\"D\"]", a.stringify());
-		assertEquals("D", a.deleteAt(-1));
+		assertEquals("D", a.removeAt(-1));
 		assertEquals("[\"a\",\"b\",\"x\"]", a.stringify());
 	}
 

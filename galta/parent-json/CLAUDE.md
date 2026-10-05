@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|---|
 | `json` | `json` | Core JSON API and default implementation |
 | `json-tests` | `json-tests` | Tests for the core library |
-| `json-performance` | `json-performance` | Micro-benchmarks (not part of the library surface) |
+| `json-performance` | `json-performance` | JMH benchmarks (not published) |
 | `json-jsonpath-jayway` | `json-jsonpath-jayway` | JSONPath via Jayway |
 | `json-yaml-snakeyaml` | `json-yaml-snakeyaml` | YAML support via SnakeYAML |
 | `json-jsonschema-jsonschemafriend` | `json-jsonschema-jsonschemafriend` | JSON Schema validation |

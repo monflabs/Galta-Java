@@ -1,7 +1,5 @@
 # GaltaJS Precompiled js-beautify HTML
 
-> Not published to Maven Central: build and install it from this repository.
-
 The HTML formatter of [js-beautify](https://github.com/beautify-web/js-beautify)
 (1.15.4, the version `js/download.sh` fetches), transpiled to Java with GaltaJS at build time: the library runs
 as compiled Java classes, with no JavaScript parsing at run time. A small facade,
@@ -16,10 +14,8 @@ as compiled Java classes, with no JavaScript parsing at run time. A small facade
 </dependency>
 ```
 
-It is not on Maven Central (nor in the `galta-bom`): install it from a checkout of
-this repository, from `galta/`, with
-`mvn install -pl parent-js/parent-js-precompiled/js-precompiled-beautify-html -am`, and declare it
-with the Galta version (`<version>0.8.0</version>`).
+Published to Maven Central: give it the Galta version (`<version>0.8.0</version>`),
+or import `galta-bom` and leave the version out.
 
 `BeautifyHtml.newBuilder().build()` creates the formatter, optionally with
 `.environment(env)` to run it in a given `JSEnvironment` (by default a plain
@@ -30,7 +26,7 @@ once, when the formatter is built.
 ## Contents
 
 - `org.monflabs.galtajs.precompiled.BeautifyHtml` - the facade: builds the environment, runs the transpiled library once and calls its `html_beautify` function
-- `js/beautify-html.js` - the js-beautify source, fetched by `js/download.sh`; the build transpiles it into the class `js.Beautify_dhtml`
+- `js/beautify-html.js` - the js-beautify source, fetched by `js/download.sh`; the build transpiles it into the class `org.monflabs.galtajs.precompiled.beautifyhtml.Beautify_dhtml`
 - `tests.HtmlFormatterTest` - formats `src/test/resources/source/sample.html` both transpiled and interpreted and compares with the expected output
 
 ## Documentation

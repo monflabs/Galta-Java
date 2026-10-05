@@ -35,7 +35,7 @@ All artifacts use the group `org.monflabs.galta`.
 | [I/O & Paths](/Utilities/IO) | Stream and file helpers, `PathUtil`, readers and writers |
 | [File Systems](/Utilities/FileSystems) | The memory, sandboxed, ZIP and resource filesystems |
 | [Reflection](/Utilities/Reflection) | `ClassMetadata` and `PojoAccessor` |
-| [Generators, Profiling & Runtime](/Utilities/Runtime) | Generators, the profiler, performance watches, console output |
+| [Generators, Profiling & Runtime](/Utilities/Runtime) | Generators, the profiler, console output |
 | [Java Compiler](/Utilities/JavaCompiler) | In-memory Java compilation |
 | [Test Support](/Utilities/Testing) | The `test` module |
 

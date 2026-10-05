@@ -80,6 +80,8 @@
 								<excludeArtifact>json-tests</excludeArtifact>
 								<excludeArtifact>json-config-test</excludeArtifact>
 								<excludeArtifact>json-performance</excludeArtifact>
+								<excludeArtifact>utilities-performance</excludeArtifact>
+								<excludeArtifact>js-performance</excludeArtifact>
 								<excludeArtifact>js-all</excludeArtifact>
 								<excludeArtifact>js-library-v8</excludeArtifact>
 								<excludeArtifact>js-playground-cheerpj</excludeArtifact>
@@ -87,11 +89,6 @@
 								<excludeArtifact>js-test-suite</excludeArtifact>
 								<excludeArtifact>js-test-test262</excludeArtifact>
 								<excludeArtifact>js-transpiler-maven-tests</excludeArtifact>
-								<excludeArtifact>js-precompiled-typescript</excludeArtifact>
-								<excludeArtifact>parent-js-precompiled</excludeArtifact>
-								<excludeArtifact>js-precompiled-beautify-css</excludeArtifact>
-								<excludeArtifact>js-precompiled-beautify-html</excludeArtifact>
-								<excludeArtifact>js-precompiled-beautify-js</excludeArtifact>
 							</excludeArtifacts>
 						</configuration>
 					</plugin>

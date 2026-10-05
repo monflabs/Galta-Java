@@ -79,6 +79,16 @@ public interface JsonArray extends JsonContainer, List<Object> {
 		return (JsonArray)factory().deepClone(this);
 	}
 
+	@Override
+	public default boolean isObject() {
+		return false;
+	}
+
+	@Override
+	public default boolean isArray() {
+		return true;
+	}
+
 
 	
 	// The is*() tests don't throw for an index out of range: like a missing key of an
@@ -1191,7 +1201,11 @@ public interface JsonArray extends JsonContainer, List<Object> {
         return r;
     }
 
-	public default JsonArray remove(Predicate<Object> predicate) {
+	/**
+	 * The items that do not match, in a new array: the opposite of {@link #filter}. The
+	 * array is unchanged (use {@link #removeIf} to remove the items from it).
+	 */
+	public default JsonArray reject(Predicate<Object> predicate) {
         JsonArray r = factory().createArray();
     	int sz = size();
         for(int i=0; i<sz; i++) {
@@ -1254,8 +1268,8 @@ public interface JsonArray extends JsonContainer, List<Object> {
 		return this;    
 	}
 
-	public default <R> R process(Function<JsonArray, R> processsor) {
-		return processsor.apply(this);
+	public default <R> R process(Function<JsonArray, R> processor) {
+		return processor.apply(this);
 	}
 
 
@@ -1456,12 +1470,40 @@ public interface JsonArray extends JsonContainer, List<Object> {
 		return JsonValues.of(get(index));
 	}
 
+	/**
+	 * The item at an index, or the default value for an index out of range (a null item
+	 * is returned as is), like {@link java.util.Map#getOrDefault}.
+	 */
 	@SuppressWarnings("unchecked")
 	public default <T> T getOrDefault(int index, T defaultValue) {
 		if(has(index)) {
 			return (T)get(index);
 		}
 		return defaultValue;
+	}
+	/**
+	 * The item at an index, which must exist and not be null (a JsonException otherwise),
+	 * like {@link JsonObject#getValue(String)}.
+	 */
+	public default <T> T getValue(int index) {
+		@SuppressWarnings("unchecked")
+		T t = (T)item(index);
+		if(t==null) {
+			throw new JsonException(null,"Value is null at index {0}",index);
+		}
+		return t;
+	}
+	/**
+	 * The item at an index, or the default value when it is null or the index out of
+	 * range, like {@link JsonObject#getValueOrDefault(String, Object)}.
+	 */
+	public default <T> T getValueOrDefault(int index, T defaultValue) {
+		@SuppressWarnings("unchecked")
+		T t = (T)peek(index);
+		if(t==null) {
+			return defaultValue;
+		}
+		return t;
 	}
 	
 	@Override
@@ -1515,6 +1557,9 @@ public interface JsonArray extends JsonContainer, List<Object> {
 		return JsonUtil.asNumber(getOrDefault(index,null));
 	}
 	public default Number asNumber(int index, int defaultValue) {
+		return JsonUtil.asNumber(getOrDefault(index,null),defaultValue);
+	}
+	public default Number asNumber(int index, Number defaultValue) {
 		return JsonUtil.asNumber(getOrDefault(index,null),defaultValue);
 	}
 
@@ -1624,6 +1669,12 @@ public interface JsonArray extends JsonContainer, List<Object> {
 	public default <T> T atOrDefault(int index, T defaultValue) {
 		return getOrDefault(fromEnd(index), defaultValue);
 	}
+	public default <T> T atValue(int index) {
+		return getValue(fromEnd(index));
+	}
+	public default <T> T atValueOrDefault(int index, T defaultValue) {
+		return getValueOrDefault(fromEnd(index), defaultValue);
+	}
 	public default JsonValues jsonValuesAt(int index) {
 		return jsonValues(fromEnd(index));
 	}
@@ -1631,7 +1682,7 @@ public interface JsonArray extends JsonContainer, List<Object> {
 	 * Remove the item at an index, possibly negative: {@link List#remove(int)}.
 	 * @return the removed item
 	 */
-	public default Object deleteAt(int index) {
+	public default Object removeAt(int index) {
 		return remove(fromEnd(index));
 	}
 	public default boolean isNullAt(int index) {
@@ -1818,6 +1869,9 @@ public interface JsonArray extends JsonContainer, List<Object> {
 		return asNumber(fromEnd(index));
 	}
 	public default Number asNumberAt(int index, int defaultValue) {
+		return asNumber(fromEnd(index), defaultValue);
+	}
+	public default Number asNumberAt(int index, Number defaultValue) {
 		return asNumber(fromEnd(index), defaultValue);
 	}
 	public default int asIntAt(int index) {

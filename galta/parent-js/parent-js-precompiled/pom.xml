@@ -13,16 +13,25 @@
 	<name>GaltaJS Precompiled Libraries Parent</name>
 	<description>Parent of JavaScript libraries transpiled to Java with GaltaJS at build time.</description>
 
-	<properties>
-		<!--
-			Not published: neither this parent nor its modules go to Maven Central
-			(excluded from the bundle in the root pom central profile). The modules
-			inherit these properties.
-		-->
-		<maven.deploy.skip>true</maven.deploy.skip>
-		<maven.javadoc.skip>true</maven.javadoc.skip>
-		<gpg.skip>true</gpg.skip>
-	</properties>
+	<build>
+		<pluginManagement>
+			<plugins>
+				<!-- The javadoc documents the Java facade only: the transpiled library (one
+				     package per module under org.monflabs.galtajs.precompiled) is generated
+				     code without a Java API of its own. Javadoc still reads it, to resolve
+				     the types the facade uses. -->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-javadoc-plugin</artifactId>
+					<configuration>
+						<sourceFileExcludes>
+							<sourceFileExclude>org/monflabs/galtajs/precompiled/*/**/*.java</sourceFileExclude>
+						</sourceFileExcludes>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
 
 
 	<modules>

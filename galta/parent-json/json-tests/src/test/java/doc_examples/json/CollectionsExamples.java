@@ -49,7 +49,7 @@ public class CollectionsExamples extends ProjectTestCase {
 		assertEquals("[1,2,3]", a.skipLimit(1, 3).stringify());
 		assertEquals("[0,1,2]", a.takeWhile(v -> JsonUtil.asInt(v) < 3).stringify());
 		assertEquals("[3,4,5]", a.dropWhile(v -> JsonUtil.asInt(v) < 3).stringify());
-		assertEquals("[1,3,5]", a.remove(v -> JsonUtil.asInt(v) % 2 == 0).stringify());   // a copy without the matches
+		assertEquals("[1,3,5]", a.reject(v -> JsonUtil.asInt(v) % 2 == 0).stringify());   // a copy without the matches
 		assertEquals(6, a.size());
 	}
 

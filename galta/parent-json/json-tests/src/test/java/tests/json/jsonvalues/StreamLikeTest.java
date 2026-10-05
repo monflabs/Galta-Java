@@ -296,16 +296,16 @@ public class StreamLikeTest extends ProjectTestCase {
 		JsonValues v = JsonValues.parseAndFlat("[1,2,3]");
 		assertEquals(3, v._size());
 		
-		JsonValues v2 = v.remove( (val) -> val.intValue()<2 );
+		JsonValues v2 = v.reject( (val) -> val.intValue()<2 );
 		assertEquals(2, v2._size());
 		assertEquals(2, v2._get(0));
 		assertEquals(3, v2._get(1));
 		
-		JsonValues v3 = v.remove( (val) -> val.intValue()<3 );
+		JsonValues v3 = v.reject( (val) -> val.intValue()<3 );
 		assertEquals(1, v3._size());
 		assertEquals(3, v3._get(0));
 
-		JsonValues v4 = JsonValues.parseAndFlat("[]").remove( (val) -> val.intValue()<0 );
+		JsonValues v4 = JsonValues.parseAndFlat("[]").reject( (val) -> val.intValue()<0 );
 		assertEquals(0, v4._size());
 	}
 

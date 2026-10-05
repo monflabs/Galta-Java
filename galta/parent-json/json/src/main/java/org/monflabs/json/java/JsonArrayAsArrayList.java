@@ -84,15 +84,6 @@ public class JsonArrayAsArrayList extends ArrayList<Object> implements JsonArray
 		return JsonUtil.hashCode(this);
 	}
 
-	@Override
-	public boolean isObject() {
-		return false;
-	}
-
-	@Override
-	public boolean isArray() {
-		return true;
-	}	
 
 	@Override
 	public JsonValues jsonValues() {

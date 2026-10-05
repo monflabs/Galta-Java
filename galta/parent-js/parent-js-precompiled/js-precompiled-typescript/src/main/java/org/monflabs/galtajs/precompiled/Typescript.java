@@ -58,7 +58,7 @@ public class Typescript {
 					.build();
 		}
 
-		js.Typescript js = new js.Typescript(env);
+		org.monflabs.galtajs.precompiled.typescript.Typescript js = new org.monflabs.galtajs.precompiled.typescript.Typescript(env);
 		runtimeContext = new TranspiledGlobalRuntimeContext(env,env.createProgramExecutor());
         js.executeWithContext(runtimeContext);
 	}

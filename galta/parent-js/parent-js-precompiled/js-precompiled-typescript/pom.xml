@@ -9,16 +9,7 @@
 	</parent>
 	<artifactId>js-precompiled-typescript</artifactId>
 	<name>GaltaJS Precompiled TypeScript</name>
-	<description>TypeScript compiler precompiled with GaltaJS. Not published.</description>
-	
-	<properties>
-		<!-- Not published: excluded from the Maven Central bundle (see the root pom central profile) -->
-		<maven.deploy.skip>true</maven.deploy.skip>
-		<maven.javadoc.skip>true</maven.javadoc.skip>
-		<gpg.skip>true</gpg.skip>
-		<!-- <maven.compiler.debug>false</maven.compiler.debug> -->
-		<!-- optional: <maven.compiler.debuglevel/> to clear any parent setting -->
-	</properties>
+	<description>TypeScript compiler, transpiled to Java with GaltaJS.</description>
 
 	<dependencies>
 		<dependency>
@@ -64,6 +55,7 @@
 				</executions>
 				<configuration>
 					<sourceDirectory>${basedir}/js</sourceDirectory>
+					<jsPackage>org.monflabs.galtajs.precompiled.typescript</jsPackage>
 					<commonJS>true</commonJS>
 					<includes>
 					    <include>**/*.js</include>

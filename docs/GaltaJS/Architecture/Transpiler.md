@@ -18,7 +18,7 @@ The mapping drops an optional trailing `.js`, turns path separators into package
 
 ## Generated class layout
 
-Verified shape (from the probe in this session and `parent-js-precompiled/js-precompiled-beautify-js/target/generated-sources/js/js/Beautify.java`):
+Verified shape (from the probe in this session and `parent-js-precompiled/js-precompiled-beautify-js/target/generated-sources/js/org/monflabs/galtajs/precompiled/beautifyjs/Beautify.java`):
 
 ```java
 // package XXX;                                   <- JSTranspiler.PACKAGE_COMMENT, replaced by the caller

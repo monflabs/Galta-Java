@@ -26,6 +26,7 @@
 		<module>test</module>
 		<module>utilities</module>
 		<module>utilities-tests</module>
+		<module>utilities-performance</module>
 	</modules>
 
 </project>

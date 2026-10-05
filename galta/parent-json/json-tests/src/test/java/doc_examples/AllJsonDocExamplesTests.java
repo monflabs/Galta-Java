@@ -4,6 +4,7 @@ import org.monflabs.json.JsonFactory;
 import org.monflabs.json.java.JavaJsonFactory;
 
 import doc_examples.json.CollectionsExamples;
+import doc_examples.json.GettingStartedExamples;
 import doc_examples.json.JsonPathExamples;
 import doc_examples.json.ParsingExamples;
 import doc_examples.json.PointersExamples;
@@ -25,6 +26,7 @@ public class AllJsonDocExamplesTests extends TestSuite {
 
 	public static TestSuite suite() throws Exception {
 		TestSuite suite = new AllJsonDocExamplesTests();
+		suite.addTestSuite(GettingStartedExamples.class);
 		suite.addTestSuite(ValuesExamples.class);
 		suite.addTestSuite(ParsingExamples.class);
 		suite.addTestSuite(JsonPathExamples.class);

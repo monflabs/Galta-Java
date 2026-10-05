@@ -18,16 +18,17 @@ Published to Maven Central:
 - [js-vb](js-vb/README.md) - `${...}` expression-language value bindings evaluated with GaltaJS
 - [js-debugger](js-debugger/README.md) - Swing debugger speaking the Chrome DevTools Protocol
 - [js-playground](js-playground/README.md) - the interactive GaltaJS playground (Swing application)
+- [parent-js-precompiled](parent-js-precompiled/README.md) - JavaScript libraries transpiled to Java at build time (js-beautify, TypeScript)
 
 Built from source only (not published):
 
-- [parent-js-precompiled](parent-js-precompiled/README.md) - JavaScript libraries transpiled to Java at build time (js-beautify)
 - [js-all](js-all/README.md) - a single fat jar of the engine and its dependencies
 - [js-playground-cheerpj](js-playground-cheerpj/README.md) - the browser (CheerpJ) build of the playground
 - [js-library-v8](js-library-v8/README.md) - pulls V8 (Javet) for cross-engine checks in tests
 - [js-test-suite](js-test-suite/README.md) - shared runner of the directory-based compliance suites
 - [js-test-test262](js-test-test262/README.md) - runs the TC39 test262 suite
 - [js-test-rhino](js-test-rhino/README.md) - runs Mozilla Rhino's ECMA test suite
+- [js-performance](js-performance/README.md) - JMH benchmarks of GaltaJS internals
 - [js-transpiler-maven-tests](js-transpiler-maven-tests/README.md) - build-level check of the transpiler Maven plugin
 
 ## External test suites

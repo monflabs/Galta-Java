@@ -14,10 +14,34 @@ Everything goes through the static methods of `org.monflabs.json.yaml.SnakeYaml`
 | Method | Does |
 |---|---|
 | `parse(String)`, `parse(Reader)`, `parse(InputStream)` | Parses one YAML document and returns its root value. |
-| `parse(JsonFactory, ...)` | Same, creating the objects and arrays with a given factory. |
+| `parse(JsonFactory, ...)` | Same, creating the objects, the arrays and the numbers with a given factory. |
 | `parse(JsonFactory, ..., SnakeYaml.Options)` | Same, with other limits (see [Limits](#limits)). |
 | `stringify(Object)` | Writes a value as block-style YAML. |
 | `stringify(Object, DumpSettings)` | Writes with SnakeYAML Engine settings. |
+
+## Like the JSON parser
+
+The YAML parser works like the JSON parser and uses the same configuration: the `JsonFactory`. `parse(...)` uses the default factory (`JsonFactory.get()`, the one `JsonFactory.set()` changes) and `parse(factory, ...)` a given one, exactly as `factory.parse(...)` does for JSON. The factory creates:
+
+- the objects and the arrays (`createObject()`, `createArray()`), so they are the same container classes as for JSON;
+- the numbers, from their text, with the factory's number options: `defaultInteger()`, `useLongIntegers()`, `overflowInteger()`, `defaultDecimal()` and `overflowDecimal()` (see [Number options](/GaltaJSON/Parsing?id=number-options)). A factory whose decimals are `BigDecimal`s gives `BigDecimal`s for YAML too.
+
+A document written in YAML or in JSON therefore gives equal values, of the same Java types:
+
+Sample: `doc_examples/yaml/YamlExamples.java` (`testNumberRules`)
+
+```java
+JsonFactory exact = new JavaJsonFactory() {
+    @Override
+    public INTEGER defaultInteger() { return INTEGER.LONG; }
+    @Override
+    public DECIMAL defaultDecimal() { return DECIMAL.BIGDEC; }
+};
+JsonObject o = (JsonObject)SnakeYaml.parse(exact, "qty: 3\nprice: 0.1\n");
+// Long 3, BigDecimal 0.1: the same values as exact.parse("{\"qty\":3,\"price\":0.1}")
+```
+
+What differs comes from YAML itself: the keys that are not strings are converted to strings (see [Keys](#keys)), YAML has its own safety [limits](#limits), and the JSON parser's own options (strict mode, revivers) don't apply.
 
 ## Parsing
 
@@ -113,6 +137,8 @@ Sample: `doc_examples/yaml/YamlExamples.java` (`testScalars`)
 | `null` | `null` |
 | `~`, `True`, `yes`, `0x1F`, `2024-01-15` | `String` |
 | `'012'`, `"012"` | `String` |
+
+The number types are those of the default factory, the same as for JSON: another factory changes them for both parsers (see [Like the JSON parser](#like-the-json-parser)). An explicit tag reads the YAML spellings of the numbers too (`!!int 0x1F`, `!!int 0o17`, `!!float .5`).
 
 ### Other features
 

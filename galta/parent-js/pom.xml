@@ -27,6 +27,7 @@
 		<module>js-test-rhino</module>
 		<module>js-test-test262</module>
 		<module>js-library-v8</module>
+		<module>js-performance</module>
 		<module>parent-js-precompiled</module>
 	</modules>
 

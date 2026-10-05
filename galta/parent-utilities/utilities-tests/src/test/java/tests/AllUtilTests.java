@@ -27,7 +27,7 @@ import tests.model.ClassMetadataTest;
 import tests.path.FilesUtilTest;
 import tests.path.PathClassLoaderTest;
 import tests.profiler.ProfilerConcurrencyTest;
-import tests.util.BuilderAndPerformanceTest;
+import tests.util.BuilderTest;
 import tests.util.ConsoleAndExceptionTest;
 import tests.util.HttpUtilsTest;
 import tests.util.ScopedValueTest;
@@ -39,7 +39,6 @@ import tests.dependencies.CircularDependenciesTest;
 import tests.dependencies.DependenciesTest;
 import tests.dependencies.DependingTest;
 import tests.dependencies.MixedDependenciesTest;
-import tests.generators.GeneratorPerformanceTest;
 import tests.generators.GeneratorTest;
 import tests.io.LRUCharBufferTest;
 import tests.io.ReaderInputStreamTest;
@@ -58,7 +57,6 @@ import tests.util.StringUtilTest;
 import tests.util.TypeUtilTest;
 import tests.util.VersionTest;
 import tests.util._DtoALibraryTest;
-import tests.util._DtoAPerformanceTest;
 import org.monflabs.tests.SuiteGuard;
 
 public class AllUtilTests extends TestSuite {
@@ -80,7 +78,7 @@ public class AllUtilTests extends TestSuite {
 		suite.addTestSuite(ConsoleAndExceptionTest.class);
 		suite.addTestSuite(ScopedValueTest.class);
 		suite.addTestSuite(HttpUtilsTest.class);
-		suite.addTestSuite(BuilderAndPerformanceTest.class);
+		suite.addTestSuite(BuilderTest.class);
 		suite.addTestSuite(ConfigTest.class);
 		suite.addTestSuite(FilesUtilTest.class);
 		suite.addTestSuite(PathClassLoaderTest.class);
@@ -93,7 +91,6 @@ public class AllUtilTests extends TestSuite {
 
 		suite.addTestSuite(GeneratorTest.class);
 		suite.addTestSuite(GeneratorThreadsTest.class);
-		suite.addTestSuite(GeneratorPerformanceTest.class);
 
 		suite.addTestSuite(LRUCharBufferTest.class);
 		suite.addTestSuite(WriterOutputStreamTest.class);
@@ -117,7 +114,6 @@ public class AllUtilTests extends TestSuite {
 		suite.addTestSuite(DependencyEngineTest.class);
 		
 		suite.addTestSuite(_DtoALibraryTest.class);
-		suite.addTestSuite(_DtoAPerformanceTest.class);
 		suite.addTestSuite(DtoATest.class);
 
 

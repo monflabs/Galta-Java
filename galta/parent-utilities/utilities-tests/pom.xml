@@ -16,12 +16,6 @@
 		<maven.deploy.skip>true</maven.deploy.skip>
 		<maven.javadoc.skip>true</maven.javadoc.skip>
 		<gpg.skip>true</gpg.skip>
-		<!-- TODO: turn the leak detection on. The suites pass with it, but the attached
-		     agent makes tests.generators.GeneratorPerformanceTest (millions of Exchanger
-		     handoffs between threads) much slower: ~48 s instead of a few seconds on JDK 21, and
-		     JDK 25 is already ~19x slower on that test, enough to hit the surefire
-		     fork timeout. Shrink or move that benchmark first. -->
-		<monflabs.tests.trackLeaks>false</monflabs.tests.trackLeaks>
 	</properties>
 
 
@@ -49,6 +43,19 @@
 
 	<build>
 		<plugins>
+			<!-- The test classes as a test-jar: utilities-performance benchmarks the reference
+			     double-to-text implementations of src/test/java (Rhino, Ryu, Harmony, cookjson) -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<executions>
+					<execution>
+						<goals>
+							<goal>test-jar</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>

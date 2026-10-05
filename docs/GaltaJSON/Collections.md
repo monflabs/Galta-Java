@@ -25,7 +25,7 @@ a.stringify();                                             // [5,8,1]
 | Operation | Result |
 |---|---|
 | `filter(predicate)` | The items that match |
-| `remove(predicate)` | The items that do *not* match (a copy: the array is unchanged) |
+| `reject(predicate)` | The items that do *not* match |
 | `map(function)` | The function applied to each item |
 | `takeWhile(predicate)`, `dropWhile(predicate)` | The leading matching items, or everything after them |
 | `slice(start, end)`, `slice(start, end, step)` | Python-style slice: `end` exclusive, negative values from the end, a negative step walks backwards; pass `null` (the `Integer` overloads) for a default bound |
@@ -49,7 +49,7 @@ a.limit(2);                   // [0,1]
 a.skipLimit(1, 3);            // [1,2,3]
 a.takeWhile(v -> JsonUtil.asInt(v) < 3);        // [0,1,2]
 a.dropWhile(v -> JsonUtil.asInt(v) < 3);        // [3,4,5]
-a.remove(v -> JsonUtil.asInt(v) % 2 == 0);      // [1,3,5]: a copy without the matches
+a.reject(v -> JsonUtil.asInt(v) % 2 == 0);      // [1,3,5]: a copy without the matches
 a.size();                     // 6
 ```
 
@@ -248,7 +248,7 @@ For reading and writing CSV files, see [Import & Export](/GaltaJSON/Modules/Impo
 
 ## Gotchas
 
-- `remove(predicate)` does not remove anything from the array: it returns a filtered copy. Use `removeIf` (from `Collection`) to modify the array.
+- Like `filter()`, `reject()` returns a new array and leaves the array unchanged. Use `removeIf` (from `Collection`) to remove the matching items from the array itself.
 - `sorted()` orders mixed types by type first; strings come before numbers. A non-JSON value (a Java object stored with `addValue`) sorts after the booleans, and two of them can't be compared (`IllegalStateException`).
 - `contains(v)`, `indexOf(v)` and `remove(Object)` are the `List` methods and use the Java `equals()` on the items: `JsonArray.of(1).contains(1.0)` is `false`, while `JsonArray.of(1).equals(JsonArray.of(1.0))` (JSON equality) is `true`. Use `anyMatch(x -> JsonUtil.eq(x, v))` for a JSON comparison.
 - `factory()` on a `JsonObjectAsLinkedMap`/`JsonArrayAsArrayList` is `JavaJsonFactory.instance` (`JavaJsonFactoryChecked.instance` for the checked ones), even when the container was created by a subclass of these factories: the containers created from it (`getOrCreateObject`, `deepClone`, `filter`...) come from that factory.

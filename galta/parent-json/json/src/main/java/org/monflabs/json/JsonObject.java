@@ -907,8 +907,8 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 	//
 	/////////////////////////////////////////////////////////////////
 
-    public default <R> R process(Function<JsonObject, R> processsor) {
-		return processsor.apply(this);
+    public default <R> R process(Function<JsonObject, R> processor) {
+		return processor.apply(this);
 	}
 
     @Override

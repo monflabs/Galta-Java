@@ -52,6 +52,6 @@ bump changes `<revision>` here too, as the BOM has no parent to inherit it from.
 
 ## Documentation
 
-- [Building and Releasing](../../docs/BuildAndRelease.md#using-galta-in-another-project)
-  ([online](https://monflabs.github.io/Galta-Java/#/BuildAndRelease?id=using-galta-in-another-project))
+- [Getting Started](../../docs/GettingStarted.md#using-the-bom)
+  ([online](https://monflabs.github.io/Galta-Java/#/GettingStarted?id=using-the-bom))
 - [API reference](https://monflabs.github.io/Galta-Java/#/API)

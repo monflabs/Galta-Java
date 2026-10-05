@@ -16,10 +16,10 @@ group id.
 - [`javacompiler`](javacompiler/README.md) - runtime compilation of Java source with the JDK's `javac`, and a class loader for the result
 - [`test`](test/README.md) - JUnit support: base test case, golden-file assertions, resource-leak detection, suite completeness
 - [`utilities-tests`](utilities-tests/README.md) - the test suites of `utilities` (not published)
+- [`utilities-performance`](utilities-performance/README.md) - JMH benchmarks of `utilities` (not published)
 
 This pom turns the resource-leak detector of the `test` module on for the tests
-of its modules (`monflabs.tests.trackLeaks=true`); `utilities-tests` turns it
-back off, as the agent slows its generator performance test down too much.
+of its modules (`monflabs.tests.trackLeaks=true`).
 
 ## Documentation
 

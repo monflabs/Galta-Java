@@ -47,7 +47,7 @@ All packages are under `org.monflabs.util`.
   access to Java objects, method calls and construction with argument
   conversion (the reflection layer under GaltaJS's Java interop)
 - `generators` - `Generator`/`Yielder`: Java generators (the body yields values to an `Iterator`), each body on its own thread, virtual by default
-- `profiler`, `performance` - `Profiler`, `JavaProfiler`, `PerformanceWatch`
+- `profiler` - `Profiler`, `JavaProfiler`
 - `config`, `http`, `function`, `scoped`, `builder` - small helpers (a `Config`
   interface, HTTP form and query-string encoding, `TriFunction`/`TriPredicate`,
   a temporary `_ScopedValue`, the `@Required` builder annotation)

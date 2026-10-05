@@ -11,6 +11,7 @@ The benchmarks are in `src/main/java/performance/jmh`:
 | `ParseBenchmark` | Parsing to a tree, from a `String` and from UTF-8 bytes (`InputStream`) |
 | `StringifyBenchmark` | Writing a tree, compact and pretty printed, and a parse + stringify round trip |
 | `ReadBenchmark` | Reading values from a parsed tree (JSONPath query and a hand-written loop) |
+| `AccessBenchmark` | Typed access to a parsed tree with Galta, Jackson, Gson and org.json: a loop over the World Cup matches and a short path |
 
 The datasets (`Datasets`) are generated deterministically: `small` (~200 B), `medium`
 (~50 KB of API-like records), `large` (~5 MB), `numbers` (ints, longs, decimals, exponents),
@@ -41,10 +42,11 @@ strings copied then scanned), in microseconds per operation: the Galta parse and
 benchmarks before and after, and Jackson on the same machine. The `deep` stringify
 benchmarks are missing from it: their setup fails with recent Gson, which limits the nesting
 to 255 levels. The comparison in the [GaltaJSON overview](../../../docs/GaltaJSON/README.md)
-comes from this run.
+comes from this run, but for its stringify rows.
 
-## Legacy benchmarks
-
-`performance/parsing` and `performance/accessors` hold the older micro-benchmarks, which
-also compare with `org.json` and Gson. They are plain Java programs, not JUnit tests:
-`performance.AllJsonPerformanceTests` runs them all from its `main` method.
+`benchmarks/results/2026-10-05-stringify.csv` holds the stringify benchmarks of the third
+pass (a lookup table to scan the strings, escapes written straight into the buffer, valid
+surrogate pairs on the fast path, the digits of the longs written in place, the Java text of
+a double kept when it is already the JavaScript one, the text of a large output built once
+from segments, and the growable buffers reused by the next serializers): before, after, and
+Jackson in the same run. The stringify rows of the GaltaJSON overview come from it.

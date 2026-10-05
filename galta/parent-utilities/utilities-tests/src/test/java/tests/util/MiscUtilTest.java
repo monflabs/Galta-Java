@@ -25,7 +25,6 @@ import org.monflabs.util.PathUtil;
 import org.monflabs.util.TextBuilder;
 import org.monflabs.util.http.HttpUtils;
 import org.monflabs.util.io.FastStringReader;
-import org.monflabs.util.performance.PerformanceWatchCollection;
 
 import tests.ProjectTestCase;
 
@@ -76,16 +75,6 @@ public class MiscUtilTest extends ProjectTestCase {
 		Throwable b = new Throwable("b", a);
 		a.initCause(b);
 		assertEquals( "a\nb", BaseException.getMessages(a) );
-	}
-
-	public void testPerformanceWatchCollectionIterations() throws Exception {
-		PerformanceWatchCollection c = new PerformanceWatchCollection("t");
-		int[] runs = new int[1];
-		c.run("k", () -> runs[0]++, 3, 2);
-		assertEquals( 5, runs[0] );
-		runs[0] = 0;
-		c.runWithException("k2", () -> runs[0]++, 4, 1);
-		assertEquals( 5, runs[0] );
 	}
 
 	public void testPathUtilCompose() {

@@ -16,6 +16,7 @@ First public release: Galta is published to Maven Central under the
 - Documentation site with the user guides, the javadoc of every published module
   and the GaltaJS playground running in the browser (CheerpJ).
 - Java 21 or later is required.
+- A Getting Started page lists every published artifact with its dependencies.
 
 ### JSON library
 
@@ -31,9 +32,10 @@ First public release: Galta is published to Maven Central under the
   are fixed.
 - `JsonObject`/`JsonArray` follow the `Map`/`List` equality contracts; the
   checked containers guard every mutator.
-- Faster: parsing 1.1-1.4x (25-50% less allocation), stringifying 1.2-2.3x,
-  pretty printing of deep documents up to 5.5x. JMH benchmarks against Jackson
-  and Gson are in `json-performance`.
+- Faster: parsing 1.1-1.4x (25-50% less allocation), stringifying 2.2-4.3x,
+  pretty printing of deep documents up to 5.5x. JMH benchmarks against Jackson,
+  Gson and org.json are in `json-performance` (the older hand-made benchmarks
+  are replaced by JMH ones).
 - Add-on modules: `KeyEncryptor` uses AES-GCM with a random IV and a salted
   PBKDF2 key (older values still decrypt); import/export encodes collection
   names (no path traversal) and is idempotent; memory database exports read a
@@ -89,7 +91,13 @@ First public release: Galta is published to Maven Central under the
   the `is*` tests and the `as*` conversions too. Negative indexes, counted from
   the end, move to `at` counterparts that call the regular methods: `at()`,
   `atString()`, `atInt()`..., `hasAt()`, `isNullAt()`..., `asIntAt()`...,
-  `addAt()`, `setAt()` and `deleteAt()`. `actualIndex()` is removed.
+  `addAt()`, `setAt()` and `removeAt()`. `actualIndex()` is removed.
+- `JsonArray` has the helpers `JsonObject` has: `getValue(index)`,
+  `getValueOrDefault(index, default)`, `asNumber(index, Number)`, and the
+  `isObject()`/`isArray()` defaults.
+- `remove(Predicate)` of `JsonArray` and `JsonValues` is renamed `reject()`: it
+  returns a copy without the matching items, and never removed anything, unlike
+  `List.remove()` and `removeIf()`.
 - The layer that let `JsonFactory` sit on top of other JSON libraries is
   removed, as Galta's own containers are the only ones: the `toNative*()`,
   `isNative*()`, `as*(nativeValue)`, `toJavaPrimitive()`, `nativeEquals()` and
@@ -112,9 +120,17 @@ First public release: Galta is published to Maven Central under the
   they are JavaScript objects, and writing a script value gives what
   `JSON.stringify()` gives (new `JsonFactory.exportValue()`). To migrate from
   `SimpleRegistry`: `mapper.convertValue(value, MyClass.class)`.
+- The YAML parser creates its numbers with the factory, like the JSON parser:
+  a factory's number options (`defaultDecimal()` for `BigDecimal`s,
+  `defaultInteger()`...) now apply to YAML too, and the same literal gives the
+  same value with both parsers.
 
 ### Utilities
 
+- `PerformanceWatch` and `PerformanceWatchCollection` are removed from
+  `utilities`: the benchmarks use JMH (new unpublished `utilities-performance`
+  and `js-performance` modules, next to `json-performance`), and `Profiler`
+  remains for measuring a running application.
 - File systems: sandbox escapes through dangling symlinks and drive-letter-like
   names are closed; the memory file system follows the `java.nio` contracts
   (shallow directory copy, no data loss on move); attribute views work.
@@ -162,6 +178,11 @@ First public release: Galta is published to Maven Central under the
 
 ### GaltaJS
 
+- The precompiled libraries are published: `js-precompiled-beautify-js`,
+  `-css`, `-html` (js-beautify) and `js-precompiled-typescript` (the TypeScript
+  compiler), transpiled to Java at build time. Their generated code moved from
+  the `js` package to one package per module under
+  `org.monflabs.galtajs.precompiled`.
 - Engine fixes: unreachable-code optimizer, `-0` in integer arithmetic,
   hoisting on re-execution, `"use strict"` in debug mode, computed class keys,
   template literals in unbraced loops, Date parsing and setters, typed array

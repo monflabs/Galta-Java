@@ -1147,7 +1147,10 @@ public class JsonValues implements Iterable<JsonValues> {
 		return r;
 	}
 
-	public JsonValues remove(Predicate<JsonValues> predicate) {
+	/**
+	 * The values that do not match: the opposite of {@link #filter}.
+	 */
+	public JsonValues reject(Predicate<JsonValues> predicate) {
 		JsonValues r = new JsonValues();
 		forEach( (value) -> {
 			if (!predicate.test(value)) {
@@ -1204,8 +1207,8 @@ public class JsonValues implements Iterable<JsonValues> {
 		return this;
 	}
 
-	public <R> R process(Function<JsonValues, R> processsor) {
-		return processsor.apply(this);
+	public <R> R process(Function<JsonValues, R> processor) {
+		return processor.apply(this);
 	}
 
 	public JsonValues distinct() {

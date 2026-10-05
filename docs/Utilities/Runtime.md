@@ -1,6 +1,6 @@
 # Generators, Profiling & Runtime
 
-This page groups the runtime helpers of `org.monflabs.util`: generators (`generators`), a hierarchical profiler (`profiler`), a stopwatch for micro-benchmarks (`performance`), console output (`Console`) and a base class for builders (`ObjectBuilder`).
+This page groups the runtime helpers of `org.monflabs.util`: generators (`generators`), a hierarchical profiler (`profiler`), console output (`Console`) and a base class for builders (`ObjectBuilder`).
 
 ## Generators
 
@@ -206,28 +206,9 @@ try {
 assertEquals("x", Profiler.profile("idle", () -> "x"));
 ```
 
-## PerformanceWatch
+## Benchmarks
 
-`PerformanceWatch` times repeated runs of a block, measuring wall-clock time (`System.nanoTime`) and the CPU time of the current thread. `run(runnable[, iterations[, warmup]])` runs the warm-up iterations unmeasured (1 by default), then the measured ones (1 by default); `runWithException` does the same for code that throws checked exceptions. `startIteration()`/`endIteration()` measure by hand. The results are per iteration (`getIterations()`), or totals and averages in nanoseconds (`getTotalWallTime`, `getAverageCpuTime`, ...) and milliseconds (`...Ms`). `dump()` prints them to `System.out`.
-
-Unlike the rest of the library, `PerformanceWatch` formats its title and its `dump()` output with `java.text.MessageFormat`, so numbers are formatted for the default locale.
-
-Sample: `doc_examples/util/RuntimeExamples.java` (`testPerformanceWatch`)
-
-```java
-PerformanceWatch w = new PerformanceWatch("sum {0}", 1000);
-int[] runs = {0};
-w.run(() -> runs[0]++, 5, 2);          // 5 measured iterations after 2 warm-up runs
-assertEquals(7, runs[0]);
-assertEquals(5, w.getIterations().size());
-assertTrue(w.getTotalWallTime() >= w.getAverageWallTime());
-
-w.startIteration();                    // or measure by hand
-w.endIteration();
-assertEquals(6, w.getIterations().size());
-```
-
-`PerformanceWatchCollection` keeps one `PerformanceWatch` per key, so several variants can be measured and dumped side by side: `run(key, runnable[, iterations[, warmup]])`, then `dump()`. Its default warm-up is 0 iterations, not 1.
+To compare implementations, use JMH: the unpublished `utilities-performance`, `json-performance` and `js-performance` modules hold the Galta benchmarks (`mvn package -Pbenchmarks`, then `java -jar target/benchmarks.jar`). The profiler above measures the operations of a running application.
 
 ## Console
 

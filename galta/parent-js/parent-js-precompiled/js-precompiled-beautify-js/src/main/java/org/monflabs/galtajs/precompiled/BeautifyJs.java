@@ -18,9 +18,14 @@ package org.monflabs.galtajs.precompiled;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.environments.JavaScriptEnvironment;
 import org.monflabs.galtajs.jsonfactory.JSValue;
+import org.monflabs.galtajs.precompiled.beautifyjs.Beautify;
 import org.monflabs.galtajs.rt.transpiler.TranspiledGlobalRuntimeContext;
 import org.monflabs.util.ObjectBuilder;
 
+/**
+ * The js-beautify JavaScript formatter (beautify.js), transpiled to Java at build time: it
+ * formats JavaScript with no JavaScript parsing at run time.
+ */
 public class BeautifyJs {
 	
 	public static final class Builder extends ObjectBuilder<BeautifyJs> {
@@ -53,11 +58,14 @@ public class BeautifyJs {
 					.supportGlobalAlias(true)
 					.build();
 		}
-		js.Beautify js = new js.Beautify(env);
+		Beautify js = new Beautify(env);
 		runtimeContext = new TranspiledGlobalRuntimeContext(env,env.createProgramExecutor());
         js.executeWithContext(runtimeContext);			
 	}
 	
+	/**
+	 * Formats JavaScript source.
+	 */
 	public String execute(String source) {
 		JSValue beautifier = runtimeContext.global("js_beautify");
 		String res = beautifier.call(source).stringValue();

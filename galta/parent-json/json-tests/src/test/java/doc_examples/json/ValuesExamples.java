@@ -223,7 +223,7 @@ public class ValuesExamples extends ProjectTestCase {
 		assertFalse(a.hasAt(-5));
 
 		a.setAt(-1, "D");                  // set(size()-1, "D")
-		a.deleteAt(-2);                    // removes "c"
+		a.removeAt(-2);                    // removes "c"
 		a.addAt(-1, "x");                  // inserts before the last item
 		assertEquals("[\"a\",\"b\",\"x\",\"D\"]", a.stringify());
 

@@ -16,13 +16,13 @@ The tests of [`utilities`](../utilities/README.md) live in this separate module
 
 The `org.mozilla.javascript`, `info.adams.ryu`, `org.yuanheng.cookjson` and
 `org.apache.harmony` packages hold third-party double-to-string
-implementations, the baselines `tests.util._DtoAPerformanceTest` compares
-`DtoA` with.
+implementations: `DtoA` is checked against them, and the
+[utilities-performance](../utilities-performance/README.md) benchmarks compare
+their speed (through the test-jar of this module).
 
 `utilities` is a compile dependency here, so the JaCoCo aggregate report of
-this module covers it. The resource-leak detector is off for this module
-(`monflabs.tests.trackLeaks=false`): its agent makes the generator performance
-test much slower.
+this module covers it. The resource-leak detector of the `test` module is on
+(`monflabs.tests.trackLeaks=true`, from the parent pom).
 
 ## Running
 

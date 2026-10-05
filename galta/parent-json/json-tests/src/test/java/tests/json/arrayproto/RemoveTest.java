@@ -66,12 +66,12 @@ public class RemoveTest extends ProjectTestCase {
 	public void testRemove() throws Exception {
 		JsonArray p1 = json.getArray("phoneNumbers");
 		
-		JsonArray f1 = p1.remove( v -> JsonValues.of(v).get("type").eq("home") );
+		JsonArray f1 = p1.reject( v -> JsonValues.of(v).get("type").eq("home") );
 		assertEquals(2,f1.size());
 		assertEquals("mobile",f1.getObject(0).getString("type"));
 		assertEquals("work",f1.getObject(1).getString("type"));
 
-		JsonArray f2 = p1.remove( v -> JsonValues.of(v).get("type").in("home","mobile") );
+		JsonArray f2 = p1.reject( v -> JsonValues.of(v).get("type").in("home","mobile") );
 		assertEquals(1,f2.size());
 		assertEquals("work",f2.jsonValues(0).get("type").stringValue());
 	}	

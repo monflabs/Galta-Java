@@ -159,7 +159,7 @@ assertEquals(5, env.evaluateScript("import { add } from 'calc'; add(2, 3)"));
 | `galtaJs` | `false` | Enable the GaltaJS extensions while parsing. |
 | `verbose` | `false` | Log every file. |
 
-The `parent-js-precompiled` modules ship third-party libraries transpiled at build time: `js-precompiled-beautify-js`, `-css` and `-html` (js-beautify) and `js-precompiled-typescript` (the TypeScript compiler). These modules are not published to Maven Central; build them from this repository.
+The `parent-js-precompiled` modules ship third-party libraries transpiled at build time: `js-precompiled-beautify-js`, `-css` and `-html` (js-beautify) and `js-precompiled-typescript` (the TypeScript compiler). They are published to Maven Central (see [Companion Modules](/GaltaJS/UserGuide/CompanionModules?id=precompiled-libraries)), and show the plugin at work: each sets `jsPackage` to a package of its own.
 
 ## Decompiled mode
 

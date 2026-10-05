@@ -1,8 +1,7 @@
 * [Home](/)
+* [Getting Started](/GettingStarted)
 * [API Reference](/API)
 * [Playground (in your browser)](playground/ ':ignore')
-* [Building and Releasing](/BuildAndRelease)
-* [Generating the Documentation](/Documentation)
 
 * GaltaJSON
   * [Overview](/GaltaJSON/)
@@ -82,3 +81,7 @@
     * [Testing & Compliance](/GaltaJS/Architecture/Testing)
     * [Internal Notes & History](/GaltaJS/Architecture/Notes)
   * [Known ECMAScript Gaps](/GaltaJS/KnownGaps)
+
+* Build & Release
+  * [Building and Releasing](/BuildAndRelease)
+  * [Generating the Documentation](/Documentation)

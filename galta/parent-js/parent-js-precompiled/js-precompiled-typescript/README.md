@@ -1,7 +1,5 @@
 # GaltaJS Precompiled TypeScript
 
-> Not published to Maven Central: build and install it from this repository.
-
 The [TypeScript](https://www.typescriptlang.org) compiler (`js/typescript.js`,
 version 6.0.3, unmodified from the npm package - `js/download.sh` fetches it)
 transpiled to Java with GaltaJS at build time, like the
@@ -9,14 +7,24 @@ transpiled to Java with GaltaJS at build time, like the
 with no JavaScript parsing at run time. A small facade, `Typescript`, transpiles
 TypeScript source to JavaScript.
 
+```xml
+<dependency>
+  <groupId>org.monflabs.galta</groupId>
+  <artifactId>js-precompiled-typescript</artifactId>
+  <version>0.8.0</version>   <!-- or from galta-bom -->
+</dependency>
+```
+
 ```java
 Typescript ts = Typescript.newBuilder().build();   // or .environment(env)
 String js = ts.execute("let x: number = 1;");       // ES2020, no module system
 ```
 
-Transpiling `typescript.js` (about 9 MB of JavaScript) takes a few minutes of
-build time; it is skipped while the generated sources are up to date, i.e.
-until `mvn clean` or a change of the compiler or of the plugin options.
+The jar is about 14 MB: the compiler, transpiled into the package
+`org.monflabs.galtajs.precompiled.typescript`. Transpiling `typescript.js`
+(about 9 MB of JavaScript) takes a few minutes of build time; it is skipped
+while the generated sources are up to date, i.e. until `mvn clean` or a change
+of the compiler or of the plugin options.
 
 ## Contents
 

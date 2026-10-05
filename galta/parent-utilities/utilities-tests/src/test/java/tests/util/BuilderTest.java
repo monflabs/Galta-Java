@@ -17,20 +17,14 @@ package tests.util;
 
 import static org.junit.Assert.assertThrows;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-
 import org.monflabs.util.DebugMode;
 import org.monflabs.util.ObjectBuilder;
 import org.monflabs.util.ObjectBuilderException;
 import org.monflabs.util.builder.Required;
-import org.monflabs.util.performance.PerformanceWatch;
-import org.monflabs.util.performance.PerformanceWatchCollection;
 
 import tests.ProjectTestCase;
 
-public class BuilderAndPerformanceTest extends ProjectTestCase {
+public class BuilderTest extends ProjectTestCase {
 
 	static class PersonBuilder extends ObjectBuilder<String> {
 		@Required
@@ -88,42 +82,5 @@ public class BuilderAndPerformanceTest extends ProjectTestCase {
 		e = assertThrows(ObjectBuilderException.class, () -> ((EmployeeBuilder)new EmployeeBuilder().name("ann").age(3)).build());
 		assertEquals("Field company is required", e.getMessage());
 		assertEquals("ann:3@acme", ((EmployeeBuilder)new EmployeeBuilder().company("acme").name("ann").age(3)).build());
-	}
-
-	private static String captureOut(Runnable r) {
-		PrintStream old = System.out;
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		System.setOut(new PrintStream(bos, true, StandardCharsets.UTF_8));
-		try {
-			r.run();
-		} finally {
-			System.setOut(old);
-		}
-		return bos.toString(StandardCharsets.UTF_8);
-	}
-
-	public void testPerformanceWatchFormatting() throws Exception {
-		// MessageFormat used to swallow the quote and the placeholder after it, and to print
-		// numbers with a locale grouping separator
-		String out = captureOut(() -> new PerformanceWatch("it's {0}", 12345).dump());
-		assertTrue(out, out.contains("it's 12345"));
-		out = captureOut(() -> PerformanceWatch.print("{0} items", 1234567));
-		assertEquals("1234567 items", out.trim());
-	}
-
-	public void testPerformanceWatchIterations() throws Exception {
-		int[] runs = {0};
-		PerformanceWatch w = new PerformanceWatch("w");
-		w.run(() -> runs[0]++, 3, 2);
-		assertEquals(5, runs[0]);   // warmup runs are not measured
-		assertEquals(3, w.getIterations().size());
-		assertTrue(w.getTotalWallTime()>=0);
-
-		// The collection uses the same defaults as PerformanceWatch
-		int[] cruns = {0};
-		PerformanceWatchCollection c = new PerformanceWatchCollection("c");
-		c.run("k", () -> cruns[0]++);
-		assertEquals(PerformanceWatch.DEFAULT_ITERATION+PerformanceWatch.DEFAULT_WARMUP, cruns[0]);
-		captureOut(c::dump);
 	}
 }

@@ -27,6 +27,7 @@ import org.monflabs.json.JsonArray;
 import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonFactory;
 import org.monflabs.json.JsonObject;
+import org.monflabs.json.java.JavaJsonFactory;
 import org.monflabs.json.yaml.SnakeYaml;
 import org.snakeyaml.engine.v2.api.DumpSettings;
 import org.snakeyaml.engine.v2.common.FlowStyle;
@@ -88,6 +89,56 @@ public class SnakeYamlValuesTest extends ProjectTestCase {
 		assertThrows(JsonException.class, () -> SnakeYaml.parse("b: !!binary aGVsbG8=\n"));
 	}
 	
+	// The numbers follow the rules of the factory, as when it parses JSON: the same literal
+	// gives the same type and value with both parsers
+	private static final String[] NUMBERS = {
+		"0", "-0", "12", "-12", "2147483647", "2147483648", "-2147483649", "12345678901",
+		"9223372036854775807", "9223372036854775808", "123456789012345678901234567890",
+		"1.5", "-1.5", "1e3", "1E3", "1e-7", "0.1", "0.0", "-0.0", "3.141592653589793",
+		"3.14159265358979323846", "1e400", "1e-400", "123456789012345678901234567890.5"
+	};
+	private static JsonFactory[] numberFactories() {
+		return new JsonFactory[] {
+			JsonFactory.get(),
+			new JavaJsonFactory() {
+				@Override public INTEGER defaultInteger() { return INTEGER.LONG; }
+				@Override public DECIMAL defaultDecimal() { return DECIMAL.BIGDEC; }
+			},
+			new JavaJsonFactory() {
+				@Override public INTEGER defaultInteger() { return INTEGER.BIGINT; }
+			},
+			new JavaJsonFactory() {
+				@Override public boolean useLongIntegers() { return false; }
+				@Override public OVERFLOW_INTEGER overflowInteger() { return OVERFLOW_INTEGER.DOUBLE; }
+				@Override public OVERFLOW_DECIMAL overflowDecimal() { return OVERFLOW_DECIMAL.DOUBLE; }
+			},
+		};
+	}
+	public void testNumbersFollowTheFactory() throws Exception {
+		for(JsonFactory f: numberFactories()) {
+			for(String n: NUMBERS) {
+				Object json = ((JsonArray)f.parse("["+n+"]")).get(0);
+				Object yaml = ((JsonArray)SnakeYaml.parse(f, "- "+n+"\n")).get(0);
+				String what = n+" with "+f.defaultInteger()+"/"+f.defaultDecimal();
+				assertEquals(what, json.getClass(), yaml.getClass());
+				assertEquals(what, json, yaml);
+			}
+		}
+	}
+	public void testYamlNumberForms() throws Exception {
+		JsonFactory exact = new JavaJsonFactory() {
+			@Override public INTEGER defaultInteger() { return INTEGER.LONG; }
+			@Override public DECIMAL defaultDecimal() { return DECIMAL.BIGDEC; }
+		};
+		JsonObject o = (JsonObject)SnakeYaml.parse(exact, "h: !!int 0x1F\no: !!int 0o17\nd: !!float .5\ne: !!float 1.\n");
+		assertEquals(Long.valueOf(31), o.get("h"));
+		assertEquals(Long.valueOf(15), o.get("o"));
+		assertEquals(new BigDecimal(".5"), o.get("d"));
+		assertEquals(new BigDecimal("1."), o.get("e"));
+		// The infinities are still rejected
+		assertThrows(JsonException.class, () -> SnakeYaml.parse(exact, "x: .inf\n"));
+	}
+
 	public void testBigNumbers() throws Exception {
 		JsonObject o = (JsonObject)SnakeYaml.parse("i: 123456789012345678901234567890\nl: 5000000000\n");
 		Object i = o.get("i");

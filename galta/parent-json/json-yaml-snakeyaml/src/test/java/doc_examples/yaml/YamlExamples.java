@@ -1,10 +1,13 @@
 package doc_examples.yaml;
 
 import java.io.StringReader;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import org.monflabs.json.JsonArray;
+import org.monflabs.json.JsonFactory;
 import org.monflabs.json.JsonObject;
+import org.monflabs.json.java.JavaJsonFactory;
 import org.monflabs.json.yaml.SnakeYaml;
 
 import tests.ProjectTestCase;
@@ -104,6 +107,21 @@ public class YamlExamples extends ProjectTestCase {
 		assertEquals("0x1F", o.get("hex"));
 		assertEquals("2024-01-15", o.get("date"));
 		assertEquals("012", o.get("quoted"));
+	}
+
+	public void testNumberRules() throws Exception {
+		JsonFactory exact = new JavaJsonFactory() {
+			@Override
+			public INTEGER defaultInteger() { return INTEGER.LONG; }
+			@Override
+			public DECIMAL defaultDecimal() { return DECIMAL.BIGDEC; }
+		};
+		JsonObject o = (JsonObject)SnakeYaml.parse(exact, "qty: 3\nprice: 0.1\n");
+		// Long 3, BigDecimal 0.1: the same values as exact.parse("{\"qty\":3,\"price\":0.1}")
+
+		assertEquals(Long.valueOf(3), o.get("qty"));
+		assertEquals(new BigDecimal("0.1"), o.get("price"));
+		assertEquals(exact.parse("{\"qty\":3,\"price\":0.1}"), o);
 	}
 
 	public void testDocumentFeatures() throws Exception {

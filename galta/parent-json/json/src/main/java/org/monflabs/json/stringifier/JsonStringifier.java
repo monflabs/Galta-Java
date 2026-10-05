@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import org.monflabs.json.JsonArray;
 import org.monflabs.json.JsonException;
@@ -227,11 +228,44 @@ public abstract class JsonStringifier {
 	private static final int BUFFER_SIZE = 8192;
 	private int bufferLength;
 	private char[] buffer;
-	// A growable buffer grows up to GROWABLE_MAX, then its content moves to a StringBuilder
-	// (compact for ASCII text) - flushBuffer() is not called
+	// A growable buffer grows up to GROWABLE_MAX, then each full buffer is kept as a segment
+	// and a new one is used: the String is built once at the end, from all the segments,
+	// without the copies of a growing StringBuilder - flushBuffer() is not called
 	private static final int GROWABLE_MAX = 64*1024;
 	private boolean growableBuffer;
-	private StringBuilder growableText;
+	private char[][] segments;
+	private int[] segmentLengths;
+	private int segmentCount;
+	// Growable buffers kept for the next serializers once their text is in its String: a
+	// stringify() then starts with a buffer already grown, instead of growing (copying and
+	// zeroing) a new one from 256 characters. A few slots, so concurrent serializers mostly
+	// find one; at most SPARE_SLOTS*GROWABLE_MAX characters are kept.
+	private static final int SPARE_SLOTS = 4;
+	private static final int SPARE_MIN = 1024;
+	private static final AtomicReferenceArray<char[]> SPARE_BUFFERS = new AtomicReferenceArray<>(SPARE_SLOTS);
+	private static char[] takeSpareBuffer() {
+		int start = (int)Thread.currentThread().threadId();
+		for(int i=0; i<SPARE_SLOTS; i++) {
+			int k = (start+i) & (SPARE_SLOTS-1);
+			char[] b = SPARE_BUFFERS.get(k);
+			if(b!=null && SPARE_BUFFERS.compareAndSet(k, b, null)) {
+				return b;
+			}
+		}
+		return null;
+	}
+	private static void releaseSpareBuffer(char[] b) {
+		if(b.length<SPARE_MIN) {
+			return;
+		}
+		int start = (int)Thread.currentThread().threadId();
+		for(int i=0; i<SPARE_SLOTS; i++) {
+			int k = (start+i) & (SPARE_SLOTS-1);
+			if(SPARE_BUFFERS.get(k)==null && SPARE_BUFFERS.compareAndSet(k, null, b)) {
+				return;
+			}
+		}
+	}
 	
 	// Indentation of the current levels, see indent()
 	private char[] indentChars;
@@ -256,8 +290,10 @@ public abstract class JsonStringifier {
     }
     protected void useGrowableBuffer(int initialSize) {
     	this.growableBuffer = true;
-    	this.buffer = new char[Math.max(16, initialSize)];
+    	this.growableInitialSize = Math.max(16, initialSize);
+    	this.buffer = null; // taken by write(), a spare one when there is one
     }
+    private int growableInitialSize;
     protected boolean isGrowableBuffer() {
     	return growableBuffer;
     }
@@ -265,10 +301,30 @@ public abstract class JsonStringifier {
      * The text written by the last write(), with a growable buffer.
      */
     protected String getBufferedText() {
-    	if(growableText==null) {
-    		return new String(buffer, 0, bufferLength);
+    	// The buffers are not used anymore: they are kept for the next serializers
+    	char[] last = buffer;
+    	buffer = null;
+    	if(segmentCount==0) {
+    		String text = new String(last, 0, bufferLength);
+    		releaseSpareBuffer(last);
+    		return text;
     	}
-    	return growableText.append(buffer, 0, bufferLength).toString();
+    	int total = bufferLength;
+    	for(int i=0; i<segmentCount; i++) {
+    		total += segmentLengths[i];
+    	}
+    	char[] text = new char[total];
+    	int pos = 0;
+    	for(int i=0; i<segmentCount; i++) {
+    		System.arraycopy(segments[i], 0, text, pos, segmentLengths[i]);
+    		pos += segmentLengths[i];
+    		releaseSpareBuffer(segments[i]);
+    		segments[i] = null;
+    	}
+    	System.arraycopy(last, 0, text, pos, bufferLength);
+    	releaseSpareBuffer(last);
+    	segmentCount = 0;
+    	return new String(text);
     }
     
     public boolean isCompact() {
@@ -396,9 +452,17 @@ public abstract class JsonStringifier {
 	protected void write(Object o) throws IOException {
     	indentLevel = initialIndentLevel;
     	bufferLength = 0;
-    	growableText = null;
+    	if(segmentCount>0) {
+    		Arrays.fill(segments, 0, segmentCount, null);
+    		segmentCount = 0;
+    	}
     	if(buffer==null) {
-    		buffer = new char[BUFFER_SIZE];
+    		if(growableBuffer) {
+    			char[] spare = takeSpareBuffer();
+    			buffer = spare!=null ? spare : new char[growableInitialSize];
+    		} else {
+    			buffer = new char[BUFFER_SIZE];
+    		}
     	}
     	try {
 	        indent();
@@ -470,10 +534,21 @@ public abstract class JsonStringifier {
 			if(buffer.length<GROWABLE_MAX) {
 				buffer = Arrays.copyOf(buffer, Math.min(GROWABLE_MAX, buffer.length*2));
 			} else {
-				if(growableText==null) {
-					growableText = new StringBuilder(GROWABLE_MAX*2);
+				if(segments==null) {
+					segments = new char[16][];
+					segmentLengths = new int[16];
+				} else if(segmentCount==segments.length) {
+					segments = Arrays.copyOf(segments, segmentCount*2);
+					segmentLengths = Arrays.copyOf(segmentLengths, segmentCount*2);
 				}
-				growableText.append(buffer, 0, bufferLength);
+				segments[segmentCount] = buffer;
+				segmentLengths[segmentCount++] = bufferLength;
+				char[] spare = takeSpareBuffer();
+				if(spare!=null && spare.length<GROWABLE_MAX) {
+					releaseSpareBuffer(spare);
+					spare = null;
+				}
+				buffer = spare!=null ? spare : new char[GROWABLE_MAX];
 				bufferLength = 0;
 			}
 		} else {
@@ -514,14 +589,15 @@ public abstract class JsonStringifier {
 	private void outLiteral(Object value) throws IOException, JsonException {
         if(value==null) {
             outNullLiteral();
-        } else if(value instanceof ReplacerRawJSON rv) {
-        	out(rv.getRawContent());
         } else if(value instanceof String s) {
             outStringLiteral(s);
         } else if(value instanceof Number n) {
             outNumberLiteral(n);
         } else if(value instanceof Boolean b) {
             outBooleanLiteral(b);
+        } else if(value instanceof ReplacerRawJSON rv) {
+        	// Before JsonObject: a raw JSON value can be an object (JSON.rawJSON() in GaltaJS)
+        	out(rv.getRawContent());
         } else if(value instanceof JsonObject o) {
             outObjectLiteral(o);
         } else if(value instanceof JsonArray a) {
@@ -538,12 +614,39 @@ public abstract class JsonStringifier {
     private void outNullLiteral() throws IOException{
         out("null"); 
     }
-    // Characters written as is in a string literal: printable ASCII, but '"' and '\\' (DEL
-    // is written as is unless escapeNonAscii is set)
+    // Characters written as is in a string literal: printable ASCII, but '"' and '\\'. DEL
+    // is written as is too, unless escapeNonAscii is set (PLAIN_CHAR_STRICT).
     private static final boolean[] PLAIN_CHAR = new boolean[128];
+    private static final boolean[] PLAIN_CHAR_STRICT = new boolean[128];
+    // The two characters escapes ('n' for '\n'...), 0 for the characters written as \\uXXXX
+    private static final char[] SHORT_ESCAPE = new char[128];
+    // How each character is written in a string (without escapeNonAscii): as is (PLAIN), as
+    // a two characters escape, as \\uXXXX, or as is in a valid surrogate pair only. A
+    // lookup per character is much faster than range tests on text mixing ASCII and non
+    // ASCII (2.5x), as the JIT then has a single branch in the scan loop.
+    private static final byte PLAIN = 0;
+    private static final byte ESCAPE_SHORT = 1;
+    private static final byte ESCAPE_UNICODE = 2;
+    private static final byte SURROGATE = 3;
+    private static final byte[] CHAR_CLASS = new byte[65536];
     static {
     	for(int c=32; c<127; c++) {
-    		PLAIN_CHAR[c] = c!='"' && c!='\\';
+    		PLAIN_CHAR[c] = PLAIN_CHAR_STRICT[c] = c!='"' && c!='\\';
+    	}
+    	PLAIN_CHAR[127] = true;
+    	SHORT_ESCAPE['"'] = '"';
+    	SHORT_ESCAPE['\\'] = '\\';
+    	SHORT_ESCAPE['\b'] = 'b';
+    	SHORT_ESCAPE['\f'] = 'f';
+    	SHORT_ESCAPE['\n'] = 'n';
+    	SHORT_ESCAPE['\r'] = 'r';
+    	SHORT_ESCAPE['\t'] = 't';
+    	for(int c=0; c<CHAR_CLASS.length; c++) {
+    		if(c<128) {
+    			CHAR_CLASS[c] = PLAIN_CHAR[c] ? PLAIN : SHORT_ESCAPE[c]!=0 ? ESCAPE_SHORT : ESCAPE_UNICODE;
+    		} else {
+    			CHAR_CLASS[c] = Character.isSurrogate((char)c) ? SURROGATE : PLAIN;
+    		}
     	}
     }
     private void outStringLiteral(String s) throws IOException {
@@ -556,128 +659,177 @@ public abstract class JsonStringifier {
         	b[start] = '\"';
         	s.getChars(0, len, b, start+1);
         	final int end = start+1+len;
-        	final boolean escapeNonAscii = this.escapeNonAscii;
-        	for(int i=start+1; i<end; i++) {
-        		char c = b[i];
-        		if(c<128) {
-        			if(PLAIN_CHAR[c] || (c==127 && !escapeNonAscii)) {
+        	int i = start+1;
+        	if(!escapeNonAscii) {
+        		for(;;) {
+        			// The characters written as is (U+2028 and U+2029 included, like
+        			// JSON.stringify() does), up to a character to escape or a surrogate
+        			for(; i<end; i++) {
+        				if(CHAR_CLASS[b[i]]!=PLAIN) {
+        					break;
+        				}
+        			}
+        			// A valid surrogate pair is written as is too
+        			if(i+1<end && Character.isHighSurrogate(b[i]) && Character.isLowSurrogate(b[i+1])) {
+        				i += 2;
         				continue;
         			}
-        		} else if(!escapeNonAscii && !Character.isSurrogate(c)) {
-        			continue;
+        			break;
         		}
-        		// A character to escape: the copied text before it is kept, the general path
-        		// writes the rest
-        		bufferLength = i;
-        		outStringRest(s, i-(start+1));
+        	} else {
+        		for(; i<end; i++) {
+        			char c = b[i];
+        			if(c>=128 || !PLAIN_CHAR_STRICT[c]) {
+        				break;
+        			}
+        		}
+        	}
+        	if(i==end) {
+        		b[end] = '\"';
+        		bufferLength = end+1;
         		return;
         	}
-        	b[end] = '\"';
-        	bufferLength = end+1;
+        	// A character to escape: the copied text before it is kept, the general path
+        	// writes the rest
+        	bufferLength = i;
+        	outStringRest(s, i-(start+1));
         	return;
         }
         out('\"');
         outStringRest(s, 0);
     }
-    // Writes a string from an index, escaped, and the closing quote
+    // Characters of a string read at once by outStringRest()
+    private static final int STRING_CHUNK = 512;
+    private char[] stringChunk;
+    // Writes a string from an index, escaped, and the closing quote. The string is read by
+    // chunks, each written directly in the buffer once it has room for the longest result
+    // (all the characters as \\uXXXX): no check per character.
     private void outStringRest(String s, int from) throws IOException {
-        int len = s.length();
-        int run = from; // Start of the current run of plain characters
+        final int len = s.length();
         final boolean escapeNonAscii = this.escapeNonAscii;
-        for(int i=from; i<len; i++) {
-            char c = s.charAt(i);
-            if(c<128) {
-            	if(PLAIN_CHAR[c] || (c==127 && !escapeNonAscii)) {
-            		continue;
-            	}
-            } else if(!escapeNonAscii && !Character.isSurrogate(c)) {
-            	// Written as is, like JSON.stringify() does (U+2028 and U+2029 included)
-            	continue;
-            }
-            if(run<i) {
-            	out(s, run, i);
-            }
-            switch(c) {
-                case '"': {
-                    out("\\\""); 
-                } break;
-                case '\\': {
-                    out("\\\\"); 
-                } break;
-                case '\b': {
-                    out("\\b"); 
-                } break;
-                case '\f': {
-                    out("\\f"); 
-                } break;
-                case '\n': {
-                    out("\\n"); 
-                } break;
-                case '\r': {
-                    out("\\r"); 
-                } break;
-                case '\t': {
-                    out("\\t"); 
-                } break;
-                default: {
-                    // Ensure that it will be transmitted correctly...
-                    if(!escapeNonAscii && Character.isHighSurrogate(c) && i+1<len && Character.isLowSurrogate(s.charAt(i+1))) {
-                        // Per spec's QuoteJSONString: a COMPLETE, valid
-                        // surrogate pair (a well-formed astral character)
-                        // must be output as its raw UTF-16 code units
-                        // unescaped, not as two individual escape sequences -
-                        // only a LONE (unpaired) surrogate half gets escaped.
-                        out(c);
-                        out(s.charAt(++i));
-                    } else {
-                        outUnicodeEscape(c);
-                    }
-                }
-            }
-            run = i+1;
+        char[] src = stringChunk;
+        if(src==null) {
+        	src = stringChunk = new char[STRING_CHUNK];
         }
-        if(run<len) {
-        	out(s, run, len);
+        while(from<len) {
+        	int room = buffer.length-bufferLength;
+        	if(room<12) {
+        		bufferFull(12);
+        		room = buffer.length-bufferLength;
+        	}
+        	int n = Math.min(Math.min(len-from, room/6), STRING_CHUNK);
+        	if(n<2 && len-from>=2) {
+        		// A buffer too small for the worst case (a tiny custom buffer)
+        		outStringRestSlow(s, from);
+        		return;
+        	}
+        	// A surrogate pair is not split between two chunks
+        	if(n>1 && from+n<len && Character.isHighSurrogate(s.charAt(from+n-1))) {
+        		n--;
+        	}
+        	s.getChars(from, from+n, src, 0);
+        	final char[] b = buffer;
+        	int p = bufferLength;
+        	if(!escapeNonAscii) {
+        		for(int i=0; i<n; i++) {
+        			char c = src[i];
+        			byte k = CHAR_CLASS[c];
+        			if(k==PLAIN) {
+        				b[p++] = c;
+        			} else if(k==ESCAPE_SHORT) {
+        				b[p++] = '\\';
+        				b[p++] = SHORT_ESCAPE[c];
+        			} else if(k==SURROGATE && c<=Character.MAX_HIGH_SURROGATE && i+1<n && Character.isLowSurrogate(src[i+1])) {
+        				// Per spec's QuoteJSONString: a complete, valid surrogate pair (a
+        				// well-formed astral character) is written as its raw UTF-16 code
+        				// units, only a lone surrogate half is escaped
+        				b[p++] = c;
+        				b[p++] = src[++i];
+        			} else {
+        				p = unicodeEscape(c, b, p);
+        			}
+        		}
+        		bufferLength = p;
+        		from += n;
+        		continue;
+        	}
+        	// escapeNonAscii: all the characters but printable ASCII are escaped
+        	for(int i=0; i<n; i++) {
+        		char c = src[i];
+        		if(c<128 && PLAIN_CHAR_STRICT[c]) {
+        			b[p++] = c;
+        		} else if(c<128 && SHORT_ESCAPE[c]!=0) {
+        			b[p++] = '\\';
+        			b[p++] = SHORT_ESCAPE[c];
+        		} else {
+        			p = unicodeEscape(c, b, p);
+        		}
+        	}
+        	bufferLength = p;
+        	from += n;
         }
         out('\"');
     }
+    // The same, a character at a time, for a buffer with less than 12 characters
+    private void outStringRestSlow(String s, int from) throws IOException {
+    	char[] e = new char[12];
+    	int len = s.length();
+    	for(int i=from; i<len; i++) {
+    		char c = s.charAt(i);
+    		int p;
+    		if(c<128) {
+    			if(escapeNonAscii ? PLAIN_CHAR_STRICT[c] : PLAIN_CHAR[c]) {
+    				out(c);
+    				continue;
+    			}
+    			if(SHORT_ESCAPE[c]!=0) {
+    				e[0] = '\\';
+    				e[1] = SHORT_ESCAPE[c];
+    				p = 2;
+    			} else {
+    				p = unicodeEscape(c, e, 0);
+    			}
+    		} else if(!escapeNonAscii && (c<Character.MIN_SURROGATE || c>Character.MAX_SURROGATE)) {
+    			out(c);
+    			continue;
+    		} else if(!escapeNonAscii && Character.isHighSurrogate(c) && i+1<len && Character.isLowSurrogate(s.charAt(i+1))) {
+    			e[0] = c;
+    			e[1] = s.charAt(++i);
+    			p = 2;
+    		} else {
+    			p = unicodeEscape(c, e, 0);
+    		}
+    		out(e, 0, p);
+    	}
+    	out('\"');
+    }
     private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
-    private void outUnicodeEscape(char c) throws IOException {
-    	out('\\');
-    	out('u');
-    	out(HEX_DIGITS[(c>>12)&0xF]);
-    	out(HEX_DIGITS[(c>>8)&0xF]);
-    	out(HEX_DIGITS[(c>>4)&0xF]);
-    	out(HEX_DIGITS[c&0xF]);
+    private static int unicodeEscape(char c, char[] b, int p) {
+    	b[p] = '\\';
+    	b[p+1] = 'u';
+    	b[p+2] = HEX_DIGITS[(c>>12)&0xF];
+    	b[p+3] = HEX_DIGITS[(c>>8)&0xF];
+    	b[p+4] = HEX_DIGITS[(c>>4)&0xF];
+    	b[p+5] = HEX_DIGITS[c&0xF];
+    	return p+6;
     }
     private void outNumberLiteral(Number n) throws IOException {
-    	// NaN and the infinities are not JSON numbers: written as null, like
-    	// JSON.stringify() does (writing NaN produced a text the strict parser rejects)
-    	if(n instanceof Double d) {
-    		if(Double.isInfinite(d) || Double.isNaN(d)) {
-   	    		outNullLiteral();
-    			return;
-    		}
-    	} else if(n instanceof Float f) {
-    		if(Float.isInfinite(f) || Float.isNaN(f)) {
-   	    		outNullLiteral();
-    			return;
-    		}
-    	}
     	// Integer values are written directly, without an intermediate String. The other
     	// numbers use JsonUtil.toString() (JavaScript Number::toString for the doubles).
+    	// NaN and the infinities are not JSON numbers: written as null, like
+    	// JSON.stringify() does (writing NaN produced a text the strict parser rejects).
     	if(n instanceof Integer i) {
     		outLong(i.intValue());
     		return;
     	}
-    	if(n instanceof Long l) {
-    		outLong(l.longValue());
-    		return;
-    	}
     	if(n instanceof Double d) {
+    		double v = d.doubleValue();
+    		if(!Double.isFinite(v)) {
+   	    		outNullLiteral();
+    			return;
+    		}
     		// Same as DtoA.toStandard() for an integral value: 0 (-0 too), or the digits of
     		// the long when it holds the value exactly
-    		double v = d.doubleValue();
     		if(v==0.0) {
     			out('0');
     			return;
@@ -695,6 +847,14 @@ public abstract class JsonStringifier {
     		}
     		if(buffer.length-bufferLength >= DtoA.MAX_STANDARD_LENGTH) {
     			bufferLength = DtoA.toStandard(v, buffer, bufferLength);
+    			return;
+    		}
+    	} else if(n instanceof Long l) {
+    		outLong(l.longValue());
+    		return;
+    	} else if(n instanceof Float f) {
+    		if(!Float.isFinite(f)) {
+   	    		outNullLiteral();
     			return;
     		}
     	}
@@ -762,8 +922,6 @@ public abstract class JsonStringifier {
     	}
     	return i==len;
     }
-    private final char[] digits = new char[20];
-    // "00", "01", ... "99": two digits per division
     private static final char[] DIGIT_PAIRS = new char[200];
     static {
     	for(int i=0; i<100; i++) {
@@ -771,6 +929,7 @@ public abstract class JsonStringifier {
     		DIGIT_PAIRS[i*2+1] = (char)('0'+i%10);
     	}
     }
+    // Written directly in the buffer, from the last digit
     private void outLong(long v) throws IOException {
     	if(v>=0 && v<10) {
     		out((char)('0'+v));
@@ -784,14 +943,41 @@ public abstract class JsonStringifier {
     	if(negative) {
     		v = -v;
     	}
-    	final char[] d = digits;
-    	int pos = d.length;
-    	// The long divisions only while the value doesn't fit an int
+    	// The number of digits, by comparisons (a division per digit is much slower)
+    	int size = 19;
+    	long limit = 10;
+    	for(int d=1; d<19; d++) {
+    		if(v<limit) {
+    			size = d;
+    			break;
+    		}
+    		limit *= 10;
+    	}
+    	if(negative) {
+    		size++;
+    	}
+    	if(buffer.length-bufferLength<size) {
+    		bufferFull(size);
+    		if(buffer.length-bufferLength<size) {
+    			out(Long.toString(negative ? -v : v));
+    			return;
+    		}
+    	}
+    	final char[] d = buffer;
+    	int start = bufferLength;
+    	int pos = start+size;
+    	bufferLength = pos;
+    	// The low 8 digits at a time, with a single long division, then int arithmetic
     	while(v>Integer.MAX_VALUE) {
-    		int r = (int)(v%100);
-    		v /= 100;
-    		d[--pos] = DIGIT_PAIRS[r*2+1];
-    		d[--pos] = DIGIT_PAIRS[r*2];
+    		long q = v/100_000_000;
+    		int low = (int)(v-q*100_000_000);
+    		for(int k=0; k<4; k++) {
+    			int r = low%100;
+    			low /= 100;
+    			d[--pos] = DIGIT_PAIRS[r*2+1];
+    			d[--pos] = DIGIT_PAIRS[r*2];
+    		}
+    		v = q;
     	}
     	int i = (int)v;
     	while(i>=100) {
@@ -809,7 +995,6 @@ public abstract class JsonStringifier {
     	if(negative) {
     		d[--pos] = '-';
     	}
-    	out(d, pos, d.length);
     }
     private void outBooleanLiteral(boolean b) throws IOException {
         out(b?"true":"false"); 

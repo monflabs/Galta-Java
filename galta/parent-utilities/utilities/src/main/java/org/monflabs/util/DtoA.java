@@ -63,7 +63,11 @@ public class DtoA {
 				return Long.toString(l);
 			}
 		}
-		return format(value < 0, shortest(Math.abs(value)));
+		String digits = shortest(Math.abs(value));
+		if (isPlain(digits)) {
+			return value < 0 ? "-".concat(digits) : digits;
+		}
+		return format(value < 0, digits);
 	}
 
 	/**
@@ -85,7 +89,23 @@ public class DtoA {
 				return offset + s.length();
 			}
 		}
-		return format(value < 0, shortest(Math.abs(value)), buffer, offset);
+		String digits = shortest(Math.abs(value));
+		if (isPlain(digits)) {
+			if (value < 0) {
+				buffer[offset++] = '-';
+			}
+			digits.getChars(0, digits.length(), buffer, offset);
+			return offset + digits.length();
+		}
+		return format(value < 0, digits, buffer, offset);
+	}
+
+	// Whether the Java text of a positive non integral double is already its JavaScript text.
+	// Java writes the numbers from 10^-3 (included) to 10^7 without an exponent, with their
+	// shortest digits: JavaScript writes them the same way (from 10^-7 to 10^21), and an
+	// integral value never comes here (it would end with ".0").
+	private static boolean isPlain(String digits) {
+		return digits.indexOf('E') < 0;
 	}
 
 	/**

@@ -194,30 +194,8 @@ the local or remote repository as usual.
 
 ## Using Galta in another project
 
-Import `galta-bom` and declare the Galta modules without a version. The BOM only
-manages Galta's own artifacts (it has no parent, so it does not push the
-Monflabs third-party versions onto your project):
-
-```xml
-<dependencyManagement>
-  <dependencies>
-    <dependency>
-      <groupId>org.monflabs.galta</groupId>
-      <artifactId>galta-bom</artifactId>
-      <version>0.8.0</version>
-      <type>pom</type>
-      <scope>import</scope>
-    </dependency>
-  </dependencies>
-</dependencyManagement>
-
-<dependencies>
-  <dependency>
-    <groupId>org.monflabs.galta</groupId>
-    <artifactId>js</artifactId>
-  </dependency>
-</dependencies>
-```
+Adding the libraries to a project, with or without `galta-bom`, is described in
+[Getting Started](/GettingStarted).
 
 ## Publishing
 
@@ -348,11 +326,10 @@ profile. The two lists must be kept in sync when a module is added.
 |---|---|
 | `utilities-tests`, `json-tests`, `json-config-test` | test suites |
 | `js-test-test262`, `js-test-rhino`, `js-test-suite`, `js-transpiler-maven-tests` | compliance and integration suites |
-| `json-performance` | benchmarks |
+| `json-performance`, `utilities-performance`, `js-performance` | JMH benchmarks |
 | `js-library-v8` | test-only V8 (Javet) harness |
 | `js-all` | fat jar, built locally (`target/galtajs-all.jar`) |
 | `js-playground-cheerpj` | browser build of the playground |
-| `parent-js-precompiled` and its modules (js-beautify, TypeScript) | third-party JavaScript libraries transpiled to Java, built from this repository |
 
 ### Other repositories
 

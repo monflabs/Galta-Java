@@ -286,20 +286,23 @@ config.getObject("limits").getInt("max");                       // 10
 
 ## Array indexes
 
-The index of every `JsonArray` method follows the `java.util.List` contract, from `0` to `size()-1`: the typed getters (`getString(i)`...), `set`/`setValue`, `add(index, value)`/`addValue`, `remove(int)`, `has`, `getOrDefault`, the `is*` tests, the `as*` conversions and `jsonValues(index)`. `has(index)` tells whether an index is in range, and a negative index never is. The getters with a default return it for an index out of range; the getters without a default throw an `IndexOutOfBoundsException`, where a missing object key throws a `JsonException`. The tests `isNull(index)`, `isString(index)`... never throw: like for a missing key, an index out of range has no value, so `isNull` is `true` and the others `false`. `firstValue()` and `lastValue()` throw on an empty array; `firstValueOrDefault()` / `lastValueOrDefault()` do not.
+The index of every `JsonArray` method follows the `java.util.List` contract, from `0` to `size()-1`: the typed getters (`getString(i)`...), `set`/`setValue`, `add(index, value)`/`addValue`, `remove(int)`, `has`, `getOrDefault`, `getValue`, `getValueOrDefault`, the `is*` tests, the `as*` conversions and `jsonValues(index)`. `has(index)` tells whether an index is in range, and a negative index never is. The getters with a default return it for an index out of range; the getters without a default throw an `IndexOutOfBoundsException`, where a missing object key throws a `JsonException`. The tests `isNull(index)`, `isString(index)`... never throw: like for a missing key, an index out of range has no value, so `isNull` is `true` and the others `false`. `firstValue()` and `lastValue()` throw on an empty array; `firstValueOrDefault()` / `lastValueOrDefault()` do not.
 
-Each of these methods has an `at` counterpart that also takes a negative index, counted from the end: `-1` is the last item, `-size()` the first one. The counterpart translates the index and calls the regular method, so it behaves the same otherwise:
+As for objects, `getOrDefault(i, d)` returns the default for an index out of range only (a `null` item is returned as is), while `getValueOrDefault(i, d)` also returns it for a `null` item, and `getValue(i)` throws a `JsonException` for a `null` item.
+
+Each of these methods has an `at` counterpart that also takes a negative index, counted from the end: `-1` is the last item, `-size()` the first one. The counterpart translates the index and calls the regular method, so it behaves the same otherwise. Its name follows one rule: a `get` method becomes `at` (`getInt` is `atInt`), any other method takes the suffix `At` (`isNull` is `isNullAt`, `remove` is `removeAt`).
 
 | Regular method | Negative indexes |
 |---|---|
 | `get(i)`, `getOrDefault(i, d)` | `at(i)`, `atOrDefault(i, d)` |
+| `getValue(i)`, `getValueOrDefault(i, d)` | `atValue(i)`, `atValueOrDefault(i, d)` |
 | `getString(i)`, `getInt(i, d)`, `getObject(i)`... | `atString(i)`, `atInt(i, d)`, `atObject(i)`... |
 | `has(i)`, `isNull(i)`, `isString(i)`... | `hasAt(i)`, `isNullAt(i)`, `isStringAt(i)`... |
 | `asInt(i)`, `asString(i, d)`... | `asIntAt(i)`, `asStringAt(i, d)`... |
 | `jsonValues(i)` | `jsonValuesAt(i)` |
 | `add(i, v)`, `addValue(i, v)`, `addNull(i)` | `addAt(i, v)`, `addValueAt(i, v)`, `addNullAt(i)`: `-1` inserts before the last item |
 | `set(i, v)`, `setValue(i, v)`, `setNull(i)` | `setAt(i, v)`, `setValueAt(i, v)`, `setNullAt(i)` |
-| `remove(i)` | `deleteAt(i)` |
+| `remove(i)` | `removeAt(i)` |
 
 `slice()` and the query methods (`find(index)`, JSON Path `[-1]`) count a negative index from the end too, as slicing and JSON Path do.
 
@@ -317,7 +320,7 @@ a.hasAt(4);         // false
 a.hasAt(-5);        // false
 
 a.setAt(-1, "D");   // set(size()-1, "D")
-a.deleteAt(-2);     // removes "c"
+a.removeAt(-2);     // removes "c"
 a.addAt(-1, "x");   // inserts before the last item
 // ["a","b","x","D"]
 

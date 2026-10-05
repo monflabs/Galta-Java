@@ -1,6 +1,6 @@
 # Add-on Modules
 
-The core `json` artifact has no third-party dependency. Everything else is packaged as optional modules, each a separate Maven artifact (`groupId` `org.monflabs.galta`, same version as `json`, e.g. `0.8.0`) that brings its own dependencies only when you add it. Import `galta-bom` to use them without declaring versions (see [Building and Releasing](/BuildAndRelease)).
+The core `json` artifact has no third-party dependency. Everything else is packaged as optional modules, each a separate Maven artifact (`groupId` `org.monflabs.galta`, same version as `json`, e.g. `0.8.0`) that brings its own dependencies only when you add it. Import `galta-bom` to use them without declaring versions (see [Getting Started](/GettingStarted?id=using-the-bom)).
 
 | Module (`artifactId`) | Adds | Third-party dependency |
 |---|---|---|

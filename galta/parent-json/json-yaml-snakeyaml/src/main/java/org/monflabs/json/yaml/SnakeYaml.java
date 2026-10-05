@@ -283,14 +283,10 @@ public class SnakeYaml {
 				|| value instanceof Integer || value instanceof Long || value instanceof BigInteger || value instanceof BigDecimal) {
 			return value;
 		}
-		if(value instanceof Double || value instanceof Float) {
-			double d = ((Number)value).doubleValue();
-			if(Double.isNaN(d) || Double.isInfinite(d)) {
-				throw new JsonException(null, "The YAML value {0} cannot be represented in JSON", value);
-			}
-			return value;
-		}
 		if(value instanceof Number) {
+			// The YAML infinities and NaN were rejected when constructed: an infinity here
+			// is a number the factory converts so (an overflowing decimal parsed as a
+			// double), as when it parses JSON
 			return value;
 		}
 		if(value instanceof JsonObject || value instanceof JsonArray || value instanceof Set) {
@@ -339,7 +335,7 @@ public class SnakeYaml {
 
 	private static Load newLoad(JsonFactory factory, Options options) {
 		LoadSettings settings = options.isDefault() ? getSettings(factory) : createSettings(factory, options);
-		return new Load(settings, new StringKeyConstructor(settings));
+		return new Load(settings, new StringKeyConstructor(settings, factory));
 	}
 
 	private static LoadSettings getSettings(JsonFactory factory) {
@@ -366,16 +362,19 @@ public class SnakeYaml {
 	 * Keys are converted with {@code String.valueOf}, which is how JSON (and the JS engine) treat
 	 * non-string property names: {@code 1} becomes {@code "1"}, {@code null} becomes {@code "null"}.
 	 * <p>
-	 * Floats are loaded exactly: as a {@link BigDecimal} when a double cannot hold the value.
+	 * The numbers are created by the factory, from their text, with the same rules as when it
+	 * parses JSON: its integer and decimal types ({@link JsonFactory#defaultInteger()},
+	 * {@link JsonFactory#defaultDecimal()}...) apply, and a decimal a double cannot hold is
+	 * a {@link BigDecimal} by default.
 	 */
 	private static class StringKeyConstructor extends StandardConstructor {
 
-		StringKeyConstructor(LoadSettings settings) {
+		StringKeyConstructor(LoadSettings settings, JsonFactory factory) {
 			super(settings);
+			ConstructNode ints = tagConstructors.get(Tag.INT);
+			tagConstructors.put(Tag.INT, node -> factoryNumber(factory, node, true, ints));
 			ConstructNode floats = tagConstructors.get(Tag.FLOAT);
-			if(floats!=null) {
-				tagConstructors.put(Tag.FLOAT, node -> exactFloat(node, floats.construct(node)));
-			}
+			tagConstructors.put(Tag.FLOAT, node -> factoryNumber(factory, node, false, floats));
 		}
 
 		@Override
@@ -384,20 +383,34 @@ public class SnakeYaml {
 		}
 	}
 
-	private static Object exactFloat(Node node, Object value) {
-		if(value instanceof Double d && !d.isNaN() && !d.isInfinite() && node instanceof ScalarNode sn) {
+	/**
+	 * A YAML number, created by the factory from its text. The JSON schema of YAML 1.2 only
+	 * resolves the JSON spellings of the numbers; an explicit tag can give the YAML ones too
+	 * ({@code !!int 0x1F}, {@code !!int 0o17}, {@code !!float .5}). What the factory doesn't
+	 * read ({@code .inf}, {@code .nan}) is left to SnakeYAML, and the infinities and NaN are
+	 * rejected, as JSON can't represent them.
+	 */
+	private static Object factoryNumber(JsonFactory factory, Node node, boolean integer, ConstructNode yaml) {
+		if(node instanceof ScalarNode sn) {
 			String s = sn.getValue();
-			if(s.startsWith("+")) {
-				s = s.substring(1);
-			}
 			try {
-				BigDecimal exact = new BigDecimal(s);
-				if(BigDecimal.valueOf(d).compareTo(exact)!=0) {
-					return exact;
+				if(!integer) {
+					return factory.parseDecimal(s);
 				}
-			} catch(NumberFormatException ex) {
-				// Not a plain decimal: keep the double
+				if(s.startsWith("0x")) {
+					return factory.parseInteger(s.substring(2), 16);
+				}
+				if(s.startsWith("0o")) {
+					return factory.parseInteger(s.substring(2), 8);
+				}
+				return factory.parseInteger(s, 10);
+			} catch(JsonException ex) {
+				// Not a number the factory reads: SnakeYAML's value
 			}
+		}
+		Object value = yaml!=null ? yaml.construct(node) : null;
+		if(value instanceof Double d && (d.isNaN() || d.isInfinite())) {
+			throw new JsonException(null, "The YAML value {0} cannot be represented in JSON", value);
 		}
 		return value;
 	}
