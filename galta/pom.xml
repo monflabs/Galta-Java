@@ -23,7 +23,6 @@
 	-->
 	<modules>
 		<module>galta-bom</module>
-		<module>parent-demodata</module>
 		<module>parent-json</module>
 		<module>parent-js</module>
 		<module>parent-playground</module>

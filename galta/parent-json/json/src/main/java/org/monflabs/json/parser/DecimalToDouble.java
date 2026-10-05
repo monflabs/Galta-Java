@@ -25,7 +25,9 @@ import java.math.BigInteger;
  * D. Lemire, "Number Parsing at a Gigabyte per Second", Software: Practice and Experience
  * 51 (8), 2021, and N. Mushtak, D. Lemire, "Fast Number Parsing Without Fallback", 2023,
  * which shows that the result is always correct for an exact w. This is a port of
- * compute_float() of the fast_float library (Apache License 2.0 / MIT).
+ * compute_float() and of the table of powers of five of the fast_float library
+ * (https://github.com/fastfloat/fast_float), Copyright (c) 2021 The fast_float authors,
+ * used under the Apache License 2.0 (see NOTICE).
  * <p>
  * The results this class doesn't produce are left to Double.parseDouble(): {@link #toDouble}
  * returns NaN for them (a subnormal, an underflow to zero or an overflow to infinity).

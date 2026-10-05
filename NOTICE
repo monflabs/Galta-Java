@@ -41,6 +41,11 @@ In the json artifact:
 - The JSON parser and ParseException derive from json-smart, Copyright 2011
   JSON-SMART authors (Uriel Chemouni), Apache License 2.0
   org/monflabs/json/parser
+- The decimal to double conversion is a port of the Eisel-Lemire algorithm of
+  the fast_float library, Copyright (c) 2021 The fast_float authors, used under
+  the Apache License 2.0 (fast_float is available under the Apache License 2.0,
+  the MIT License or the Boost Software License 1.0)
+  org/monflabs/json/parser/DecimalToDouble.java
 
 In the ui-swing-ide and playground-ui-swing artifacts:
 
@@ -72,8 +77,6 @@ Not published as Maven artifacts:
   in the js-precompiled-beautify-js, -css and -html modules
 - TypeScript compiler, Copyright Microsoft Corporation, Apache License 2.0
   galta/parent-js/parent-js-precompiled/js-precompiled-typescript/js/typescript.js
-- The sample datasets under galta/parent-demodata come from third-party sources
-  and keep their original licenses (see the README of each module).
 - Test and benchmark material (test262, the Rhino test suite, Octane, SunSpider
   and V8 benchmarks, and reference number-conversion code used only by tests)
   is distributed under the licenses stated in those files and folders.

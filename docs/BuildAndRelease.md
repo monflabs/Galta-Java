@@ -353,7 +353,6 @@ profile. The two lists must be kept in sync when a module is added.
 | `js-all` | fat jar, built locally (`target/galtajs-all.jar`) |
 | `js-playground-cheerpj` | browser build of the playground |
 | `parent-js-precompiled` and its modules (js-beautify, TypeScript) | third-party JavaScript libraries transpiled to Java, built from this repository |
-| `parent-demodata` and the `demo-*` modules | sample datasets |
 
 ### Other repositories
 
@@ -393,7 +392,6 @@ See [Generating the Documentation](/Documentation) to preview the site locally.
 
 ```
 utilities  →  json  →  ui  →  playground  →  js (playground)
-                               demodata
 ```
 
 The `js` engine depends on `json` and on `javacompiler` (from `utilities`);

@@ -92,10 +92,6 @@
 								<excludeArtifact>js-precompiled-beautify-css</excludeArtifact>
 								<excludeArtifact>js-precompiled-beautify-html</excludeArtifact>
 								<excludeArtifact>js-precompiled-beautify-js</excludeArtifact>
-								<excludeArtifact>parent-demodata</excludeArtifact>
-								<excludeArtifact>demo-dvdrental</excludeArtifact>
-								<excludeArtifact>demo-northwind</excludeArtifact>
-								<excludeArtifact>demo-tour-de-france</excludeArtifact>
 							</excludeArtifacts>
 						</configuration>
 					</plugin>

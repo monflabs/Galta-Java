@@ -20,7 +20,6 @@ see the [root README](../README.md#modules).
 - [`parent-js`](parent-js/README.md) - GaltaJS, the JavaScript-inspired scripting engine, its tools and test suites
 - [`parent-ui`](parent-ui/README.md) - the Swing user interface modules
 - [`parent-playground`](parent-playground/README.md) - the interactive scripting playground
-- [`parent-demodata`](parent-demodata/README.md) - sample datasets (not published)
 
 ## Building
 

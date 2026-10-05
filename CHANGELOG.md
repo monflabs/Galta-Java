@@ -259,6 +259,9 @@ First public release: Galta is published to Maven Central under the
   `js-transpiler-maven` plugin honours its options (and works with Maven 3.9).
 
 ### Build
+- The sample datasets (`parent-demodata`: Northwind, DVD rental, Tour de
+  France) are no longer part of the repository: their licenses are not
+  confirmed, and no Galta module used them.
 - Every jar carries `META-INF/LICENSE`, `META-INF/NOTICE` and the texts of the
   third-party licenses of the code it bundles (`META-INF/licenses/`); NOTICE
   lists every bundled component. The release script checks the jars, the
