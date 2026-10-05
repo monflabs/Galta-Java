@@ -66,8 +66,11 @@ public abstract class AbstractPath implements Path {
             path = path.replace(doubleSep, separator);
         }
         
-        // Remove trailing separators (except for root)
-        while (path.length() > 1 && path.endsWith(separator)) {
+        // Remove trailing separators, but never the one of a root: "/", and the Windows
+        // "C:\" whose separator is part of the root (stripping it left "C:", a path relative
+        // to the drive, and rootPrefix() then built "C:dir" instead of "C:\dir")
+        int rootLength = startsWithDriveLetter(path) ? 3 : 1;
+        while (path.length() > rootLength && path.endsWith(separator)) {
             path = path.substring(0, path.length() - 1);
         }
         
@@ -129,8 +132,17 @@ public abstract class AbstractPath implements Path {
      * support drive letters have them; elsewhere "x:" is an ordinary file name.
      */
     protected boolean hasDriveLetter() {
-        return fileSystem.supportsDriveLetters() && path.length() >= 2
-            && Character.isLetter(path.charAt(0)) && path.charAt(1) == ':';
+        return startsWithDriveLetter(path);
+    }
+
+    /**
+     * Whether a path string starts with a Windows drive letter ("C:"), on a filesystem that
+     * has them. Takes the string so that it can also be used while normalizing, before
+     * {@link #path} is assigned.
+     */
+    private boolean startsWithDriveLetter(String p) {
+        return fileSystem.supportsDriveLetters() && p.length() >= 2
+            && Character.isLetter(p.charAt(0)) && p.charAt(1) == ':';
     }
     
     @Override

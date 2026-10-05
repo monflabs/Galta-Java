@@ -139,7 +139,14 @@ public abstract class AbstractFileSystemProvider extends FileSystemProvider {
                 path = "/";
             }
         }
-        return createPath(getFileSystem(uri), path);
+        AbstractFileSystem fs = (AbstractFileSystem) getFileSystem(uri);
+        // An unsandboxed Windows path has a URI path of "/C:/dir/file": the leading "/" is
+        // required by URI, but is not part of the path
+        if (fs.supportsDriveLetters() && path.length() >= 3 && path.charAt(0) == '/'
+                && Character.isLetter(path.charAt(1)) && path.charAt(2) == ':') {
+            path = path.substring(1);
+        }
+        return createPath(fs, path);
     }
 
     /**

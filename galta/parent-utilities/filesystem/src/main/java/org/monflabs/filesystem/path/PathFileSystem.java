@@ -162,6 +162,11 @@ public class PathFileSystem extends AbstractFileSystem {
             if (relativePath.isEmpty()) {
                 return Paths.get("/");
             }
+            // A Windows host path is virtually "/C:/dir" (what toVirtualPath() produces): the
+            // drive letter already makes it absolute, prefixing a separator made it invalid
+            if (hasDriveLetter(relativePath)) {
+                return Paths.get(relativePath);
+            }
             return Paths.get(FileSystems.getDefault().getSeparator() + relativePath);
         }
     }
@@ -198,6 +203,15 @@ public class PathFileSystem extends AbstractFileSystem {
         }
     }
     
+    /**
+     * Whether an OS path string starts with a Windows drive letter ("C:\..."), which this
+     * filesystem's virtual paths carry as a first name element ("/C:/...").
+     */
+    private static boolean hasDriveLetter(String osPath) {
+        return !"/".equals(FileSystems.getDefault().getSeparator()) && osPath.length() >= 2
+            && Character.isLetter(osPath.charAt(0)) && osPath.charAt(1) == ':';
+    }
+
     /**
      * Translate an OS path to a virtual path (with /).
      * 

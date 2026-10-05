@@ -108,18 +108,6 @@ public class FileFileSystemProvider extends AbstractFileSystemProvider {
         return new FilePath((FileFileSystem) fs, path);
     }
 
-    @Override
-    public Path getPath(URI uri) {
-        String path = uri.getPath();
-        // An unsandboxed Windows path has a URI path of "/C:/dir/file"
-        if (path != null && "\\".equals(File.separator) && path.length() >= 3 && path.charAt(0) == '/'
-                && Character.isLetter(path.charAt(1)) && path.charAt(2) == ':') {
-            checkUri(uri);
-            return createPath(getFileSystem(uri), path.substring(1));
-        }
-        return super.getPath(uri);
-    }
-
     /**
      * Validate that the resolved file is within the root (if a root is set).
      */
