@@ -185,9 +185,10 @@ public abstract class JsonStringifier {
      */
     public static final int DEFAULT_MAX_DEPTH = 1000;
     /**
-     * The highest depth setMaxDepth() accepts.
+     * The highest depth setMaxDepth() accepts. Same as the parser's limit, which leaves a
+     * margin below the depth overflowing a default 1MB thread stack.
      */
-    public static final int MAX_DEPTH_LIMIT = 2000;
+    public static final int MAX_DEPTH_LIMIT = 1500;
     private int maxDepth = DEFAULT_MAX_DEPTH;
 
     /**

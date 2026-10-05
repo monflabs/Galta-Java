@@ -105,9 +105,11 @@ public abstract class JsonParser {
 	public static final int DEFAULT_MAX_DEPTH = 1000;
 	/**
 	 * The highest nesting depth setMaxDepth() accepts: the parser is recursive, a deeper
-	 * content would overflow the Java stack of a default thread.
+	 * content would overflow the Java stack of a default thread. The stack used per level
+	 * depends on the platform and the JIT state: with a 1MB stack, Linux x86_64 overflows
+	 * at ~1850 levels while partly JIT compiled, hence the margin.
 	 */
-	public static final int MAX_DEPTH_LIMIT = 2000;
+	public static final int MAX_DEPTH_LIMIT = 1500;
 	private int maxDepth = DEFAULT_MAX_DEPTH;
 	private int depth;
 

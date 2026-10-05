@@ -283,9 +283,9 @@ The parser and the stringifier refuse content that would exhaust the Java stack 
 
 | Limit | Default | Setter | Exceeded |
 |---|---|---|---|
-| Nesting depth of objects and arrays, parsing | 1000 (`JsonParser.DEFAULT_MAX_DEPTH`) | `JsonParser.setMaxDepth()`, capped at `MAX_DEPTH_LIMIT` (2000) | `ParseException` (`ERROR_SYNTAX`) |
+| Nesting depth of objects and arrays, parsing | 1000 (`JsonParser.DEFAULT_MAX_DEPTH`) | `JsonParser.setMaxDepth()`, capped at `MAX_DEPTH_LIMIT` (1500) | `ParseException` (`ERROR_SYNTAX`) |
 | Length of a number literal, in characters | 1000 (`JsonParser.DEFAULT_MAX_NUMBER_LENGTH`) | `JsonParser.setMaxNumberLength()`, `0` for no limit | `ParseException` (`ERROR_SYNTAX`) |
-| Nesting depth, stringifying | 1000 (`JsonStringifier.DEFAULT_MAX_DEPTH`) | `JsonStringifier.setMaxDepth()`, capped at `MAX_DEPTH_LIMIT` (2000) | `JsonStringifier.NestingTooDeepException` (a `JsonException`) |
+| Nesting depth, stringifying | 1000 (`JsonStringifier.DEFAULT_MAX_DEPTH`) | `JsonStringifier.setMaxDepth()`, capped at `MAX_DEPTH_LIMIT` (1500) | `JsonStringifier.NestingTooDeepException` (a `JsonException`) |
 
 The number length limit exists because converting a huge literal to a `BigInteger` or a `BigDecimal` takes a time that grows faster than its length (a million digits took tens of seconds); remove it only when the factory converts numbers to doubles, which is linear. A thread with a small stack gets the same exceptions, never a `StackOverflowError`.
 
