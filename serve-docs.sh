@@ -16,8 +16,8 @@
 #
 # Serves the documentation site (docs/) over HTTP for a local preview, the same
 # way GitHub Pages serves it. Docsify is client-side and fetches its markdown at
-# runtime, so it needs an HTTP server (a file:// URL does not work); a plain
-# python3 http.server is enough.
+# runtime, so it needs an HTTP server (a file:// URL does not work): docsify-cli's,
+# run through npx (Node.js required; the first run downloads it).
 #
 # The API reference (docs/api/) and the browser playground's jar
 # (docs/playground/*.jar) are generated, not checked in: run
@@ -25,7 +25,7 @@
 #
 # Usage:
 #   ./serve-docs.sh [port]      # default port 3030 (not 8000, the default of the nashorn docs, so the browser never shows one site's cached page for the other), or set PORT=...
-# then open the printed http://localhost:<port>/ ; Ctrl-C to stop.
+# then open http://localhost:<port>/ ; Ctrl-C to stop.
 
 set -euo pipefail
 
@@ -33,9 +33,8 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 DOCS="$ROOT/docs"
 PORT="${1:-${PORT:-3030}}"
 
-command -v python3 >/dev/null 2>&1 || { echo "error: python3 not found on PATH" >&2; exit 1; }
+command -v npx >/dev/null 2>&1 || { echo "error: npx not found on PATH (install Node.js)" >&2; exit 1; }
 [ -f "$DOCS/index.html" ] || { echo "error: no docsify site at $DOCS" >&2; exit 1; }
 [ -d "$DOCS/api" ] || echo "note: no API reference yet (docs/api/); run ./buildtools/build-site.sh to generate it"
 
-echo "Serving the Galta docs at http://localhost:${PORT}/   (Ctrl-C to stop)"
-exec python3 -m http.server "$PORT" --directory "$DOCS"
+exec npx --yes docsify-cli serve "$DOCS" --port "$PORT"
