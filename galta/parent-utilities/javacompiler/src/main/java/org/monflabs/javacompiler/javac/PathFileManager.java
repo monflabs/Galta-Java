@@ -58,6 +58,9 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 	// compilation succeeds (see JavaCompiler.writeOutputs)
 	private Map<String,byte[]> stagedOutputs;
 
+	// Whether the source path is said to contain the compilation units (PathSourceFile)
+	private boolean sourcePathUnits;
+
 	protected PathFileManager(JavaFileManager fileManager, TargetFactory targetFactory, ClassLoader cl) {
 		super(fileManager);
 		this.targetFactory = targetFactory;
@@ -120,6 +123,52 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 		return super.getFileForOutput(location, packageName, relativeName, sibling);
 	}
 
+	/**
+	 * Report the compilation units (read from the source factory) as contained in the
+	 * source path. The Eclipse compiler requires a compilation unit to be either in the
+	 * source path or a file on disk; the JDK's compiler does not need it.
+	 */
+	void setSourcePathUnits(boolean sourcePathUnits) {
+		this.sourcePathUnits = sourcePathUnits;
+	}
+
+	@Override
+	public boolean hasLocation(Location location) {
+		if(sourcePathUnits && location==StandardLocation.SOURCE_PATH) {
+			return true;
+		}
+		return super.hasLocation(location);
+	}
+
+	@Override
+	public boolean contains(Location location, FileObject fo) throws IOException {
+		if(sourcePathUnits && location==StandardLocation.SOURCE_PATH && fo instanceof PathSourceFile) {
+			return true;
+		}
+		return super.contains(location, fo);
+	}
+
+	// The source path reported for the compilation units only: the delegate has none
+	private boolean isUnitsSourcePath(Location location) {
+		return sourcePathUnits && location==StandardLocation.SOURCE_PATH && !super.hasLocation(location);
+	}
+
+	@Override
+	public JavaFileObject getJavaFileForInput(Location location, String className, JavaFileObject.Kind kind) throws IOException {
+		if(isUnitsSourcePath(location)) {
+			return null;
+		}
+		return super.getJavaFileForInput(location, className, kind);
+	}
+
+	@Override
+	public FileObject getFileForInput(Location location, String packageName, String relativeName) throws IOException {
+		if(isUnitsSourcePath(location)) {
+			return null;
+		}
+		return super.getFileForInput(location, packageName, relativeName);
+	}
+
 	@Override
 	public ClassLoader getClassLoader(JavaFileManager.Location location) {
 		if(location==StandardLocation.ANNOTATION_PROCESSOR_PATH && super.hasLocation(location)) {
@@ -131,6 +180,9 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 	
 	@Override
 	public Iterable<JavaFileObject> list(Location location, String packageName, Set<JavaFileObject.Kind> kinds, boolean recurse) throws IOException {
+		if(isUnitsSourcePath(location)) {
+			return List.of();
+		}
 		Iterable<JavaFileObject> std = super.list(location, packageName, kinds, recurse);
 		if(location!=StandardLocation.CLASS_PATH || !kinds.contains(JavaFileObject.Kind.CLASS)) {
 			return std;
@@ -159,6 +211,9 @@ public class PathFileManager extends ForwardingJavaFileManager<JavaFileManager> 
 	public String inferBinaryName(Location location, JavaFileObject file) {
 		if(file instanceof FactoryClassFile f) {
 			return f.binaryName;
+		}
+		if(file instanceof PathSourceFile s) {
+			return s.getClassName();
 		}
 		return super.inferBinaryName(location, file);
 	}

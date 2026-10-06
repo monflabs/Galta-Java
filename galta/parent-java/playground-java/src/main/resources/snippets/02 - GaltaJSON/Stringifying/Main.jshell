@@ -1,0 +1,12 @@
+import org.monflabs.json.*;
+
+var o = JsonObject.parse("{ a:1, b:[true,null,'x'] }");
+
+// Compact
+System.out.println( o.stringify() );                       // {"a":1,"b":[true,null,"x"]}
+
+// Indented
+System.out.println( JsonFactory.get().stringify(o, false) );
+
+// Any value: strings are quoted and escaped
+System.out.println( JsonFactory.get().stringify("line\nbreak") );   // "line\nbreak"

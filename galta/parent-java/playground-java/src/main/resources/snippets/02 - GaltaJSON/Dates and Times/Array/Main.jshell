@@ -1,0 +1,29 @@
+import org.monflabs.json.*;
+
+var a = JsonArray.of(
+  "2020-02-20",
+  "13:44:18",
+  "2020-02-20T13:44:18",
+  "13:44:18+02:00",
+  "2020-02-20T13:44:18+02:00",
+  "2020-02-20T13:44:18-05:00[US/Eastern]"
+);
+
+// Read and parse the date/time objects
+System.out.println( a.getLocalDate(0) );
+System.out.println( a.getLocalTime(1) );
+System.out.println( a.getLocalDateTime(2) );
+System.out.println( a.getOffsetTime(3) );
+System.out.println( a.getOffsetDateTime(4) );
+System.out.println( a.getZonedDateTime(5) );
+
+// Set the date time value
+a = JsonArray.create();
+a.add( java.time.LocalDate.of(2020, 2, 20) );
+a.add( java.time.LocalTime.of(13, 44, 18) );
+a.add( java.time.LocalDateTime.of(2020, 2, 20, 13, 44, 18) );
+a.add( java.time.OffsetTime.of(13, 44, 18, 0, java.time.ZoneOffset.ofHours(2)) );
+a.add( java.time.OffsetDateTime.of(2020, 2, 20, 13, 44, 18, 0, java.time.ZoneOffset.ofHours(2)) );
+a.add( java.time.ZonedDateTime.of(2020, 2, 20, 13, 44, 18, 0, java.time.ZoneId.of("US/Eastern")));
+
+System.out.println(a.stringify());

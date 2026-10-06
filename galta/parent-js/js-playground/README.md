@@ -13,7 +13,8 @@ extensions, strict mode and the optimizer. Scripts can be debugged in the
 built-in [debugger](../js-debugger/README.md) panel, or exposed to an external
 Chrome DevTools Protocol client (Chrome DevTools, VS Code).
 
-Shortcuts: Cmd/Ctrl+Enter executes, Cmd/Ctrl+. stops, Cmd/Ctrl+S saves. The
+Shortcuts: Cmd/Ctrl+Enter executes, Cmd/Ctrl+. stops, Cmd/Ctrl+S saves the
+scratchpad (the snippets of the library are never saved). The
 options, window bounds and last snippet are kept in
 `~/.monflabs/playground-galtajs/settings.json`.
 

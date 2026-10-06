@@ -119,7 +119,6 @@ public class GaltaJSPlayground {
     protected static void configure() {
     	FileSystem fs = createSnippetFs();
     	PlaygroundConfiguration.get().setFrameTitle("GaltaJS Playground");
-    	PlaygroundConfiguration.get().setEditable(!fs.isReadOnly());
     	PlaygroundConfiguration.get().setSnippetFactory(new SnippetFactory(fs));
     	PlaygroundConfiguration.get().setExecutionEngineFactory( new ExecutionEngineFactory() {
 			private static String[] FILES =  new String[] {GaltaJSExecutionEngine.DEFAULT_JS};

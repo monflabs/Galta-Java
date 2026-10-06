@@ -1,0 +1,96 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.monflabs.galta</groupId>
+		<artifactId>parent-java</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<artifactId>playground-java-cheerpj</artifactId>
+	<name>Galta Java Playground for CheerpJ</name>
+	<description>Browser (CheerpJ) build of the Java playground. Not published.</description>
+
+	<properties>
+		<!-- Not published: excluded from the Maven Central bundle (see the root pom central profile) -->
+		<maven.deploy.skip>true</maven.deploy.skip>
+		<maven.javadoc.skip>true</maven.javadoc.skip>
+		<gpg.skip>true</gpg.skip>
+        <main.class>playground.JavaPlaygroundCheerpJ</main.class>
+        <app.name>javaplayground-cheerpj</app.name>
+        <app.version>1.0.0</app.version>
+		<!-- The tests run as on CheerpJ: without the jdk.compiler and jdk.jshell modules
+		     (java.se has neither), so the snippets go through the Eclipse compiler and the
+		     JShell script conversion -->
+		<monflabs.tests.jvmArgs>--limit-modules java.se</monflabs.tests.jvmArgs>
+	</properties>
+
+
+	<dependencies>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>playground-java</artifactId>
+		</dependency>
+		<!-- The Java compiler of the browser: CheerpJ's runtime has no jdk.compiler module.
+		     A javax.tools.JavaCompiler service, found by Galta's javacompiler -->
+		<dependency>
+			<groupId>org.eclipse.jdt</groupId>
+			<artifactId>ecj</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.monflabs.galta</groupId>
+			<artifactId>test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+	       	<!--
+            	Fat jar creation
+            -->
+            <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-shade-plugin -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<executions>
+					<execution>
+<!--						<phase>package</phase> -->
+						<goals>
+							<goal>shade</goal>
+						</goals>
+						<configuration>
+							<finalName>${app.name}</finalName>
+							<createDependencyReducedPom>false</createDependencyReducedPom>
+							<filters>
+								<filter>
+									<artifact>*:*</artifact>
+									<excludes>
+										<exclude>META-INF/*.SF</exclude>
+										<exclude>META-INF/*.DSA</exclude>
+										<exclude>META-INF/*.RS</exclude>
+										<!-- Signature files of the dependencies; the Eclipse
+										     compiler (org/eclipse/jdt) must stay -->
+										<exclude>org/apache/commons/logging/**</exclude>
+										<exclude>src/org/eclipse/jdt/**</exclude>
+									</excludes>
+								</filter>
+							</filters>
+							<transformers>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer">
+								</transformer>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+									<mainClass>${main.class}</mainClass>
+								</transformer>
+							</transformers>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+</project>

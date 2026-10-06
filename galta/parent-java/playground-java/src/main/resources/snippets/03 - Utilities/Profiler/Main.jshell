@@ -1,0 +1,19 @@
+import org.monflabs.util.profiler.*;
+
+Profiler.reset();
+Profiler.start();
+try {
+	for (String table : new String[] {"users", "orders", "users"}) {
+		Profiler.profile("query", table, () -> {
+			Profiler.profile("parse", () -> Thread.sleep(1));   // a nested block
+		});
+	}
+	ProfilerSnapshot snapshot = Profiler.createSnapshot("after load");
+	Aggregator query = snapshot.getMainAggregator().getChildren().get(0);
+	System.out.println( query.getType()+": "+query.getCount()+" calls" );       // query: 3 calls
+	System.out.println( query.getChildren().size()+" parameters" );             // 2 parameters
+	System.out.println( (query.getTotalWallTime()/1_000_000)+" ms or more" );   // 3 ms or more
+} finally {
+	Profiler.stop();
+	Profiler.reset();
+}

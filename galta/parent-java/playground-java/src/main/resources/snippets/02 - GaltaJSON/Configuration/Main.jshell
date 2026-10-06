@@ -1,0 +1,31 @@
+import java.nio.file.*;
+import org.monflabs.json.config.JsonFileConfig;
+
+// The configuration file, in a temporary folder
+var folder = Files.createTempDirectory("playground-config");
+Files.writeString(folder.resolve("app.json"), """
+	{ "server": { "host": "localhost", "port": 8080, "secure": "true" }, "timeout": 2.5 }
+	""");
+
+var config = JsonFileConfig.newBuilder()
+		.folder(folder)
+		.fileName("app.json")
+		.build();
+
+System.out.println( config.getString("server/host") );        // localhost
+System.out.println( config.getInt("server/port") );           // 8080
+System.out.println( config.getBoolean("server/secure") );     // true: strings are converted
+System.out.println( config.getInt("server/retries", 30) );    // 30: the default
+
+// Updates are saved to the file
+config.updateValues(u -> {
+	u.put("server/port", 443);
+	u.put("debug", false);
+});
+System.out.println( Files.readString(folder.resolve("app.json")) );
+
+// Clean up the temporary folder
+try (var files = Files.list(folder)) {
+	files.forEach(f -> f.toFile().delete());
+}
+Files.delete(folder);

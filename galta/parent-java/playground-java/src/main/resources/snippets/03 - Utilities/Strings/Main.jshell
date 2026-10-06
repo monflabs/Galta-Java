@@ -1,0 +1,12 @@
+import org.monflabs.util.*;
+
+System.out.println( String.join("|", StringUtil.splitString(" a , b ,c", ',', true)) );   // a|b|c
+System.out.println( StringUtil.isEmpty(null) );                          // true
+System.out.println( StringUtil.equals(null, "") );                       // true
+System.out.println( StringUtil.padLeft("7", 3, '0') );                   // 007
+System.out.println( StringUtil.truncate("Hello world", 8) );             // Hello...
+System.out.println( StringUtil.toCamelCase("background-color") );        // backgroundColor
+System.out.println( StringUtil.toKebabCase("backgroundColor") );         // background-color
+
+System.out.println( StringFormat.format("{0} + {0} = {1}", 1, 2) );      // 1 + 1 = 2
+System.out.println( StringFormat.format("It's {0}", 1234567) );          // It's 1234567

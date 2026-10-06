@@ -1,0 +1,30 @@
+import org.monflabs.json.*;
+
+var a = JsonArray.of( 1,2,3,4,5,6 );
+
+// Filtering and mapping: new arrays, the array is unchanged
+System.out.println( "Filter: "+a.filter( v -> JsonUtil.asInt(v) >= 3 ).stringify() );      // [3,4,5,6]
+System.out.println( "Reject: "+a.reject( v -> JsonUtil.asInt(v) % 2 == 0 ).stringify() );  // [1,3,5]
+System.out.println( "Map: "+a.map( v -> JsonUtil.asInt(v) + 10 ).stringify() );             // [11,...,16]
+
+// Slicing, skipping and limiting (a negative slice bound counts from the end)
+System.out.println( "Slice: "+a.slice(1, 3).stringify() );             // [2,3]
+System.out.println( "Last 3: "+a.slice(-3, null).stringify() );        // [4,5,6]
+System.out.println( "Skip: "+a.skip(2).stringify() );                  // [3,4,5,6]
+System.out.println( "Limit: "+a.limit(4).stringify() );                // [1,2,3,4]
+System.out.println( "Take While: "+a.takeWhile( v -> JsonUtil.asInt(v) <= 3 ).stringify() );  // [1,2,3]
+System.out.println( "Drop While: "+a.dropWhile( v -> JsonUtil.asInt(v) <= 3 ).stringify() );  // [4,5,6]
+
+// Sorting and distinct values
+System.out.println( "Sorted: "+JsonArray.of(4,3,6,2,1,5).sorted().stringify() );          // [1,...,6]
+System.out.println( "Distinct: "+JsonArray.of(1,3,3,1,2,3).distinct().stringify() );      // [1,3,2]
+
+// Flattening nested arrays and objects, one level deep
+var nested = JsonArray.of( JsonArray.of(1,2), JsonArray.of(3,4,5), JsonObject.of("a",6,"b",7) );
+System.out.println( "Flat: "+nested.flat().stringify() );              // [1,2,3,4,5,6,7]
+
+// Aggregations
+System.out.println( "Min: "+a.min()+", Max: "+a.max() );               // 1, 6
+System.out.println( "Any Match: "+a.anyMatch( v -> JsonUtil.asInt(v) == 3 ) );   // true
+System.out.println( "All Match: "+a.allMatch( v -> JsonUtil.asInt(v) == 3 ) );   // false
+System.out.println( "Sum: "+a.reduce( (Integer sum, Object v) -> sum + JsonUtil.asInt(v), 0 ) ); // 21

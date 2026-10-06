@@ -103,6 +103,7 @@ Galta keeps its dependencies minimal: the core libraries depend only on each oth
 | `ui-swing-ide` | IDE-grade Swing editors and consoles | `ui-swing`, `json-config`, RSyntaxTextArea |
 | `playground-core` | The engine-independent core of the scripting playground | `filesystem` |
 | `playground-ui-swing` | The Swing user interface of the playground | `playground-core`, `ui-swing-ide`, CommonMark |
+| `playground-java` | The Java playground: `Main.java` snippets compiled in memory, `Main.jshell` snippets run by JShell | `playground-ui-swing`, `javacompiler` |
 
 `js-transpiler-maven` is a Maven plugin, declared under `<build><plugins>` rather than as a dependency; it is not in the BOM, so give it its version.
 
@@ -141,6 +142,7 @@ assertEquals(3, o);
 - [GaltaJS Getting Started](/GaltaJS/UserGuide/GettingStarted): environments, expressions and scripts, the event loop.
 - [Utilities](/Utilities/): what the other libraries build on.
 - [API Reference](/API): the javadoc of every published artifact.
-- [Playground](playground/ ':ignore'): try GaltaJS in the browser, without installing anything.
+- [Java Playground](java-playground/index.html ':ignore'): try Java, JShell and the Galta libraries in the browser, without installing anything.
+- [GaltaJS Playground](playground/index.html ':ignore'): try GaltaJS in the browser.
 
 To build Galta from its sources instead, see [Building and Releasing](/BuildAndRelease).

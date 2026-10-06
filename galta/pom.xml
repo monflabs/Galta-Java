@@ -25,6 +25,7 @@
 		<module>galta-bom</module>
 		<module>parent-json</module>
 		<module>parent-js</module>
+		<module>parent-java</module>
 		<module>parent-playground</module>
 		<module>parent-ui</module>
 		<module>parent-utilities</module>

@@ -20,7 +20,8 @@ The Galta project is split into many sub-projects, organized in a hierarchy and 
 
 - [Getting Started](/GettingStarted) - adding the libraries to a project from Maven Central, the list of artifacts, first steps.
 - [API Reference](/API) - the javadoc of every published module.
-- [Playground](playground/ ':ignore') - try GaltaJS in your browser: the playground application, running on CheerpJ.
+- [Java Playground](java-playground/index.html ':ignore') - try Java, JShell and the Galta libraries in your browser: the Java playground, running on CheerpJ.
+- [GaltaJS Playground](playground/index.html ':ignore') - try GaltaJS in your browser: the playground application, running on CheerpJ.
 - [GaltaJSON](/GaltaJSON/) - the JSON library:
   - [Guide](/GaltaJSON/) - values, parsing, JSON Path, pointers, collections, schema metadata.
   - [Add-on Modules](/GaltaJSON/Modules/) - Jackson interoperability, configuration, import/export, in-memory database, YAML, Jayway JsonPath, JSON Schema validation.

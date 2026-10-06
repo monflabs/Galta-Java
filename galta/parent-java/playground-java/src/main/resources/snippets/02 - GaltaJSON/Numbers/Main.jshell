@@ -1,0 +1,23 @@
+import org.monflabs.json.*;
+
+var o = JsonObject.create();
+
+// Objects and arrays accept any kind of Number
+o.put( "i", 45 );    // int
+o.put( "l", 54L );   // long
+o.put( "d", 13.24 ); // double
+
+// The typed getters convert them
+System.out.println( o.getLong( "i" ) );          // 45
+System.out.println( o.getDouble( "l" ) );        // 54.0
+System.out.println( o.getBigDecimal( "d" ) );    // 13.24
+
+// The parser picks the smallest fitting type
+var a = JsonArray.parse("[1, 12345678901, 123456789012345678901234567890, 1.5, 3.14159265358979323846]");
+for(Object n: a) {
+	System.out.println( n+" is a "+n.getClass().getSimpleName() );
+}
+// 1 Integer, 12345678901 Long, ... BigInteger, 1.5 Double, 3.14159265358979323846 BigDecimal
+
+// Numbers are written as JavaScript writes them
+System.out.println( JsonArray.of(1.0, 1e21, 0.1+0.2).stringify() );   // [1,1e+21,0.30000000000000004]

@@ -85,6 +85,7 @@
 								<excludeArtifact>js-all</excludeArtifact>
 								<excludeArtifact>js-library-v8</excludeArtifact>
 								<excludeArtifact>js-playground-cheerpj</excludeArtifact>
+								<excludeArtifact>playground-java-cheerpj</excludeArtifact>
 								<excludeArtifact>js-test-rhino</excludeArtifact>
 								<excludeArtifact>js-test-suite</excludeArtifact>
 								<excludeArtifact>js-test-test262</excludeArtifact>

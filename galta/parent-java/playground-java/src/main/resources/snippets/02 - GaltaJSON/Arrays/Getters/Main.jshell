@@ -1,0 +1,20 @@
+import org.monflabs.json.*;
+
+var a = JsonArray.of(
+	"AA",
+	23,
+	true,
+	JsonObject.of("v",22),
+	JsonArray.of(33) );
+
+// Typed getters
+System.out.println( a.getString(0) );              // AA
+System.out.println( a.getInt(1) );                 // 23
+System.out.println( a.getDouble(1) );              // 23.0
+System.out.println( a.getBigDecimal(1) );          // 23
+System.out.println( a.getBoolean(2) );             // true
+System.out.println( a.getObject(3).stringify() );  // {"v":22}
+System.out.println( a.getArray(4).stringify() );   // [33]
+
+// With a default, for an index out of range
+System.out.println( a.getString(10, "none") );     // none

@@ -1,0 +1,14 @@
+import org.monflabs.json.*;
+import org.monflabs.json.jsonpointer.JsonPointer;
+
+var doc = JsonObject.parse("{\"a\":{\"b\":[10,20,30]},\"list\":[1,2,3]}");
+
+System.out.println( JsonPointer.of("/a/b/0").read(doc) );      // 10
+System.out.println( JsonPointer.of("/a/b/-1").read(doc) );     // 30: from the end (an extension)
+System.out.println( JsonPointer.of("/a/c").exists(doc) );      // false
+
+JsonPointer.of("/list/1").add(doc, 9);                          // inserts
+JsonPointer.of("/list/-").add(doc, 4);                          // '-' appends
+JsonPointer.of("/list/0").remove(doc);
+JsonPointer.of("/config/server/port").setValue(doc, 8080);      // creates the parents
+System.out.println( doc.stringify() );

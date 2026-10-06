@@ -1,7 +1,8 @@
 * [Home](/)
 * [Getting Started](/GettingStarted)
 * [API Reference](/API)
-* [Playground (in your browser)](playground/ ':ignore')
+* [Java Playground](java-playground/index.html ':ignore')
+* [GaltaJS Playground](playground/index.html ':ignore')
 
 * GaltaJSON
   * [Overview](/GaltaJSON/)

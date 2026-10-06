@@ -1,0 +1,16 @@
+import org.monflabs.util.*;
+
+// JavaScript's Number::toString
+System.out.println( DtoA.toStandard(1.0) );        // 1
+System.out.println( DtoA.toStandard(0.1 + 0.2) );  // 0.30000000000000004
+System.out.println( DtoA.toStandard(1e21) );       // 1e+21
+System.out.println( DtoA.toStandard(1e-7) );       // 1e-7
+
+// Conversions
+System.out.println( TypeUtil.toInt(Double.POSITIVE_INFINITY) );   // 2147483647
+System.out.println( TypeUtil.toBigDecimal(0.1) );                 // 0.1
+
+// Versions
+var v = Version.parse("2.1-beta");
+System.out.println( v.getMajor()+" "+v.getMinor()+" "+v.getQualifier() );   // 2 1 beta
+System.out.println( v );                                                      // 2.1.0-beta

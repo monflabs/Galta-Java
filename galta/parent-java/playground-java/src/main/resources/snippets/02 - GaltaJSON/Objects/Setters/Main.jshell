@@ -1,0 +1,22 @@
+import org.monflabs.json.*;
+
+var o = JsonObject.create();
+
+o.put("str", "AA")
+ .put("num", 23)
+ .put("bol", true)
+ .put("obj", JsonObject.of("v",22) )
+ .put("arr", JsonArray.of(33));
+
+System.out.println(o.stringify());
+
+// Dynamically construct an object/array to add
+o.put( "oo", (JsonObject child) -> {
+  child.put("a", 34);
+});
+o.put( "aa", (JsonArray child) -> {
+  child.add(56);
+});
+
+System.out.println(o.stringify());
+

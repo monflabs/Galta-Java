@@ -17,7 +17,8 @@
 # Generates the parts of the documentation site (docs/) that are not checked in:
 #
 #   docs/api/<artifactId>/          the javadoc of every published module
-#   docs/playground/*.jar           the CheerpJ (browser) build of the playground
+#   docs/playground/*.jar           the CheerpJ (browser) build of the GaltaJS playground
+#   docs/java-playground/*.jar      the CheerpJ (browser) build of the Java playground
 #
 # Both are gitignored. Run this before ./serve-docs.sh to preview the API pages
 # and the playground locally; the publish-docs workflow
@@ -46,10 +47,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DOCS="$ROOT/docs"
 API="$DOCS/api"
-PLAYGROUND="$DOCS/playground"
 MVN="${MVN:-mvn}"
-CHEERPJ_MODULE="galta/parent-js/js-playground-cheerpj"
-CHEERPJ_JAR="jsplayground-cheerpj.jar"
+# The browser (CheerpJ) playgrounds: "<module> <built jar> <docs folder>"
+CHEERPJ_PLAYGROUNDS="galta/parent-js/js-playground-cheerpj jsplayground-cheerpj.jar playground
+galta/parent-java/playground-java-cheerpj javaplayground-cheerpj.jar java-playground"
 
 command -v python3 >/dev/null 2>&1 || { echo "error: python3 not found on PATH" >&2; exit 1; }
 
@@ -103,8 +104,8 @@ if problems:
     sys.exit("error: docs/API.md and galta/galta-bom/pom.xml disagree\n  " + "\n  ".join(problems))
 EOF
 
-PL="$(echo "$MODULES" | awk '{print $2}' | paste -sd, -),$CHEERPJ_MODULE"
-echo "Building $(echo "$MODULES" | wc -l | tr -d ' ') published modules and the CheerpJ playground, with their javadoc"
+PL="$(echo "$MODULES" | awk '{print $2}' | paste -sd, -),$(echo "$CHEERPJ_PLAYGROUNDS" | awk '{print $1}' | paste -sd, -)"
+echo "Building $(echo "$MODULES" | wc -l | tr -d ' ') published modules and the CheerpJ playgrounds, with their javadoc"
 # One reactor invocation: modules resolve each other (and the Galta Maven
 # plugins) from the reactor, so nothing needs to be installed first.
 "$MVN" -B -q -f "$ROOT/pom.xml" -DskipTests -Dgpg.skip=true -pl "$PL" -am package javadoc:javadoc
@@ -125,10 +126,12 @@ while read -r artifact dir; do
     echo "  $artifact -> docs/api/$artifact/"
 done <<< "$MODULES"
 
-jar="$ROOT/$CHEERPJ_MODULE/target/$CHEERPJ_JAR"
-[ -f "$jar" ] || { echo "error: the CheerpJ playground jar was not built ($jar)" >&2; exit 1; }
-mkdir -p "$PLAYGROUND"
-cp "$jar" "$PLAYGROUND/$CHEERPJ_JAR"
-echo "  playground -> docs/playground/$CHEERPJ_JAR"
+while read -r module jarName folder; do
+    jar="$ROOT/$module/target/$jarName"
+    [ -f "$jar" ] || { echo "error: the CheerpJ playground jar was not built ($jar)" >&2; exit 1; }
+    mkdir -p "$DOCS/$folder"
+    cp "$jar" "$DOCS/$folder/$jarName"
+    echo "  playground -> docs/$folder/$jarName"
+done <<< "$CHEERPJ_PLAYGROUNDS"
 
 echo "Site generated in $DOCS (serve it with ./serve-docs.sh)"

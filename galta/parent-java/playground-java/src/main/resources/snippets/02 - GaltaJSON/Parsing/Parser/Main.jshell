@@ -1,0 +1,18 @@
+import org.monflabs.json.*;
+
+// Generic parser, from the factory: lenient by default (unquoted names)
+var v = JsonFactory.get().parse("{ a:1, b:2 }");
+System.out.println( "v="+JsonFactory.get().stringify(v) );   // v={"a":1,"b":2}
+
+// Shortcuts that check the type of the result
+var o = JsonObject.parse("{ a:1, b:2 }");
+System.out.println( "a="+o.get("a") );            // 1
+var a = JsonArray.parse("[1,2,3]");
+System.out.println( "[1]="+a.get(1) );            // 2
+
+// Strict JSON: unquoted names are rejected
+try {
+	JsonFactory.get().parse("{ a:1 }", true);
+} catch(JsonException e) {
+	System.out.println( "Strict: "+e.getMessage() );
+}

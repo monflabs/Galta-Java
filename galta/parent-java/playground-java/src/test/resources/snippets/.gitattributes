@@ -1,0 +1,2 @@
+# Ensure that Git don't process these files, and thus change them and their length (stored in manifest file)
+* text eol=lf

@@ -41,10 +41,10 @@ Package: `org.monflabs.playground`.
   (`request(context, options, delay)`), one current run (a new one stops the
   previous), `stop()`, `cancel()`, `close()`; `Run.gate(PrintStream)` mutes
   the console of a superseded run.
-- `SnippetStorage` - saves the in-memory files back: changed text files only,
+- `SnippetStorage` - saves the in-memory files back (the scratchpad): changed text files only,
   atomically, with conflicts reported for files modified on disk since loaded.
 - `PlaygroundConfiguration` - the singleton holding the frame title, the
-  editable flag, the snippet factory, the engine factory and the
+  snippet factory, the engine factory and the
   `PlaygroundLayout` (which file goes to which editor tab pane).
 
 ## Documentation

@@ -329,7 +329,7 @@ profile. The two lists must be kept in sync when a module is added.
 | `json-performance`, `utilities-performance`, `js-performance` | JMH benchmarks |
 | `js-library-v8` | test-only V8 (Javet) harness |
 | `js-all` | fat jar, built locally (`target/galtajs-all.jar`) |
-| `js-playground-cheerpj` | browser build of the playground |
+| `js-playground-cheerpj`, `playground-java-cheerpj` | browser builds of the GaltaJS and Java playgrounds |
 
 ### Other repositories
 
@@ -344,15 +344,16 @@ with `jarsigner`, which is separate from the GPG signatures Central requires.
 The documentation is published to GitHub Pages at
 <https://monflabs.github.io/Galta-Java/>: the guides (the docsify site in
 `docs/`), the [API reference](/API) with the javadoc of every published module,
-and the GaltaJS [playground](playground/ ':ignore') running in the browser.
+and the GaltaJS [playground](playground/index.html ':ignore') running in the browser.
 
 `.github/workflows/publish-docs.yml` publishes it on every push to `master`
 (and on demand from the *Actions* tab): it runs `buildtools/build-site.sh`,
 which builds the published modules and generates into `docs/`
 
 - `docs/api/<artifactId>/`: the javadoc of every module managed by `galta-bom`,
-- `docs/playground/jsplayground-cheerpj.jar`: the CheerpJ build of the
-  playground, loaded by `docs/playground/index.html`,
+- `docs/playground/jsplayground-cheerpj.jar` and
+  `docs/java-playground/javaplayground-cheerpj.jar`: the CheerpJ builds of the
+  GaltaJS and Java playgrounds, loaded by the `index.html` next to them,
 
 then uploads `docs/` as the site. Both generated parts are gitignored, so the
 site always documents the revision it was published from.

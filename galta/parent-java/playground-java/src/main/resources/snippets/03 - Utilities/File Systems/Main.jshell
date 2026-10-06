@@ -1,0 +1,14 @@
+import java.nio.file.*;
+import java.util.stream.*;
+import org.monflabs.filesystem.memory.MemoryFileSystem;
+
+try (FileSystem fs = MemoryFileSystem.newBuilder().build()) {
+	Files.createDirectories(fs.getPath("/a/b"));
+	Files.writeString(fs.getPath("/a/b/c.txt"), "Hello");
+	Files.copy(fs.getPath("/a/b/c.txt"), fs.getPath("/a/d.txt"));
+	try (Stream<Path> s = Files.walk(fs.getPath("/"))) {
+		System.out.println( s.map(Path::toString).sorted().collect(Collectors.toList()) );
+		// [/, /a, /a/b, /a/b/c.txt, /a/d.txt]
+	}
+	System.out.println( Files.readString(fs.getPath("/a/d.txt")) );   // Hello
+}

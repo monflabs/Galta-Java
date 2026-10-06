@@ -1,6 +1,6 @@
 # Java Compiler
 
-The `javacompiler` module (`org.monflabs.galta:javacompiler`, package `org.monflabs.javacompiler`) compiles Java source held in memory, or in any `java.nio` filesystem, with the JDK's `javac`, and loads the resulting classes. It needs a JDK at runtime: the compiler comes from `ToolProvider.getSystemJavaCompiler()`.
+The `javacompiler` module (`org.monflabs.galta:javacompiler`, package `org.monflabs.javacompiler`) compiles Java source held in memory, or in any `java.nio` filesystem, with the JDK's `javac`, and loads the resulting classes. It needs a JDK at runtime: the compiler comes from `ToolProvider.getSystemJavaCompiler()`. On a runtime without the `jdk.compiler` module (a JRE, or CheerpJ in the browser), it uses a `javax.tools.JavaCompiler` service found on the class path instead, like the Eclipse compiler (`org.eclipse.jdt:ecj`): add it as a dependency. The classes are then compiled for the running Java version (`-source` and `-target`), as `javac` does, unless the options set a version.
 
 ## Compiling and loading a class
 
@@ -258,6 +258,6 @@ try (JavaCompiler compiler = JavaCompilerFactory.newBuilder()
 
 `compile()` also throws a `JavaCompilerException` for an empty list of sources (`No source to compile`), an option `javac` does not know (`Invalid compiler option: ...`) or an exception thrown by an annotation processor.
 
-A `JavaCompiler` is `Closeable`; `close()` releases the `javac` file manager, and `compile()` on a closed compiler throws `JavaCompilerException("Compiler is closed")`. Building a compiler on a JRE (no `jdk.compiler` module) throws a `JavaCompilerException` saying so.
+A `JavaCompiler` is `Closeable`; `close()` releases the `javac` file manager, and `compile()` on a closed compiler throws `JavaCompilerException("Compiler is closed")`. Building a compiler on a JRE (no `jdk.compiler` module) without a compiler service on the class path throws a `JavaCompilerException` saying so.
 
 Sample: `doc_examples/javacompiler/JavaCompilerExamples.java` (`testClosedCompiler`)

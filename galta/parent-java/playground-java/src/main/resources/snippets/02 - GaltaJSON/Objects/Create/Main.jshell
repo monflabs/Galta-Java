@@ -1,0 +1,11 @@
+import org.monflabs.json.*;
+
+// Create an object with global methods
+var o1 = JsonObject.create();
+System.out.println(o1.stringify());
+
+var o2 = JsonObject.of("a",1);
+System.out.println(o2.stringify());
+
+var o3 = JsonObject.parse("{x: 99}");
+System.out.println(o3.stringify());

@@ -1,0 +1,31 @@
+import org.monflabs.json.*;
+
+var a = JsonArray.create();
+
+// Add/Set typed values
+//   add(value))
+//   add(index,value)
+//   set(index,value)
+a.add("AA")
+ .add(23)
+ .add(true)
+ .add(JsonObject.of("v",22))
+ .add(JsonArray.of(33));
+
+System.out.println(a.stringify());
+
+// Dynamically construct an object/array to add
+a.add((JsonObject child) -> {
+  child.put("a", 34);
+});
+a.add((JsonArray child) -> {
+  child.add(56);
+});
+
+System.out.println(a.stringify());
+
+a.add(0,"123");
+System.out.println(a.stringify());
+
+a.set(0,"456");
+System.out.println(a.stringify());

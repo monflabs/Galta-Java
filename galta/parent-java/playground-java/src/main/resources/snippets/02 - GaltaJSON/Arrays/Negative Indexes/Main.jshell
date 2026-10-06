@@ -1,0 +1,16 @@
+import org.monflabs.json.*;
+
+var a = JsonArray.of("a", "b", "c", "d");
+
+System.out.println( a.atString(-1) );      // d: the last item
+System.out.println( a.atString(-2) );      // c
+System.out.println( a.hasAt(-4) );         // true
+System.out.println( a.hasAt(-5) );         // false
+
+a.setAt(-1, "D");                          // set(size()-1, "D")
+a.removeAt(-2);                            // removes "c"
+a.addAt(-1, "x");                          // inserts before the last item
+System.out.println( a.stringify() );       // ["a","b","x","D"]
+
+// The regular methods follow the List contract: a negative index is out of range
+System.out.println( a.has(-1) );           // false

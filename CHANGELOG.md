@@ -127,6 +127,9 @@ First public release: Galta is published to Maven Central under the
 
 ### Utilities
 
+- `javacompiler` works on a runtime without the `jdk.compiler` module: it uses a
+  `javax.tools.JavaCompiler` service on the class path (the Eclipse compiler),
+  compiling for the running Java version.
 - `PerformanceWatch` and `PerformanceWatchCollection` are removed from
   `utilities`: the benchmarks use JMH (new unpublished `utilities-performance`
   and `js-performance` modules, next to `json-performance`), and `Profiler`
@@ -169,6 +172,18 @@ First public release: Galta is published to Maven Central under the
 
 ### UI and playground
 
+- The playgrounds never save the snippets of the library: the Save Snippet
+  button and the editable mode (`PlaygroundConfiguration.setEditable()`) are
+  removed, and leaving a modified snippet asks once whether to discard the
+  changes (it used to ask twice). Only the scratchpad is saved.
+- New `playground-java` module, moved from Galta-Java-Private: the Java
+  playground, running `Main.java` snippets compiled in memory and `Main.jshell`
+  snippets with JShell. Its snippet library showcases GaltaJSON and the utilities,
+  by category, and every snippet is run by the tests.
+- The Java playground also runs in the browser (CheerpJ build,
+  `playground-java-cheerpj`), linked from the documentation site. CheerpJ has
+  neither the JDK's compiler nor JShell: the build bundles the Eclipse compiler,
+  and JShell snippets are converted to a Java class.
 - The playground cancels a superseded run, saves snippets atomically, handles
   binary snippet files, doesn't record a loaded snippet as an undoable edit and
   no longer leaks its editors; the console stream can't deadlock with the

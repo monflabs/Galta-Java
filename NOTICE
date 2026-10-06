@@ -70,13 +70,21 @@ In the js test artifact (js-tests):
   (licenses/MPL-2.0.txt)
 - Examples from MDN Web Docs, dedicated to the public domain (CC0)
 
-Not published as Maven artifacts:
+In the js-precompiled artifacts (third-party JavaScript transpiled to Java):
 
 - js-beautify, Copyright (c) 2007-2018 Einar Lielmanis, Liam Newman, and
   contributors, MIT License (licenses/js-beautify-MIT.txt), transpiled to Java
   in the js-precompiled-beautify-js, -css and -html modules
 - TypeScript compiler, Copyright Microsoft Corporation, Apache License 2.0
-  galta/parent-js/parent-js-precompiled/js-precompiled-typescript/js/typescript.js
+  galta/parent-js/parent-js-precompiled/js-precompiled-typescript/js/typescript.js,
+  transpiled to Java in the js-precompiled-typescript module
+
+Not published as Maven artifacts:
+
+- The Eclipse Compiler for Java (ecj), Copyright (c) the Eclipse Foundation and
+  others, Eclipse Public License 2.0 (licenses/EPL-2.0.txt), unmodified, bundled
+  in the browser (CheerpJ) build of the Java playground (playground-java-cheerpj).
+  Its source is available at https://github.com/eclipse-jdt/eclipse.jdt.core
 - Test and benchmark material (test262, the Rhino test suite, Octane, SunSpider
   and V8 benchmarks, and reference number-conversion code used only by tests)
   is distributed under the licenses stated in those files and folders.

@@ -30,6 +30,7 @@
 # Generated into the documentation site by buildtools/build-site.sh, never committed
 docs/api/
 docs/playground/*.jar
+docs/java-playground/*.jar
 
 # Build output of the standalone smoke-test project
 smoke-test/target/

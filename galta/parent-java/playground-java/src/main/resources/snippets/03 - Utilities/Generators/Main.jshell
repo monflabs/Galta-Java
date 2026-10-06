@@ -1,0 +1,28 @@
+import java.util.*;
+import org.monflabs.util.generators.*;
+
+try (Generator<Integer, String> g = GeneratorImpl.create(y -> {
+	for (int i = 1; i <= 3; i++) {
+		y.yield(i);
+	}
+	return "done";
+})) {
+	List<Integer> values = new ArrayList<>();
+	g.forEachRemaining(values::add);       // a Generator is an Iterator
+	System.out.println( values );          // [1, 2, 3]
+	System.out.println( g.getReturnValue() );   // done
+}
+
+// Values can be sent back to the body
+try (Generator<String, String> g = GeneratorImpl.create(y -> {
+	String name = y.yield("Who are you?");
+	return "Hello " + name;
+})) {
+	System.out.println( g.next(null) );    // Who are you?
+	try {
+		g.next("Ann");
+	} catch(NoSuchElementException e) {
+		// the body completed
+	}
+	System.out.println( g.getReturnValue() );   // Hello Ann
+}

@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.ServiceLoader;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -66,16 +67,39 @@ public class JavaCompilerJavac extends org.monflabs.javacompiler.JavaCompiler {
 	
 	// Runtime members
 	private JavaCompiler javac;
+	// Not the JDK's compiler (the Eclipse compiler on a runtime without jdk.compiler)
+	private boolean otherCompiler;
 	private StandardJavaFileManager stdFileManager;
 	private PathFileManager fileManager;
+
+	/**
+	 * The JDK's compiler or, on a runtime without the jdk.compiler module (a JRE, or
+	 * CheerpJ in the browser), a javax.tools.JavaCompiler service on the class path, like
+	 * the Eclipse compiler (ecj).
+	 */
+	static JavaCompiler findCompiler(ClassLoader classLoader) {
+		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+		if(compiler!=null) {
+			return compiler;
+		}
+		for(ClassLoader cl: new ClassLoader[] {classLoader, Thread.currentThread().getContextClassLoader(), JavaCompilerJavac.class.getClassLoader()}) {
+			if(cl==null) {
+				continue;
+			}
+			for(JavaCompiler c: ServiceLoader.load(JavaCompiler.class, cl)) {
+				return c;
+			}
+		}
+		return null;
+	}
 
 	public JavaCompilerJavac(ClassLoader parentClassLoader, SourceFactory sourceFactory, TargetFactory targetFactory, List<String> options, boolean failOnWarnings) {
 		super(parentClassLoader,sourceFactory,targetFactory,options);
 		this.failOnWarnings = failOnWarnings;
 		
-		this.javac = ToolProvider.getSystemJavaCompiler();
+		this.javac = findCompiler(parentClassLoader);
 		if(javac==null) {
-			throw new JavaCompilerException(null,"No Java compiler available: the application must run on a JDK, not a JRE (the jdk.compiler module is missing)");
+			throw new JavaCompilerException(null,"No Java compiler available: the application must run on a JDK, not a JRE (the jdk.compiler module is missing), or have a javax.tools.JavaCompiler service (like the Eclipse compiler, ecj) on its class path");
 		}
 		this.stdFileManager = javac.getStandardFileManager(null, null, null);
 		if(!hasClassPathOption(options)) {
@@ -91,6 +115,10 @@ public class JavaCompilerJavac extends org.monflabs.javacompiler.JavaCompiler {
 		// The compiler's class loader is only exposed to the annotation processors: use its parent,
 		// as the compiler class loader instance changes after a recompilation
 		this.fileManager = new PathFileManager(stdFileManager, getTargetFactory(), new org.monflabs.javacompiler.FactoryClassLoader(parentClassLoader, getTargetFactory()));
+		// Another compiler than the JDK's (ecj) requires a compilation unit to be a file on
+		// disk, unless the source path contains it
+		this.otherCompiler = javac!=ToolProvider.getSystemJavaCompiler();
+		fileManager.setSourcePathUnits(otherCompiler);
 	}
 	
 	/**
@@ -117,6 +145,16 @@ public class JavaCompilerJavac extends org.monflabs.javacompiler.JavaCompiler {
 		return result;
 	}
 	
+	private static boolean hasVersionOption(List<String> options) {
+		for(String o: options) {
+			if(o.equals("-source") || o.equals("-target") || o.equals("--release") || o.startsWith("--release=")
+					|| o.equals("--source") || o.equals("--target")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private static boolean hasClassPathOption(List<String> options) {
 		if(options!=null) {
 			for(String o: options) {
@@ -193,7 +231,14 @@ public class JavaCompilerJavac extends org.monflabs.javacompiler.JavaCompiler {
 		Map<String,byte[]> outputs;
 		fileManager.startCompilation();
 		try {
-			JavaCompiler.CompilationTask task = javac.getTask(null, fileManager, collector, effectiveOptions(getOptions()), null, compilationUnits);
+			List<String> options = effectiveOptions(getOptions());
+			if(otherCompiler && !hasVersionOption(options)) {
+				// The JDK's compiler targets the running Java version, another one its latest:
+				// the classes must load in this runtime
+				String version = Integer.toString(Runtime.version().feature());
+				options.addAll(List.of("-source", version, "-target", version));
+			}
+			JavaCompiler.CompilationTask task = javac.getTask(null, fileManager, collector, options, null, compilationUnits);
 			result = task.call();
 		} catch(IllegalArgumentException ex) {
 			// Invalid option

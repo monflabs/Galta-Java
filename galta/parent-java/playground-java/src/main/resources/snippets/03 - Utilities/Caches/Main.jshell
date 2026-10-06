@@ -1,0 +1,14 @@
+import java.util.*;
+import org.monflabs.util.cache.*;
+
+LRUCache<String, Integer> cache = new LRUCache<>(2);
+cache.put("a", 1);
+cache.put("b", 2);
+cache.get("a");          // "a" is now the most recently used
+cache.put("c", 3);       // evicts "b"
+System.out.println( cache.getMap().keySet() );   // [a, c]
+
+int[] calls = {0};
+cache.get("hello", k -> { calls[0]++; return k.length(); });
+cache.get("hello", k -> { calls[0]++; return k.length(); });
+System.out.println( "computed "+calls[0]+" time" );   // computed 1 time

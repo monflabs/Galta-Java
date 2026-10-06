@@ -4,7 +4,7 @@
 
 GaltaJS is an implementation of JavaScript in Java. It follows the ECMAScript specification as closely as it can (its compliance is measured continuously against the TC39 [test262](https://github.com/tc39/test262) suite, see [Known ECMAScript Gaps](/GaltaJS/KnownGaps)) and it is designed to integrate tightly with Java and the JVM, which makes it a natural choice for scripting Java applications. On top of the standard language it offers a set of [extensions](/GaltaJS/Extensions/) that make it even better at working with Java values and JSON data.
 
-?> **Try it in your browser:** the [GaltaJS playground](playground/ ':ignore') runs the engine, its extensions and a set of samples directly in the page, through [CheerpJ](https://cheerpj.com) - nothing to install.
+?> **Try it in your browser:** the [GaltaJS playground](playground/index.html ':ignore') runs the engine, its extensions and a set of samples directly in the page, through [CheerpJ](https://cheerpj.com) - nothing to install.
 
 ## Highlights
 

@@ -1,0 +1,22 @@
+import org.monflabs.json.*;
+
+var o = JsonObject.of(
+	"str", "AA", 
+	"num", 23, 
+	"bol", true, 
+	"obj", JsonObject.of("v",22), 
+	"arr", JsonArray.of(33) );
+
+// Typed getters
+System.out.println( o.getString("str") );
+System.out.println( o.getInt("num") );
+System.out.println( o.getDouble("num") );
+System.out.println( o.getBigDecimal("num") );
+System.out.println( o.getBoolean("bol") );
+System.out.println( o.getObject("obj").stringify() );
+System.out.println( o.getArray("arr").stringify() );
+// and more....
+
+// GetOrCreate
+System.out.println( o.getOrCreateObject("aaa").stringify() );
+System.out.println( o.getOrCreateObject("bbb", (child) -> child.put("vv",4) ).stringify());

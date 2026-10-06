@@ -26,7 +26,6 @@ public final class PlaygroundConfiguration {
 	private SnippetFactory snippetFactory;
 	private ExecutionEngineFactory executionEngineFactory;
 	private PlaygroundLayout layout;
-	private boolean editable;
 	
 	public PlaygroundConfiguration() {
 	}
@@ -53,12 +52,6 @@ public final class PlaygroundConfiguration {
 	}
 	
 	
-	public boolean isEditable() {
-		return editable;
-	}
-	public void setEditable(boolean editable) {
-		this.editable = editable;
-	}
 
 	public ExecutionEngineFactory getExecutionEngineFactory() {
 		return executionEngineFactory;

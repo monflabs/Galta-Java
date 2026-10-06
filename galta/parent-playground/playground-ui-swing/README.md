@@ -43,9 +43,12 @@ before creating the frame, and subclass `PlaygroundFrame` to add options
   `.java`/`.jshell` code completion (the JDK's `jmods`, else the running JVM's
   `jrt:/` image).
 
-Shortcuts: Cmd/Ctrl+Enter executes, Cmd/Ctrl+. stops, Cmd/Ctrl+S saves
-(editable snippet libraries and the scratchpad), Cmd/Ctrl+F/R/G find, replace
-and go to a line in an editor.
+Shortcuts: Cmd/Ctrl+Enter executes, Cmd/Ctrl+. stops, Cmd/Ctrl+S saves the
+scratchpad, Cmd/Ctrl+F/R/G find, replace and go to a line in an editor.
+
+Only the scratchpad is saved (automatically). The snippets of the library can be
+edited and run, but are never saved: leaving a modified snippet asks once whether to
+discard the changes.
 
 ## Documentation
 

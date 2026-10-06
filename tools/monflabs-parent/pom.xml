@@ -143,6 +143,15 @@
 					<artifactId>org.eclipse.jdt.annotation</artifactId>
 					<version>2.4.100</version>
 				</dependency>
+
+				<!-- The Eclipse Java compiler: a javax.tools.JavaCompiler in pure Java, for a
+				     runtime without the jdk.compiler module (the browser build of the Java
+				     playground, on CheerpJ) -->
+				<dependency>
+					<groupId>org.eclipse.jdt</groupId>
+					<artifactId>ecj</artifactId>
+					<version>3.46.100</version>
+				</dependency>
 			
 				<!-- JDK Annotations for Eclipse -->
 				<!-- https://github.com/lastnpe/eclipse-null-eea-augments?tab=readme-ov-file -->

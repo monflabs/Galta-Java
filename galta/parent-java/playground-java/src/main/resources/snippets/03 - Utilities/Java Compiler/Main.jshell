@@ -1,0 +1,24 @@
+import java.util.function.Supplier;
+import org.monflabs.javacompiler.*;
+import org.monflabs.javacompiler.factory.*;
+
+MapSourceFactory sources = new MapSourceFactory()
+		.put("com/acme/Greeter.java", """
+			package com.acme;
+			public class Greeter implements java.util.function.Supplier<String> {
+			    public String get() { return "Hello from " + getClass().getName(); }
+			}
+			""");
+MapTargetFactory classes = new MapTargetFactory();
+
+try (JavaCompiler compiler = JavaCompilerFactory.newBuilder()
+		.classLoader(JavaCompiler.class.getClassLoader())
+		.sourceFactory(sources)
+		.targetFactory(classes)
+		.build()) {
+	compiler.compile("com.acme.Greeter");                       // a class name
+	System.out.println( classes.getFiles().keySet() );          // [com/acme/Greeter.class]
+	Class<?> c = compiler.getClassLoader().loadClass("com.acme.Greeter");
+	Supplier<?> greeter = (Supplier<?>)c.getDeclaredConstructor().newInstance();
+	System.out.println( greeter.get() );                        // Hello from com.acme.Greeter
+}

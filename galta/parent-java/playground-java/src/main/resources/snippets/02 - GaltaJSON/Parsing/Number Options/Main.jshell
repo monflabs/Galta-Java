@@ -1,0 +1,18 @@
+import org.monflabs.json.*;
+import org.monflabs.json.java.JavaJsonFactory;
+
+JsonFactory exact = new JavaJsonFactory() {
+	@Override
+	public INTEGER defaultInteger() { return INTEGER.LONG; }
+	@Override
+	public DECIMAL defaultDecimal() { return DECIMAL.BIGDEC; }
+};
+
+var o = (JsonObject)exact.parse("{\"qty\":3,\"price\":0.1}");
+System.out.println( o.get("qty").getClass().getSimpleName() );     // Long
+System.out.println( o.get("price").getClass().getSimpleName() );   // BigDecimal
+
+// The default factory: Integer and Double
+var d = JsonObject.parse("{\"qty\":3,\"price\":0.1}");
+System.out.println( d.get("qty").getClass().getSimpleName() );     // Integer
+System.out.println( d.get("price").getClass().getSimpleName() );   // Double

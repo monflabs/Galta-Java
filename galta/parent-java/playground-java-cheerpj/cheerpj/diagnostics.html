@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Java Playground - CheerpJ diagnostics</title>
+    <script src="https://cjrtnc.leaningtech.com/20260907_3546/loader.js"></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+        }
+        #cheerpj {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+  </head>
+  <body>
+    <div id="cheerpj"></div>
+    <script>
+      (async function () {
+        await cheerpjInit({
+          version: 21
+        });
+        cheerpjCreateDisplay(-1, -1, document.getElementById("cheerpj"));
+        await cheerpjRunMain(
+          "playground.CheerpJDiagnostics",
+          "/app/javaplayground-cheerpj.jar"
+        );
+      })();
+    </script>
+  </body>
+</html>

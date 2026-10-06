@@ -93,6 +93,7 @@ import org.monflabs.util.BaseException;
 import org.monflabs.util.Console;
 import org.monflabs.util.PathUtil;
 import org.monflabs.util.StringFormat;
+import org.monflabs.util.StringUtil;
 import org.monflabs.util.UserPath;
 import org.monflabs.util.config.Config;
 import org.monflabs.util.datetime.PeriodFormatter;
@@ -164,7 +165,9 @@ public class PlaygroundFrame extends IDEFrame {
     // needed. Debounced 1s after the last edit, and flushed immediately when
     // switching away from it or closing the window (canClose()), so nothing
     // is lost even if the debounce hasn't fired yet.
-    private static final Path SCRATCHPAD_FOLDER = UserPath.getMonflabsFolder().resolve("playground-scratchpad");
+    // One folder per kind of main file (playground-scratchpad/js, .../jshell...): the
+    // playgrounds of different languages don't share their scratchpad
+    private static final Path SCRATCHPAD_ROOT = UserPath.getMonflabsFolder().resolve("playground-scratchpad");
     private Snippet scratchpad;
     private boolean scratchpadActive;
     private final Timer scratchpadSaveTimer = new Timer(1000, e -> saveSnippet());
@@ -188,7 +191,6 @@ public class PlaygroundFrame extends IDEFrame {
     private JToolBar toolBar;
     private JPanel toolBarInfoPanel;
     private JLabel lbExecution;
-    private JButton btSaveSnippet;
     private JButton btnExecute;
     private JButton btnStop;
     private JSplitPane mainSplitPane;
@@ -275,11 +277,6 @@ public class PlaygroundFrame extends IDEFrame {
     }
 
     protected void initToolbarLeft(JToolBar toolBar) {
-        btSaveSnippet = new JButton("Save Snippet");
-        btSaveSnippet.setToolTipText("Save the snippet ("+shortcutText(KeyEvent.VK_S)+")");
-        btSaveSnippet.addActionListener(e -> saveSnippet());
-        toolBar.add(btSaveSnippet);
-
         btnExecute = new JButton("Execute");
         btnExecute.setToolTipText("Execute the current snippet ("+shortcutText(KeyEvent.VK_ENTER)+")");
         toolBar.add(btnExecute);
@@ -357,8 +354,6 @@ public class PlaygroundFrame extends IDEFrame {
     }
 
     private void init() {
-    	btSaveSnippet.setVisible(PlaygroundConfiguration.get().isEditable());
-
     	stateManager = new ComponentStateManager(SETTINGS_PATH);
     	stateManager.add(ckAutoExec, "autoExecute", true, null);
     	stateManager.add(ckLogStatement, "logStatements", true, null);
@@ -370,25 +365,14 @@ public class PlaygroundFrame extends IDEFrame {
     	initKeyboardShortcuts();
 
         treePanel.setPreferredSize(new Dimension(SwingUtil.scale(250), SwingUtil.scale(250)));
-        // Keyboard navigation goes through setSelectionPaths(), not setSelectionPath():
-        // guard every way the selection can change
+        // Every selection change goes through setSelectionPaths() or addSelectionPaths()
+        // (setSelectionPath() and addSelectionPath() call them): guard these two only, so
+        // the user is asked once per change
         snippetTree.setSelectionModel(new DefaultTreeSelectionModel() {
-            @Override
-			public void setSelectionPath(TreePath path){
-                if (isSelectionChangeAllowed(path)) {
-                    super.setSelectionPath(path);
-                }
-            }
             @Override
 			public void setSelectionPaths(TreePath[] paths){
                 if (isSelectionChangeAllowed(paths!=null && paths.length>0 ? paths[0] : null)) {
                     super.setSelectionPaths(paths);
-                }
-            }
-            @Override
-			public void addSelectionPath(TreePath path){
-                if (isSelectionChangeAllowed(path)) {
-                    super.addSelectionPath(path);
                 }
             }
             @Override
@@ -466,13 +450,13 @@ public class PlaygroundFrame extends IDEFrame {
     }
 
     /**
-     * Execute (Cmd/Ctrl+Enter), Save (Cmd/Ctrl+S) and Stop (Cmd/Ctrl+.), in
-     * the whole window.
+     * Execute (Cmd/Ctrl+Enter), Save (Cmd/Ctrl+S, the scratchpad only: it is
+     * saved automatically anyway) and Stop (Cmd/Ctrl+.), in the whole window.
      */
     protected void initKeyboardShortcuts() {
     	bindShortcut("playground.execute", KeyEvent.VK_ENTER, this::executeNow);
     	bindShortcut("playground.save", KeyEvent.VK_S, () -> {
-    		if(btSaveSnippet.isVisible() || scratchpadActive) {
+    		if(scratchpadActive) {
     			saveSnippet();
     		}
     	});
@@ -581,42 +565,18 @@ public class PlaygroundFrame extends IDEFrame {
 			return true;
 		}
 		if(dirty) {
-			if(PlaygroundConfiguration.get().isEditable()) {
-    			// Ask for save?
-    		    int res = JOptionPane.showConfirmDialog(this,
-    		    		 	"The snippet has been modified, do you want to save it?",
-    		    		 	"Save Confirmation",
-    		    		 	JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
-	    	    if(res == JOptionPane.YES_OPTION) {
-	    	    	// a failed save keeps the snippet open: nothing is lost
-	    	    	return saveSnippet();
-	    	    } else if (res == JOptionPane.NO_OPTION){
-	    	    	return true;
-	    	    } else {
-	    	    	return false;
-	    	    }
-	    	} else {
-    			// Ask for save?
-    		    int res = JOptionPane.showConfirmDialog(this,
-    		    		 	"The snippet has been modified, do you want to discard the changes?",
-    		    		 	"Discard Confirmation",
-    		    		 	JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-	    	    if(res == JOptionPane.YES_OPTION) {
-	    	    	return true;
-	    	    } else {
-	    	    	return false;
-	    	    }
-
-	    	}
+			// The snippets of the library are never saved: leaving one discards its changes
+		    int res = JOptionPane.showConfirmDialog(this,
+		    		"The snippet has been modified. Leave it and discard the changes?",
+		    		"Discard the Changes",
+		    		JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+		    return res == JOptionPane.YES_OPTION;
 		}
     	return true;
     }
 
     private void initTitle() {
     	String title = PlaygroundConfiguration.get().getFrameTitle();
-    	if(PlaygroundConfiguration.get().isEditable()) {
-    		title = "[Editable] "+ title;
-    	}
 		if(executionContext!=null) {
     		Snippet s = executionContext.getSnippet();
     		if(s!=null) {
@@ -688,13 +648,37 @@ public class PlaygroundFrame extends IDEFrame {
     }
 
     /**
+     * The folder of the scratchpad: one per kind of main file, under the
+     * Monflabs folder, so the playgrounds of different languages don't mix
+     * their files.
+     */
+    protected Path getScratchpadFolder(String fileName) {
+    	String ext = PathUtil.POSIX.getFileExtension(fileName);
+    	return SCRATCHPAD_ROOT.resolve(StringUtil.isNotEmpty(ext) ? ext : "default");
+    }
+
+    /**
      * The content of a new scratchpad file: a line comment for the usual
-     * C-like languages, nothing otherwise.
+     * C-like languages (and a "Hello, world!" for Java and JShell), nothing
+     * otherwise.
      */
     protected String getScratchpadDefaultContent(String fileName) {
     	String ext = PathUtil.POSIX.getFileExtension(fileName);
+    	if(ext.equals("java")) {
+    		String className = PathUtil.POSIX.removeExtension(PathUtil.POSIX.getFileName(fileName));
+    		return "// Scratchpad - saved automatically, not part of the snippet library\n"
+    			+ "public class "+className+" {\n\n"
+    			+ "\tpublic static void main(String[] args) {\n"
+    			+ "\t\tSystem.out.println(\"Hello, world!\");\n"
+    			+ "\t}\n"
+    			+ "}\n";
+    	}
+    	if(ext.equals("jshell")) {
+    		return "// Scratchpad - saved automatically, not part of the snippet library\n"
+    			+ "System.out.println(\"Hello, world!\");\n";
+    	}
     	return switch(ext) {
-    		case "js", "mjs", "ts", "java", "jshell", "c", "cpp", "cs", "go", "kt", "scala", "swift" ->
+    		case "js", "mjs", "ts", "c", "cpp", "cs", "go", "kt", "scala", "swift" ->
     			"// Scratchpad - saved automatically, not part of the snippet library\n";
     		case "py", "sh", "rb" ->
     			"# Scratchpad - saved automatically, not part of the snippet library\n";
@@ -704,17 +688,24 @@ public class PlaygroundFrame extends IDEFrame {
 
     private void ensureScratchpadFile() {
     	if(scratchpad==null) {
+    		String name = getScratchpadFileName();
+    		Path folder = getScratchpadFolder(name);
     		try {
-    			Files.createDirectories(SCRATCHPAD_FOLDER);
-    			String name = getScratchpadFileName();
-    			Path main = SCRATCHPAD_FOLDER.resolve(name);
+    			Files.createDirectories(folder);
+    			Path main = folder.resolve(name);
     			if(!Files.exists(main)) {
-    				Files.writeString(main, getScratchpadDefaultContent(name), StandardCharsets.UTF_8);
+    				// The scratchpad of an earlier version, shared by all the playgrounds
+    				Path previous = SCRATCHPAD_ROOT.resolve(name);
+    				if(Files.isRegularFile(previous)) {
+    					Files.copy(previous, main);
+    				} else {
+    					Files.writeString(main, getScratchpadDefaultContent(name), StandardCharsets.UTF_8);
+    				}
     			}
     		} catch(IOException ex) {
     			Console.log(ex);
     		}
-    		scratchpad = new Snippet(SCRATCHPAD_FOLDER);
+    		scratchpad = new Snippet(folder);
     	}
     }
 
@@ -1019,10 +1010,10 @@ public class PlaygroundFrame extends IDEFrame {
 
 
     //
-    // Save snippet (dev mode)
+    // Save the scratchpad
     //
     /**
-     * Writes the snippet's modified text files back to its folder (see
+     * Writes the scratchpad's modified text files back to its folder (see
      * {@link SnippetStorage}): atomically, keeping CRLF line breaks, skipping
      * the binary files. A file modified outside of the playground since it was
      * loaded is only overwritten once the user confirms. A failure is reported
@@ -1031,7 +1022,8 @@ public class PlaygroundFrame extends IDEFrame {
      * @return true when the snippet was saved (or there was nothing to save)
      */
     private boolean saveSnippet() {
-    	if(executionContext==null) {
+    	// Only the scratchpad is saved: the snippets of the library are read-only
+    	if(executionContext==null || !scratchpadActive) {
     		return true;
     	}
     	commitEditors();
