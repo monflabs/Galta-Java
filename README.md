@@ -1,6 +1,12 @@
 # Galta
 
 [![Maven Central](https://img.shields.io/maven-central/v/org.monflabs.galta/galta-bom?label=Maven%20Central)](https://central.sonatype.com/artifact/org.monflabs.galta/galta-bom)
+[![Documentation](https://img.shields.io/badge/docs-monflabs.github.io-blue)](https://monflabs.github.io/Galta-Java/)
+
+**Documentation: <https://monflabs.github.io/Galta-Java/>** - the guides, the API
+reference, and the [Java](https://monflabs.github.io/Galta-Java/java-playground/index.html)
+and [GaltaJS](https://monflabs.github.io/Galta-Java/playground/index.html) playgrounds
+running in your browser.
 
 Galta is a set of Java libraries, mostly focused on a JSON library,
 **GaltaJSON**, and a JavaScript-inspired scripting engine for the JVM,
@@ -21,8 +27,9 @@ rest follows.
 |---|---|
 | Utilities | `utilities`, `filesystem` (java.nio file systems: memory, sandboxed, ZIP, classpath), `javacompiler` (runtime Java compilation), `test` (JUnit support) |
 | JSON | `json` (parser, values, JSONPath, JSON Pointer, schema), `json-jackson`, `json-config`, `json-impexp`, `json-impexp-fastcsv`, `json-memdb`, `json-yaml-snakeyaml`, `json-jsonpath-jayway`, `json-jsonschema-jsonschemafriend` |
-| GaltaJS | `js` (the engine), `js-transpiler-maven` (Maven plugin), `js-template`, `js-vb`, `js-debugger`, `js-playground` |
+| GaltaJS | `js` (the engine), `js-transpiler-maven` (Maven plugin), `js-template`, `js-vb`, `js-debugger`, `js-playground`, `js-precompiled-beautify-js`, `-css`, `-html` and `js-precompiled-typescript` (libraries transpiled to Java) |
 | UI | `ui-commons`, `ui-swing`, `ui-swing-ide`, `playground-core`, `playground-ui-swing` |
+| Java | `playground-java` (the Java playground: Java and JShell snippets) |
 
 Import the `galta-bom` bill of materials once, then declare the modules you use
 without a version - for example the JSON library and the JavaScript engine:
@@ -60,8 +67,10 @@ Galta requires **Java 21** or later.
 
 The documentation is online at **<https://monflabs.github.io/Galta-Java/>**,
 with the [API reference](https://monflabs.github.io/Galta-Java/#/API) (the
-javadoc of every published module) and the GaltaJS
-[playground running in your browser](https://monflabs.github.io/Galta-Java/playground/).
+javadoc of every published module) and the
+[Java](https://monflabs.github.io/Galta-Java/java-playground/index.html) and
+[GaltaJS](https://monflabs.github.io/Galta-Java/playground/index.html) playgrounds running
+in your browser.
 
 Its sources live in [`docs/`](docs/README.md), a docsify site (see
 [Generating the Documentation](docs/Documentation.md) to view it locally):
