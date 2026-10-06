@@ -89,11 +89,11 @@
 		<galta.version>0.8.0</galta.version>
 
 		<!-- Versions shared by several artifacts of the same family -->
-		<maven.api.version>3.9.16</maven.api.version>
+		<maven.api.version>3.10.0</maven.api.version>
 		<javet.version>5.0.1</javet.version>
-		<commonmark.version>0.27.0</commonmark.version>
+		<commonmark.version>0.30.0</commonmark.version>
 		<jmh.version>1.37</jmh.version>
-		<graalvm.version>25.0.1</graalvm.version>
+		<graalvm.version>25.4.4.1.1</graalvm.version>
 		<javacc.version>7.0.13</javacc.version>
 
 		<!-- Set by jacoco:prepare-agent; empty when JaCoCo does not run, so the surefire
@@ -398,14 +398,14 @@
 				<dependency>
 					<groupId>net.bytebuddy</groupId>
 					<artifactId>byte-buddy</artifactId>
-					<version>1.18.3</version>
+					<version>1.18.14</version>
 				</dependency>
 				<!--
 				https://mvnrepository.com/artifact/net.bytebuddy/byte-buddy-agent -->
 				<dependency>
 					<groupId>net.bytebuddy</groupId>
 					<artifactId>byte-buddy-agent</artifactId>
-					<version>1.18.3</version>
+					<version>1.18.14</version>
 				</dependency>
 
 				<!--
@@ -452,7 +452,7 @@
 				<dependency>
 					<groupId>org.seleniumhq.selenium</groupId>
 					<artifactId>selenium-java</artifactId>
-					<version>4.49.0</version>
+					<version>4.50.0</version>
 				</dependency>
 
 
@@ -487,7 +487,7 @@
 				<dependency>
 				    <groupId>org.apache.maven.plugin-tools</groupId>
 				    <artifactId>maven-plugin-annotations</artifactId>
-				    <version>3.15.1</version>
+				    <version>3.16.0</version>
 					<!-- Maven plugin projects: the API is provided by the running Maven -->
 					<scope>provided</scope>
 				</dependency>
@@ -558,7 +558,7 @@
 			<dependency>
 				<groupId>commons-logging</groupId>
 				<artifactId>commons-logging</artifactId>
-				<version>1.3.2</version>
+				<version>1.4.0</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
@@ -591,7 +591,7 @@
 					     Platform, which does not pick up the JUnit 3 style suite()
 					     classes the test modules include (0 tests run). Move to 3.6
 					     together with a JUnit 5 migration. -->
-					<version>3.5.5</version>
+					<version>3.5.6</version>
 					<configuration>
 						<!--
 							Per-fork wall-clock budget. When a fork overruns it, surefire
@@ -634,7 +634,7 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-site-plugin</artifactId>
-					<version>3.21.0</version>
+					<version>3.22.0</version>
 				</plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
@@ -698,7 +698,7 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-plugin-plugin</artifactId>
-					<version>3.15.1</version>
+					<version>3.16.0</version>
 				</plugin>
 				<plugin>
 					<groupId>org.codehaus.mojo</groupId>
