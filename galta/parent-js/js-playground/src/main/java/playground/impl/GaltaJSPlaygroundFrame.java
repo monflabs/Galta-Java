@@ -515,8 +515,9 @@ public class GaltaJSPlaygroundFrame extends PlaygroundFrame {
     			if(!process.waitFor(2, TimeUnit.SECONDS) || process.exitValue()==0) {
     				return true;   // still running, or done and content: the browser is on its way
     			}
-    		} catch(IOException notThere) {
-    			// try the next candidate
+    		} catch(IOException | RuntimeException notThere) {
+    			// try the next candidate (a RuntimeException: a runtime without real
+    			// processes, like CheerpJ)
     		} catch(InterruptedException interrupted) {
     			Thread.currentThread().interrupt();
     			return true;

@@ -164,8 +164,15 @@ public class SwingTheme {
         } catch (IOException | RuntimeException e) {
             return null;	// command not available: not dark
         } finally {
-        	if(process!=null && process.isAlive()) {
-        		process.destroyForcibly();
+        	if(process!=null) {
+        		try {
+        			if(process.isAlive()) {
+        				process.destroyForcibly();
+        			}
+        		} catch(RuntimeException e) {
+        			// A runtime without real processes (CheerpJ in the browser starts
+        			// one but fails on its pipes and on destroy()): nothing to clean up
+        		}
         	}
         }
     }
