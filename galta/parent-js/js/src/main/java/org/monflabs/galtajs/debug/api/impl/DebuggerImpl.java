@@ -659,8 +659,15 @@ public class DebuggerImpl implements Debugger, DebugHook {
 			frame.setPausedEvent(event);
 		}
 		currentPause = event;
+		resumeModeConsumed = null;
 		fireListeners(l -> l.paused(event));
-		if (event.isResumed()) {
+		// Not event.isResumed(): PausedEventImpl sets that flag BEFORE
+		// requestResume() takes this lock, so a resume from another thread
+		// (still blocked on the lock we hold) would be taken as already done
+		// - the thread then ran on before that resume's step request was
+		// recorded, missing the step's pause. Only a resume made from the
+		// paused() callback itself, on this thread, can have completed here.
+		if (resumeModeConsumed != null) {
 			resumeModeConsumed = null;
 			return false;
 		}
