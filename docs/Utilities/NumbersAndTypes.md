@@ -66,6 +66,30 @@ assertEquals(BigInteger.valueOf(1900), TypeUtil.toBigInteger(1.9e3));
 assertEquals(BigInteger.ONE, TypeUtil.toBigInteger(new BigDecimal("1.99")));  // truncates
 ```
 
+## Decimal128 or BigDecimal?
+
+`org.monflabs.util.number.Decimal128` is an immutable IEEE 754 decimal128 value (two `long`s, the BID encoding): at most 34 significant digits, exponent range -6176..6111, results rounded half even, overflow to an infinity, and `NaN`, `+Infinity`, `-Infinity` and `-0` are values. There are no cohorts: `1.0` and `1` are the same value. It is the decimal of [GaltaJS](/GaltaJS/Extensions/Decimal) (the ECMAScript Decimal proposal) and the `DEC128` option of the [JSON factory](/GaltaJSON/Parsing). `java.math.BigDecimal` stays the arbitrary-precision Java type: the two meet at explicit conversions (`TypeUtil.toDecimal128`, `Decimal128.toBigDecimal()`).
+
+Why a dedicated class rather than a `BigDecimal` with special instances for `NaN`, the infinities and `-0`:
+
+- **No silent wrong results.** `BigDecimal` methods read the *argument's* private fields, so overriding them is bypassed: `plain.add(infinity)` would return a huge finite number and `infinity.subtract(infinity)` would return `0` instead of `NaN`. With a dedicated type, misuse is a compile error or an explicit conversion.
+- **Invariants enforced by the type.** Every `Decimal128` is valid (at most 34 digits, in range). Any Java code can create a 50-digit or `1E+9000` `BigDecimal`, so a `BigDecimal`-based type would have to re-validate on every operation.
+- **Honest semantics.** The lossy step (round to 34 digits, overflow to an infinity) is explicit and testable, and `BigDecimal` keeps its arbitrary-precision meaning for Java code.
+- **Wire formats.** The special values can't be stored in a database or written to JSON as a number: converting a non-finite `Decimal128` to a `BigDecimal` throws (`TypeUtil.toBigDecimal`), and the JSON stringifier writes `null`, as for a `double`.
+- **Storage and independence.** 16 bytes of payload, no `BigInteger`, no reliance on JDK internals, and the layout is the standard BID one.
+
+Use `BigDecimal` for money or measures that need more than 34 digits or a controlled scale, `Decimal128` when the value must behave as the ECMAScript decimal. The full comparison is in [Decimal128 vs BigDecimal](/Decimal128-Design).
+
+Sample: the `Decimal128` snippet of the Java playground (`03 - Utilities`)
+
+```java
+var sum = Decimal128.of("0.1").add(Decimal128.of("0.2"));        // 0.3, a double gives 0.30000000000000004
+assertEquals(Decimal128.of("1"), Decimal128.of("1.0"));          // no scale
+assertEquals(Decimal128.POSITIVE_INFINITY, Decimal128.ONE.divide(Decimal128.ZERO));
+assertTrue(Decimal128.ZERO.divide(Decimal128.ZERO).isNaN());
+assertEquals("-0", Decimal128.NEGATIVE_ZERO.toString());
+```
+
 ## Version
 
 `Version` holds up to three numbers and an optional qualifier: `major.minor.subversion-qualifier`. `Version.parse` accepts one to three numeric components (missing ones are 0) and a qualifier after the first `-`, whatever the number of components before it. A null or empty string returns `Version.EMPTY` (`0.0.0`); anything else that does not parse, such as a fourth component or a `v` prefix, throws `IllegalArgumentException`. `toString()` always writes the three numbers.

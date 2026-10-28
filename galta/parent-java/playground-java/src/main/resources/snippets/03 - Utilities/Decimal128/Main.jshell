@@ -1,0 +1,31 @@
+import java.math.BigDecimal;
+import org.monflabs.util.TypeUtil;
+import org.monflabs.util.number.*;
+
+// A double can't hold 0.1: base-10 arithmetic is inexact
+System.out.println( 0.1 + 0.2 );                                          // 0.30000000000000004
+
+// A Decimal128 is an IEEE 754 decimal: at most 34 significant digits, rounded half even
+var a = Decimal128.of("0.1");
+var b = Decimal128.of("0.2");
+System.out.println( a.add(b) );                                           // 0.3
+System.out.println( Decimal128.of("1").divide(Decimal128.of("3")) );      // 0.3333333333333333333333333333333333 (34 digits)
+
+// No scale: 1.0 and 1 are the same value (a BigDecimal's equals() tells them apart)
+System.out.println( Decimal128.of("1.0").equals(Decimal128.of("1")) );    // true
+System.out.println( new BigDecimal("1.0").equals(new BigDecimal("1")) );  // false
+
+// NaN, the infinities and -0 are values, and a division by zero doesn't throw
+System.out.println( Decimal128.ONE.divide(Decimal128.ZERO) );             // Infinity
+System.out.println( Decimal128.ZERO.divide(Decimal128.ZERO) );            // NaN
+System.out.println( Decimal128.NEGATIVE_ZERO );                           // -0
+System.out.println( Decimal128.NaN.equals(Decimal128.NaN) );              // true (equals() is SameValue; compare() is unordered)
+
+// Rounding
+System.out.println( Decimal128.of("2.675").round(2) );                    // 2.68
+System.out.println( Decimal128.of("1234.5678").toFixed(1) );              // 1234.6
+System.out.println( Decimal128.of("1234.5678").toPrecision(3) );          // 1.23e3
+
+// Conversions: a BigDecimal is rounded to 34 digits, NaN and the infinities have no BigDecimal
+System.out.println( TypeUtil.toDecimal128(new BigDecimal("3.14159265358979323846264338327950288")) );  // 3.141592653589793238462643383279503
+System.out.println( Decimal128.of("12.50").toBigDecimal() );              // 12.5
