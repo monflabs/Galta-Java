@@ -212,7 +212,7 @@ public class VirtualTableModel extends AbstractTableModel {
 		return executor;
 	}
 
-	/** What {@link #readRows(int, Consumer)} read: the rows, and whether there were more. */
+	/** What {@link #readRows(int, BiConsumer)} read: the rows, and whether there were more. */
 	public record Rows(List<VirtualColumn> columns, List<Object[]> rows, boolean truncated) {
 	}
 
