@@ -14,7 +14,7 @@ Standard JavaScript has one number type, the IEEE double, plus `BigInt`. GaltaJS
 | `1d` / `1.0D` | `Double` | `number` | Forces a `Double` |
 | `1.5f` / `1F` | `Float` | `number` | |
 | `1n` / `1N` | `BigInteger` | `bigint` | Standard `BigInt` |
-| `1m` / `1M` | `BigDecimal` | `decimal` | Requires `supportBigDecimalLiteral`, see [Decimal](/GaltaJS/Extensions/Decimal) |
+| `1m` / `1M` | `Decimal128` (`BigDecimal` with `useDecimal128(false)`) | `decimal` | Requires `supportBigDecimalLiteral`, see [Decimal](/GaltaJS/Extensions/Decimal) |
 
 Suffixes are case-insensitive and work with every radix (`0xFFl`, `0b101L`). `-0` is a `Double` (`-0.0`) so the sign survives.
 
@@ -29,7 +29,7 @@ assertEquals(Integer.class,    env.evaluateExpression("1.0").getClass());   // w
 assertEquals(Double.class,     env.evaluateExpression("1d").getClass());    // unless the suffix says otherwise
 assertEquals(Float.class,      env.evaluateExpression("1.5f").getClass());
 assertEquals(BigInteger.class, env.evaluateExpression("1n").getClass());
-assertEquals(BigDecimal.class, env.evaluateExpression("1m").getClass());
+assertEquals(Decimal128.class, env.evaluateExpression("1m").getClass());
 assertEquals(255L, env.evaluateExpression("0xFFl"));
 assertEquals(List.of("number", "number", "bigint", "decimal"),
 		list(env.evaluateExpression("[typeof 1L, typeof 1.5f, typeof 1n, typeof 1m]")));
@@ -89,8 +89,8 @@ On in `GaltaJSEnvironment`. Standard JavaScript throws `TypeError: Cannot mix Bi
 JSEnvironment env = GaltaJSEnvironment.create();
 assertEquals(new BigInteger("3"), env.evaluateExpression("6 / 2n"));
 assertEquals(new BigInteger("36"), env.evaluateExpression("6 ** 2n"));
-assertEquals(new BigDecimal("3.0"), env.evaluateExpression("6.0m / 2"));
-assertEquals(new BigDecimal("3.3"), env.evaluateExpression("1.1m + 2.2m"));
+assertEquals(Decimal128.of("3"), env.evaluateExpression("6.0m / 2"));
+assertEquals(Decimal128.of("3.3"), env.evaluateExpression("1.1m + 2.2m"));
 
 JSEnvironment js = JavaScriptEnvironment.create();
 assertEquals("TypeError", js.evaluateScript("let r; try { 6 / 2n } catch(e) { r = e.name } r"));
@@ -98,7 +98,7 @@ assertEquals("TypeError", js.evaluateScript("let r; try { 6 / 2n } catch(e) { r 
 
 Sample: `doc_examples/NumbersExamples.java` (`testMixingBigNumbers`)
 
-`BigDecimal` results keep their scale (`6.0m / 2` is `3.0`, not `3`), which matters for `equals()` in Java; compare with `compareTo` when the scale is irrelevant.
+`Decimal128` results have no scale (`6.0m / 2` is `3`); `BigDecimal` results (`useDecimal128(false)`) keep it (`3.0`), which matters for `equals()` in Java: compare with `compareTo` when the scale is irrelevant.
 
 ## `supportBigDecimalPromotion`
 
@@ -107,7 +107,7 @@ Off by default and not set by `enableGaltaJSExtensions()`. It affects JSON parsi
 ```java
 JSEnvironment env = GaltaJSEnvironment.newBuilder().supportBigDecimalPromotion(true).build();
 Object v = env.evaluateExpression("JSON.parse('{\"v\": 1234567890.12345678901234567890}').v");
-assertEquals(new BigDecimal("1234567890.12345678901234567890"), v);
+assertEquals(Decimal128.of("1234567890.12345678901234567890"), v);
 
 Object plain = GaltaJSEnvironment.create().evaluateExpression("JSON.parse('{\"v\": 1234567890.12345678901234567890}').v");
 assertEquals(1.2345678901234567E9, plain);

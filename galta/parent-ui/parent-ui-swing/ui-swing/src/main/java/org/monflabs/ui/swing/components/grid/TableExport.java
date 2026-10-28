@@ -109,6 +109,6 @@ public final class TableExport {
 	}
 
 	private static boolean isFinite(Number n) {
-		return !(n instanceof Double d && (d.isNaN() || d.isInfinite())) && !(n instanceof Float f && (f.isNaN() || f.isInfinite()));
+		return !org.monflabs.util.TypeUtil.isNaN(n) && !org.monflabs.util.TypeUtil.isInfinite(n);
 	}
 }

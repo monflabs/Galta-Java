@@ -8,7 +8,7 @@ Because GaltaJS represents JavaScript values with plain Java objects, Java value
 |---|---|---|---|
 | `Integer`, `Long`, `Short`, `Byte`, `Float`, `Double` | number | `number` | Class is preserved through arithmetic where possible (`Long + 1` is a `Long`) |
 | `java.math.BigInteger` | `BigInt` | `bigint` | |
-| `java.math.BigDecimal` | `Decimal` | `decimal` | Arithmetic with regular numbers needs `supportMixedBigNumber` |
+| `java.math.BigDecimal`, `org.monflabs.util.number.Decimal128` | `Decimal` | `decimal` | Arithmetic with regular numbers needs `supportMixedBigNumber` |
 | `String`, any `CharSequence` | string | `string` | |
 | `Boolean` | boolean | `boolean` | |
 | `java.util.Date` | `Date` | `object` | Same instance |

@@ -198,8 +198,10 @@ The mapping is controlled by methods of the factory, which a subclass of `JavaJs
 | `defaultInteger()` | `INT`, `LONG`, `BIGINT` | The type of an integer that fits |
 | `useLongIntegers()` | `true`, `false` | With `INT`, whether an integer outside the `int` range becomes a `Long`; when `false` it goes straight to the overflow type |
 | `overflowInteger()` | `BIGINT`, `DOUBLE` | The type of an integer too large for the previous rules |
-| `defaultDecimal()` | `DOUBLE`, `BIGDEC` | The type of a decimal number |
-| `overflowDecimal()` | `BIGDEC`, `DOUBLE` | The type of a decimal a `double` can't hold exactly; `DOUBLE` makes every decimal a `Double` |
+| `defaultDecimal()` | `DOUBLE`, `BIGDEC`, `DEC128` | The type of a decimal number |
+| `overflowDecimal()` | `BIGDEC`, `DOUBLE`, `DEC128` | The type of a decimal a `double` can't hold exactly; `DOUBLE` makes every decimal a `Double` |
+
+`DEC128` produces an `org.monflabs.util.number.Decimal128` (IEEE 754, 34 digits, `NaN`, infinities and `-0`): as `defaultDecimal()` for every decimal, as `overflowDecimal()` for a decimal a `double` can't hold. A literal with more than 34 digits is rounded half even, beyond the Decimal128 range (`1e7000`) the `double` value (`Infinity` or `0`) is kept. The stringifier writes a finite `Decimal128` with all its digits (`-0` stays `-0`) and `NaN` and the infinities as `null`. `getDecimal128()`, `asDecimal128()` and `Reducers.sumDecimal128()` read them.
 
 Sample: `doc_examples/json/ParsingExamples.java` (`testNumberOptions`)
 

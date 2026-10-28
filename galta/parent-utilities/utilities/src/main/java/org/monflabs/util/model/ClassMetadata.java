@@ -38,6 +38,7 @@ import java.util.function.BiFunction;
 import org.eclipse.jdt.annotation.NonNull;
 import org.monflabs.util.StringUtil;
 import org.monflabs.util.TypeUtil;
+import org.monflabs.util.number.Decimal128;
 
 /**
  * Java reflection helper.
@@ -259,6 +260,18 @@ public class ClassMetadata {
 						return b ? BigDecimal.ONE : BigDecimal.ZERO;
 					}
 				}
+			} else if(targetClass==Decimal128.class) {
+				if(value instanceof Number number) {
+					return TypeUtil.toDecimal128(number);
+				}
+				if(permissiveConverter) {
+					if(value instanceof String s) {
+						return Decimal128.of(s);
+					}
+					if(value instanceof Boolean b) {
+						return b ? Decimal128.ONE : Decimal128.ZERO;
+					}
+				}
 			}
 		}
 		return value;
@@ -473,12 +486,13 @@ public class ClassMetadata {
 
 	/**
 	 * Whether a number of another class can be converted to this (boxed) parameter class:
-	 * the numeric primitive wrappers, {@link BigInteger} and {@link BigDecimal}. Any other
+	 * the numeric primitive wrappers, {@link BigInteger}, {@link BigDecimal} and {@link Decimal128}. Any other
 	 * {@link Number} subclass (e.g. AtomicInteger) only takes an instance of itself.
 	 */
 	public static boolean isNumericTarget(Class<?> c) {
 		return c == Integer.class || c == Long.class || c == Double.class || c == Float.class
-				|| c == Short.class || c == Byte.class || c == BigInteger.class || c == BigDecimal.class;
+				|| c == Short.class || c == Byte.class || c == BigInteger.class || c == BigDecimal.class
+				|| c == Decimal128.class;
 	}
 
 	private static String methodSignature(Class<?>[] c) {

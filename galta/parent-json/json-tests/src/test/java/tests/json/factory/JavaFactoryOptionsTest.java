@@ -87,5 +87,8 @@ public class JavaFactoryOptionsTest extends ProjectTestCase {
 
 		f.defaultDecimal = DECIMAL.BIGDEC; 
 		assertEquals( new BigDecimal("12.0"), f.parseDecimal("12.0") );
+
+		f.defaultDecimal = DECIMAL.DEC128; 
+		assertEquals( org.monflabs.util.number.Decimal128.of("12.0"), f.parseDecimal("12.0") );
 	}
 }

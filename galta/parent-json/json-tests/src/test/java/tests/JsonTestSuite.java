@@ -108,6 +108,7 @@ public class JsonTestSuite  {
 		suite.addTestSuite(StringParsingTest.class);
 		suite.addTestSuite(tests.json.factory.ParserEdgeCasesTest.class);
 		suite.addTestSuite(tests.json.factory.NumberParsingTest.class);
+		suite.addTestSuite(tests.json.factory.Decimal128JsonTest.class);
 		suite.addTestSuite(tests.json.factory.StringifierOptionsTest.class);
 		suite.addTestSuite(tests.json.factory.JsonTextHardeningTest.class);
 				

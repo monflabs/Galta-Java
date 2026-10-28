@@ -16,6 +16,7 @@
 package org.monflabs.json.util;
 
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.util.function.BiFunction;
 
@@ -45,6 +46,16 @@ public final class Reducers {
 		return new ReducerImpl<BigDecimal,V>((a,v) -> a.add(bigDecimalValue(v)),BigDecimal.ZERO);
 	}
 	
+	public static <V> Reducer<Decimal128,V> sumDecimal128() { 
+		return new ReducerImpl<Decimal128,V>((a,v) -> a.add(decimal128Value(v)),Decimal128.ZERO);
+	}
+	
+	private static Decimal128 decimal128Value(Object v) {
+		if(v instanceof JsonValues jv) {
+			return jv.decimal128Value();
+		}
+		return JsonUtil.checkDecimal128(v);
+	}
 	private static int intValue(Object v) {
 		if(v instanceof JsonValues jv) {
 			return jv.intValue();

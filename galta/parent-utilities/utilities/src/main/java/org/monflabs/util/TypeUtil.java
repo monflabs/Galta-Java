@@ -18,6 +18,8 @@ package org.monflabs.util;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import org.monflabs.util.number.Decimal128;
+
 /**
  * Helpers to handle some Java types.
  */
@@ -63,6 +65,9 @@ public abstract class TypeUtil {
 		if(n instanceof BigDecimal) {
 			return (BigDecimal)n;
 		}
+		if(n instanceof Decimal128 dec) {
+			return dec.toBigDecimal();	// ArithmeticException for NaN and the infinities
+		}
 		if(n instanceof BigInteger) {
 			return new BigDecimal((BigInteger)n);
 		}
@@ -92,6 +97,9 @@ public abstract class TypeUtil {
 		if(n instanceof BigDecimal) {
 			return ((BigDecimal)n).toBigInteger();
 		}
+		if(n instanceof Decimal128 dec) {
+			return dec.toBigDecimal().toBigInteger();	// ArithmeticException for NaN and the infinities
+		}
 		if(n instanceof Float f) {
 			checkFinite(f.doubleValue());
 			return new BigDecimal(n.floatValue()).toBigInteger();
@@ -113,7 +121,72 @@ public abstract class TypeUtil {
 		} catch(NumberFormatException ex) {
 			return BigInteger.valueOf(n.longValue());
 		}
-	}	
+	}
 
+	/**
+	 * Converts a number to a Decimal128: exactly for the integral types and BigInteger/BigDecimal when they fit in
+	 * 34 digits (otherwise rounded half even, and beyond the range an infinity or zero), through the shortest decimal
+	 * representation for a float or a double. NaN and the infinities are kept.
+	 */
+	public static Decimal128 toDecimal128(Number n) {
+		if(n instanceof Decimal128 dec) {
+			return dec;
+		}
+		if(n instanceof BigDecimal bd) {
+			return Decimal128.of(bd);
+		}
+		if(n instanceof BigInteger bi) {
+			return Decimal128.of(bi);
+		}
+		if(n instanceof Float f) {
+			// Via the float's own shortest decimal form (see toBigDecimal)
+			if(f.isNaN() || f.isInfinite()) {
+				return Decimal128.of(f.doubleValue());
+			}
+			return Decimal128.of(Float.toString(f));
+		}
+		if(n instanceof Double d) {
+			return Decimal128.of(d.doubleValue());
+		}
+		if(n instanceof Integer || n instanceof Long || n instanceof Byte || n instanceof Short) {
+			return Decimal128.of(n.longValue());
+		}
+		try {
+			return Decimal128.of(n.toString());
+		} catch(RuntimeException ex) {
+			return Decimal128.of(n.doubleValue());
+		}
+	}
 
+	/**
+	 * Whether a number is NaN: a Double, a Float or a Decimal128.
+	 */
+	public static boolean isNaN(Number n) {
+		if(n instanceof Double d) {
+			return d.isNaN();
+		}
+		if(n instanceof Float f) {
+			return f.isNaN();
+		}
+		if(n instanceof Decimal128 dec) {
+			return dec.isNaN();
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a number is an infinity: a Double, a Float or a Decimal128.
+	 */
+	public static boolean isInfinite(Number n) {
+		if(n instanceof Double d) {
+			return d.isInfinite();
+		}
+		if(n instanceof Float f) {
+			return f.isInfinite();
+		}
+		if(n instanceof Decimal128 dec) {
+			return dec.isInfinite();
+		}
+		return false;
+	}
 }

@@ -68,6 +68,10 @@ public final class ExprLiteral extends ExprNode {
 			return b;
 		}
 		if(value instanceof Number n) {
+			if(n instanceof org.monflabs.util.number.Decimal128 dec) {
+				// Not doubleValue(): 1e-400 would underflow to 0
+				return !dec.isNaN() && !dec.isZero();
+			}
 			double d = n.doubleValue();
 			return d!=0.0 && !Double.isNaN(d);
 		}

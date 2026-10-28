@@ -271,7 +271,7 @@ public class JSON extends NativeObject {
     				// must leave the output compact (no indent AND no newlines).
     				String gap = null;
     				// Only a Number is a count of spaces: a BigInt space is ignored (compact output)
-    				if(space instanceof Number n && !(n instanceof java.math.BigInteger) && !(n instanceof java.math.BigDecimal)) {
+    				if(space instanceof Number n && !(n instanceof java.math.BigInteger) && !(n instanceof java.math.BigDecimal) && !(n instanceof org.monflabs.util.number.Decimal128)) {
     					int sp = (int)Math.max(0, Math.min(10, n.longValue()));
     					gap = " ".repeat(sp);
     				} else if(space instanceof CharSequence) {

@@ -365,6 +365,8 @@ public class JavaLibrary extends AbstractLibrary implements JSJavaLibrary {
 					return JsonUtil.toBigInteger(n);
 				} else if(boxed==BigDecimal.class) {
 					return JsonUtil.toBigDecimal(n);
+				} else if(boxed==org.monflabs.util.number.Decimal128.class) {
+					return JsonUtil.toDecimal128(n);
 				}
 			}
 			if(boxed==Character.class && o instanceof CharSequence cs && cs.length()==1) {

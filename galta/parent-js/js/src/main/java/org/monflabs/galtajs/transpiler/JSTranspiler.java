@@ -186,6 +186,7 @@ public class JSTranspiler {
 			b.println("import org.monflabs.galtajs.rt.transpiler.*;");
 			b.println("import org.monflabs.galtajs.rt.interpreter.JSInterpretedRuntimeContext.VAR_TYPE;");
 			b.println("import org.monflabs.util.generators.*;");
+			b.println("import org.monflabs.util.number.Decimal128;");
 			
 			b.println("import static org.monflabs.galtajs.rt.RuntimeUtil.*;");
 			
@@ -443,6 +444,8 @@ public class JSTranspiler {
 			return "BigInteger";
 		} else if(value instanceof BigDecimal) {
 			return "BigDecimal";
+		} else if(value instanceof org.monflabs.util.number.Decimal128) {
+			return "Decimal128";
 		} else if(value instanceof CharSequence) {
 			return "String";
 		} else if(value instanceof String[]) {

@@ -38,6 +38,7 @@ Package root: `org.monflabs.json`
 ### Design Notes
 
 - `JsonObject` and `JsonArray` are **interfaces**, not classes. Every helper (typed getters and setters, `is*` tests, conversions, the `at*()` negative-index methods, the stream-like functions of arrays) is a `default` method built on the `Map`/`List` methods (`get`, `put`, `add`, `set`, `size`...): an implementation only provides the storage. The default implementation is in `json/java/` (`JsonObjectAsLinkedMap`, `JsonArrayAsArrayList` and their `Checked` variants, created by `JavaJsonFactory`); GaltaJS has its own (`JsonObjectAsScriptMap`, `JSArrayImpl`). There is no adapter over other JSON libraries: the values are always plain Java ones (`String`, `Number`, `Boolean`, `null`, `JsonObject`, `JsonArray`).
+- Number options (`JsonFactory.DECIMAL`/`OVERFLOW_DECIMAL`) include `DEC128`: `org.monflabs.util.number.Decimal128` (IEEE 754, with NaN, infinities and -0). NaN/infinity checks in the helpers go through `TypeUtil.isNaN/isInfinite`, which know Double, Float and Decimal128; a Decimal128 has no BigDecimal/BigInteger value when not finite. Typed access: `getDecimal128`/`asDecimal128`/`atDecimal128`, `Reducers.sumDecimal128()`.
 - The GaltaJS engine uses `JsonObject`/`JsonArray` as its native Object/Array types, so changes to these interfaces affect the JS engine.
 
 ## `json-jackson`

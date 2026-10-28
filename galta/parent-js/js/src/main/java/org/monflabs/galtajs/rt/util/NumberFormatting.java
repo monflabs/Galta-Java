@@ -16,6 +16,7 @@
 package org.monflabs.galtajs.rt.util;
 
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 
 import org.monflabs.galtajs.external.org_mozilla_javascript.DToA;
@@ -40,6 +41,8 @@ public class NumberFormatting {
 			return Long.toString(l,radix);
 		} else if(_this instanceof Double || _this instanceof Float) {
 			return numberToString(_this.doubleValue(),radix);
+		} else if(_this instanceof Decimal128 d) {
+			return suffix && d.isFinite() ? d.toString()+'m' : d.toString();
 		} else if(_this instanceof BigDecimal bd) {
 			if(radix==10) {
 				return suffix ? bd.toString()+'m' : bd.toString();

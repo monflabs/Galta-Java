@@ -16,6 +16,7 @@
 package tests.json.jsonvalues;
 
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 
 import org.junit.Before;
@@ -81,8 +82,11 @@ public class CompareGtTest extends ProjectTestCase {
 		assertFalse(json.get("v_int").gt(new BigInteger("33")));
 		assertFalse(json.get("v_int").gt(new BigInteger("34")));
 		assertTrue(json.get("v_int").gt(new BigDecimal("32")));
+		assertTrue(json.get("v_int").gt(Decimal128.of("32")));
 		assertFalse(json.get("v_int").gt(new BigDecimal("33")));
+		assertFalse(json.get("v_int").gt(Decimal128.of("33")));
 		assertFalse(json.get("v_int").gt(new BigDecimal("34")));
+		assertFalse(json.get("v_int").gt(Decimal128.of("34")));
 		assertFalse(json.get("v_int").gt("abc"));
 
 		assertTrue (json.get("v_double").gt((byte)32));
@@ -107,8 +111,11 @@ public class CompareGtTest extends ProjectTestCase {
 		assertFalse(json.get("v_double").gt(new BigInteger("33")));
 		assertFalse(json.get("v_double").gt(new BigInteger("34")));
 		assertTrue(json.get("v_double").gt(new BigDecimal("32")));
+		assertTrue(json.get("v_double").gt(Decimal128.of("32")));
 		assertFalse(json.get("v_double").gt(new BigDecimal("33")));
+		assertFalse(json.get("v_double").gt(Decimal128.of("33")));
 		assertFalse(json.get("v_double").gt(new BigDecimal("34")));
+		assertFalse(json.get("v_double").gt(Decimal128.of("34")));
 		assertFalse(json.get("v_double").gt("abc"));
 		
 		assertFalse(json.get("v_boolean").gt((byte)32));
@@ -167,8 +174,11 @@ public class CompareGtTest extends ProjectTestCase {
 		assertTrue(json.get("v_int").gte(new BigInteger("33")));
 		assertFalse(json.get("v_int").gte(new BigInteger("34")));
 		assertTrue(json.get("v_int").gte(new BigDecimal("32")));
+		assertTrue(json.get("v_int").gte(Decimal128.of("32")));
 		assertTrue(json.get("v_int").gte(new BigDecimal("33")));
+		assertTrue(json.get("v_int").gte(Decimal128.of("33")));
 		assertFalse(json.get("v_int").gte(new BigDecimal("34")));
+		assertFalse(json.get("v_int").gte(Decimal128.of("34")));
 		assertFalse(json.get("v_int").gte("abc"));
 
 		assertTrue (json.get("v_double").gte((byte)32));
@@ -193,8 +203,11 @@ public class CompareGtTest extends ProjectTestCase {
 		assertTrue(json.get("v_double").gte(new BigInteger("33")));
 		assertFalse(json.get("v_double").gte(new BigInteger("34")));
 		assertTrue(json.get("v_double").gte(new BigDecimal("32")));
+		assertTrue(json.get("v_double").gte(Decimal128.of("32")));
 		assertTrue(json.get("v_double").gte(new BigDecimal("33")));
+		assertTrue(json.get("v_double").gte(Decimal128.of("33")));
 		assertFalse(json.get("v_double").gte(new BigDecimal("34")));
+		assertFalse(json.get("v_double").gte(Decimal128.of("34")));
 		assertFalse(json.get("v_double").gte("abc"));
 		
 		assertFalse(json.get("v_boolean").gte((byte)32));

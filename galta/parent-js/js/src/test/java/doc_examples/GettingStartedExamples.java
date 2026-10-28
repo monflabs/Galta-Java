@@ -15,7 +15,7 @@
  */
 package doc_examples;
 
-import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.util.Date;
 import java.util.List;
 
@@ -41,7 +41,7 @@ public class GettingStartedExamples extends __BaseTestCase {
 			const prices = [{ item: 'pen', price: 1.5m }, { item: 'book', price: 12m }];
 			prices.*.price[].reduce((a, b) => a + b, 0m)
 			""");
-		assertEquals(new BigDecimal("13.5"), value);
+		assertEquals(Decimal128.of("13.5"), value);
 	}
 
 	public void testFirstProgram() {

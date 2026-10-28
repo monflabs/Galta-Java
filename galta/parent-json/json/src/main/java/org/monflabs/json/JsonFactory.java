@@ -21,6 +21,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.Writer;
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
@@ -152,14 +153,25 @@ public abstract class JsonFactory {
 	//
 	public enum INTEGER { INT, LONG, BIGINT }
 	public enum OVERFLOW_INTEGER { DOUBLE, BIGINT }
-	public enum DECIMAL { DOUBLE, BIGDEC }
-	public enum OVERFLOW_DECIMAL { DOUBLE, BIGDEC }
+	public enum DECIMAL { DOUBLE, BIGDEC, DEC128 }
+	public enum OVERFLOW_DECIMAL { DOUBLE, BIGDEC, DEC128 }
 
 	public INTEGER defaultInteger() { return INTEGER.INT; }
 	public OVERFLOW_INTEGER overflowInteger() { return OVERFLOW_INTEGER.BIGINT; }
 	public DECIMAL defaultDecimal() { return DECIMAL.DOUBLE; }
 	public OVERFLOW_DECIMAL overflowDecimal() { return OVERFLOW_DECIMAL.BIGDEC; }
 	
+	/**
+	 * Whether a decimal that must keep its exact value but is not parsed from a JSON literal (a database
+	 * DECIMAL column, text typed by a user) is a {@link org.monflabs.util.number.Decimal128} rather than a
+	 * {@link java.math.BigDecimal}: when the decimals are parsed as {@code DEC128}, or as doubles with
+	 * {@code DEC128} as the overflow type. Otherwise a BigDecimal, which does not lose precision.
+	 */
+	public boolean exactDecimalsAsDecimal128() {
+		return defaultDecimal()==DECIMAL.DEC128
+				|| (defaultDecimal()==DECIMAL.DOUBLE && overflowDecimal()==OVERFLOW_DECIMAL.DEC128);
+	}
+
 	public boolean useLongIntegers() {return true;}
 
 	
@@ -814,7 +826,16 @@ public abstract class JsonFactory {
 				throw new JsonException(e,"Number {0} is out of the BigDecimal range",s);
 			}
 		}
+		if (def==DECIMAL.DEC128) {
+			return Decimal128.of(s);
+		}
 		double d = Double.parseDouble(s);
+		if(overflowDecimal()==OVERFLOW_DECIMAL.DEC128 && !fitsDouble(s, d)) {
+			// Out of the double range or precision: a Decimal128 when it can hold the value (finite, not rounded
+			// to zero), else the double (Infinity or 0), like JSON.parse()
+			Decimal128 dec = Decimal128.of(s);
+			return dec.isFinite() && !dec.isZero() ? dec : d;
+		}
 		if(overflowDecimal()==OVERFLOW_DECIMAL.BIGDEC && !fitsDouble(s, d)) {
 			try {
 				return new BigDecimal(s);

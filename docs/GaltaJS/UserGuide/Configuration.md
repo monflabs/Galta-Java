@@ -29,7 +29,7 @@ JSEnvironment galta = GaltaJSEnvironment.create();
 assertTrue(galta.supportBigDecimalLiteral());
 assertTrue(galta.supportSequenceExtensions());
 assertTrue(galta.supportJavaNative());
-assertEquals(new BigDecimal("1"), galta.evaluateExpression("1m"));
+assertEquals(Decimal128.of("1"), galta.evaluateExpression("1m"));
 assertEquals("function", galta.evaluateExpression("typeof Java.type"));
 ```
 
@@ -89,6 +89,7 @@ Defaults are those of a bare `JSEnvironment.newBuilder()` (from `ConfigurationIm
 |---|---|---|---|
 | `supportLongPromotion(boolean)` | `false` | An `int` overflow produces a `Long` instead of a `Double`. | `true` |
 | `supportBigIntPromotion(boolean)` | `false` | A `Long` overflow produces a `BigInteger` (BigInt). | `false` |
+| `useDecimal128(boolean)` | `true` | Decimals (`m` literals, `forceBigDecimalOperations`, JSON decimals, `Math.PIm`...) are `Decimal128` instead of `BigDecimal`; the global `Decimal` is then `Decimal128`. | - |
 | `supportBigDecimal(boolean)` | `false` | `BigDecimal` values get the Decimal accessor (methods, arithmetic). | `true` |
 | `supportBigDecimalLiteral(boolean)` | `false` | Accepts the `1.5m` literal syntax. | `true` |
 | `supportBigDecimalPromotion(boolean)` | `false` | JSON numbers that do not fit a `double` are parsed as `BigDecimal`. | - |
@@ -96,7 +97,7 @@ Defaults are those of a bare `JSEnvironment.newBuilder()` (from `ConfigurationIm
 | `supportBigNumberMath(boolean)` | `false` | `Math` accepts BigInt/Decimal arguments and exposes `Math.PIm`, `Math.SQRT2m`, ... | `true` |
 | `forceBigDecimalOperations(boolean)` | `false` | Every floating point literal and operation uses `BigDecimal`. | - |
 | `supportParseIntOctal(boolean)` | `true` | Reserved: the flag is not read by the runtime today. | `false` |
-| `mathContext(MathContext, String)` | `DECIMAL128`, `"java.math.MathContext.DECIMAL128"` | Precision of Decimal arithmetic; the string is the Java expression emitted by the transpiler. | - |
+| `mathContext(MathContext, String)` | `DECIMAL128`, `"java.math.MathContext.DECIMAL128"` | Precision of `BigDecimal` decimal arithmetic (`useDecimal128(false)`); the string is the Java expression emitted by the transpiler. | - |
 
 ### Standard objects and Java
 
@@ -142,7 +143,9 @@ assertNull(env.getProperty("missing"));
 Sample: `doc_examples/ConfigurationExamples.java` (`testDecimalPrecision`)
 
 ```java
+// The MathContext applies to the BigDecimal decimals; a Decimal128 always has 34 digits
 JSEnvironment env = GaltaJSEnvironment.newBuilder()
+        .useDecimal128(false)
         .mathContext(MathContext.DECIMAL64, "java.math.MathContext.DECIMAL64")
         .build();
 assertEquals(new BigDecimal("0.3333333333333333"), env.evaluateExpression("1m/3m"));

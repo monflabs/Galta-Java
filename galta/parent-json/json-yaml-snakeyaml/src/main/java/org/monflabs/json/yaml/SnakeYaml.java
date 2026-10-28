@@ -33,6 +33,7 @@ import org.monflabs.json.JsonArray;
 import org.monflabs.json.JsonException;
 import org.monflabs.json.JsonFactory;
 import org.monflabs.json.JsonObject;
+import org.monflabs.util.TypeUtil;
 import org.snakeyaml.engine.v2.api.ConstructNode;
 import org.snakeyaml.engine.v2.api.Dump;
 import org.snakeyaml.engine.v2.api.DumpSettings;
@@ -257,6 +258,16 @@ public class SnakeYaml {
 						throw new JsonException(null, "The value {0} cannot be represented in JSON", data);
 					}
 				}
+				if(data instanceof org.monflabs.util.number.Decimal128 dec) {
+					if(!dec.isFinite()) {
+						throw new JsonException(null, "The value {0} cannot be represented in JSON", data);
+					}
+					String s = dec.toString();
+					if(s.indexOf('.')<0 && s.indexOf('E')<0) {
+						s = s+".0";
+					}
+					return representScalar(Tag.FLOAT, s);
+				}
 				if(data instanceof BigDecimal bd) {
 					// A plain decimal, read back exactly (as a BigDecimal when a double cannot hold it)
 					String s = bd.toString();
@@ -409,7 +420,7 @@ public class SnakeYaml {
 			}
 		}
 		Object value = yaml!=null ? yaml.construct(node) : null;
-		if(value instanceof Double d && (d.isNaN() || d.isInfinite())) {
+		if(value instanceof Number n && (TypeUtil.isNaN(n) || TypeUtil.isInfinite(n))) {
 			throw new JsonException(null, "The YAML value {0} cannot be represented in JSON", value);
 		}
 		return value;

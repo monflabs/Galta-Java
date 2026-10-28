@@ -34,6 +34,7 @@ import tests.util.ScopedValueTest;
 import tests.util.TextBuilderTest;
 import tests.collections.LRUCacheTest;
 import tests.datetime.ISO8601Test;
+import tests.number.Decimal128Test;
 import tests.datetime.PeriodFormatterTest;
 import tests.dependencies.CircularDependenciesTest;
 import tests.dependencies.DependenciesTest;
@@ -85,6 +86,7 @@ public class AllUtilTests extends TestSuite {
 
 		suite.addTestSuite(PeriodFormatterTest.class);
 		suite.addTestSuite(ISO8601Test.class);
+		suite.addTestSuite(Decimal128Test.class);
 
 		suite.addTestSuite(PojoAccessorTest.class);
 		suite.addTestSuite(ClassMetadataTest.class);

@@ -4,6 +4,34 @@ All notable changes to Galta. Versions follow the `<revision>` of the root
 `pom.xml`; the release notes of a GitHub release are the matching section below
 (`buildtools/release.sh` extracts it).
 
+## Unreleased
+
+### Utilities
+
+- New `org.monflabs.util.number.Decimal128`: the IEEE 754 decimal128 value of the
+  ECMAScript Decimal proposal (34 digits, `NaN`, infinities, `-0`), stored in two
+  longs. `TypeUtil.toDecimal128()`, `isNaN()` and `isInfinite()`; `ClassMetadata`
+  converts to it. See `docs/Decimal128-Design.md`.
+
+### GaltaJS
+
+- Decimals are now `Decimal128` by default (new builder flag `useDecimal128`, default
+  `true`): `m` literals, `forceBigDecimalOperations`, the decimals the JSON factory
+  parses, and the `Math.PIm`-style constants. `useDecimal128(false)` restores the
+  `BigDecimal` decimals; both types are always supported as values. New global
+  `Decimal128` (the proposal's prototype methods), `NaN`/`Infinity`/`-0` decimals,
+  division by zero giving `Infinity`/`NaN`, and `Math` functions on `Decimal128`.
+  `typeof` stays `"decimal"`. See `docs/GaltaJS/Extensions/Decimal.md`.
+
+### JSON library
+
+- `JsonFactory.DECIMAL.DEC128` and `OVERFLOW_DECIMAL.DEC128` parse decimals as
+  `Decimal128`; the stringifier, equality, ordering, hashing, JSONPath
+  comparisons, YAML, Jackson and Jayway adapters understand it. Typed access:
+  `getDecimal128()`, `asDecimal128()`, `atDecimal128()`, `Reducers.sumDecimal128()`.
+  `JsonFactory.exactDecimalsAsDecimal128()` tells the consumers that read exact decimals
+  outside a JSON text (database columns, user input) which decimal type to create.
+
 ## 0.8.0 (2026-10-02)
 
 First public release: Galta is published to Maven Central under the
@@ -17,6 +45,16 @@ First public release: Galta is published to Maven Central under the
   and the GaltaJS playground running in the browser (CheerpJ).
 - Java 21 or later is required.
 - A Getting Started page lists every published artifact with its dependencies.
+
+### GaltaJS
+
+- Decimals are now `Decimal128` by default (new builder flag `useDecimal128`, default
+  `true`): `m` literals, `forceBigDecimalOperations`, the decimals the JSON factory
+  parses, and the `Math.PIm`-style constants. `useDecimal128(false)` restores the
+  `BigDecimal` decimals; both types are always supported as values. New global
+  `Decimal128` (the proposal's prototype methods), `NaN`/`Infinity`/`-0` decimals,
+  division by zero giving `Infinity`/`NaN`, and `Math` functions on `Decimal128`.
+  `typeof` stays `"decimal"`. See `docs/GaltaJS/Extensions/Decimal.md`.
 
 ### JSON library
 

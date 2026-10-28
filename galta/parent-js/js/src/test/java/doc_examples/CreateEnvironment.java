@@ -15,7 +15,7 @@
  */
 package doc_examples;
 
-import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.environments.GaltaJSEnvironment;
@@ -43,9 +43,9 @@ public class CreateEnvironment extends __BaseTestCase {
 	public void testGaltaJSExpression() {
 		JSEnvironment env = GaltaJSEnvironment.create();
 		Object o = env.evaluateExpression("1m / 3m");
-		// 'm' literals are java.math.BigDecimal values, computed with MathContext.DECIMAL128 by default
-		assertEquals(BigDecimal.class, o.getClass());
-		assertEquals(new BigDecimal("0.3333333333333333333333333333333333"), o);
+		// 'm' literals are org.monflabs.util.number.Decimal128 values, are Decimal128 values (34 digits)
+		assertEquals(Decimal128.class, o.getClass());
+		assertEquals(Decimal128.of("0.3333333333333333333333333333333333"), o);
 	}
 
 	public void testGaltaJSWithBuilder() {
@@ -56,7 +56,7 @@ public class CreateEnvironment extends __BaseTestCase {
 				.registerLibrary(new StandardLibrary())
 				.build();
 		Object o = env.evaluateExpression("1m / 4m + Math.abs(-1)");
-		assertEquals(new BigDecimal("1.25"), o);
+		assertEquals(Decimal128.of("1.25"), o);
 	}
 
 	//

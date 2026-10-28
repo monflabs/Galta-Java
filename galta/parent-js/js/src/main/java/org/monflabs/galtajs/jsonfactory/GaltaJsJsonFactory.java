@@ -51,7 +51,7 @@ public class GaltaJsJsonFactory extends JavaJsonFactory {
 	@Override
 	public DECIMAL defaultDecimal() { 
 		//return DECIMAL.DOUBLE; 
-		return env.forceBigDecimalOperations() ? DECIMAL.BIGDEC : DECIMAL.DOUBLE;
+		return env.forceBigDecimalOperations() ? (env.useDecimal128() ? DECIMAL.DEC128 : DECIMAL.BIGDEC) : DECIMAL.DOUBLE;
 	}
 	@Override
 	public OVERFLOW_INTEGER overflowInteger() { 
@@ -61,7 +61,7 @@ public class GaltaJsJsonFactory extends JavaJsonFactory {
 	@Override
 	public OVERFLOW_DECIMAL overflowDecimal() { 
 		//return OVERFLOW_DECIMAL.DOUBLE; 
-		return env.supportBigDecimalPromotion() ? OVERFLOW_DECIMAL.BIGDEC : OVERFLOW_DECIMAL.DOUBLE;
+		return env.supportBigDecimalPromotion() ? (env.useDecimal128() ? OVERFLOW_DECIMAL.DEC128 : OVERFLOW_DECIMAL.BIGDEC) : OVERFLOW_DECIMAL.DOUBLE;
 	}
 	@Override
 	public boolean useLongIntegers() {

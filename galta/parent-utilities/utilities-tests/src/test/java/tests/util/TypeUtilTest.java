@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import org.monflabs.util.TypeUtil;
+import org.monflabs.util.number.Decimal128;
 
 import tests.ProjectTestCase;
 
@@ -38,6 +39,32 @@ public class TypeUtilTest extends ProjectTestCase {
 			assertThrows(ArithmeticException.class, () -> TypeUtil.toBigInteger(n));
 		}
 		assertEquals( new BigDecimal(Double.MAX_VALUE).toBigInteger(), TypeUtil.toBigInteger(Double.MAX_VALUE) );
+	}
+
+	public void testDecimal128() {
+		assertEquals(new BigDecimal("0.1"), TypeUtil.toBigDecimal(Decimal128.of("0.1")));
+		assertEquals(BigDecimal.ZERO, TypeUtil.toBigDecimal(Decimal128.of("-0")));
+		assertEquals(BigInteger.valueOf(12), TypeUtil.toBigInteger(Decimal128.of("12.9")));
+		for (Decimal128 n : new Decimal128[] {Decimal128.NaN, Decimal128.POSITIVE_INFINITY, Decimal128.NEGATIVE_INFINITY}) {
+			assertThrows(ArithmeticException.class, () -> TypeUtil.toBigDecimal(n));
+			assertThrows(ArithmeticException.class, () -> TypeUtil.toBigInteger(n));
+		}
+		assertEquals(Decimal128.of("0.1"), TypeUtil.toDecimal128(0.1));
+		assertEquals(Decimal128.of("0.1"), TypeUtil.toDecimal128(0.1f));
+		assertEquals(Decimal128.of(7), TypeUtil.toDecimal128(7));
+		assertEquals(Decimal128.of(-7), TypeUtil.toDecimal128((byte)-7));
+		assertEquals(Decimal128.of("1.5"), TypeUtil.toDecimal128(new BigDecimal("1.50")));
+		assertEquals(Decimal128.of(BigInteger.TEN.pow(40)), TypeUtil.toDecimal128(BigInteger.TEN.pow(40)));
+		assertEquals(Decimal128.NaN, TypeUtil.toDecimal128(Double.NaN));
+		assertEquals(Decimal128.NEGATIVE_INFINITY, TypeUtil.toDecimal128(Float.NEGATIVE_INFINITY));
+		assertEquals(Decimal128.of("2.5"), TypeUtil.toDecimal128(new TextNumber("2.5")));
+		assertTrue(TypeUtil.isNaN(Decimal128.NaN));
+		assertTrue(TypeUtil.isNaN(Double.NaN));
+		assertTrue(TypeUtil.isNaN(Float.NaN));
+		assertFalse(TypeUtil.isNaN(1));
+		assertTrue(TypeUtil.isInfinite(Decimal128.NEGATIVE_INFINITY));
+		assertTrue(TypeUtil.isInfinite(Double.POSITIVE_INFINITY));
+		assertFalse(TypeUtil.isInfinite(Decimal128.NaN));
 	}
 
 	public void testPrimitiveTargets() {

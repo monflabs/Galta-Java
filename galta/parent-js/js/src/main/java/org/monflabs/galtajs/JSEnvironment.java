@@ -18,6 +18,7 @@ package org.monflabs.galtajs;
 import java.lang.ref.WeakReference;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import org.monflabs.util.number.Decimal128;
 import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.Date;
@@ -71,6 +72,8 @@ import org.monflabs.galtajs.rt.builtins.primitives.symbol.Symbol;
 import org.monflabs.galtajs.rt.builtins.primitives.symbol.SymbolAccessor;
 import org.monflabs.galtajs.rt.builtins.standard.bigdecimal.BigDecimalAccessor;
 import org.monflabs.galtajs.rt.builtins.standard.bigdecimal.BuiltinBigDecimalConstructor;
+import org.monflabs.galtajs.rt.builtins.standard.decimal128.BuiltinDecimal128Constructor;
+import org.monflabs.galtajs.rt.builtins.standard.decimal128.Decimal128Accessor;
 import org.monflabs.galtajs.rt.builtins.standard.bigint.BigIntAccessor;
 import org.monflabs.galtajs.rt.builtins.standard.bigint.BuiltinBigIntConstructor;
 import org.monflabs.galtajs.rt.builtins.standard.date.DateAccessor;
@@ -394,6 +397,11 @@ public final class JSEnvironment implements JSConfiguration {
 			this.configuration.forceBigDecimalOperations = forceBigDecimalOperations;
 			return this;
 		}
+		public Builder useDecimal128(boolean useDecimal128) {
+			checkBuilder();
+			this.configuration.useDecimal128 = useDecimal128;
+			return this;
+		}
 		public Builder supportMixedBigNumber(boolean supportMixedBigNumber) {
 			checkBuilder();
 			this.configuration.supportMixedBigNumber = supportMixedBigNumber;
@@ -586,7 +594,10 @@ public final class JSEnvironment implements JSConfiguration {
 		standardObjects.setOwnProperty(BuiltinFunctionConstructor.CLASSNAME,new BuiltinFunctionConstructor(this),PropertyDescriptor.DESC_METHOD);
 
 		standardObjects.setOwnProperty(BuiltinBigIntConstructor.CLASSNAME,new BuiltinBigIntConstructor(this),PropertyDescriptor.DESC_METHOD);
-		standardObjects.setOwnProperty(BuiltinBigDecimalConstructor.CLASSNAME,new BuiltinBigDecimalConstructor(this),PropertyDescriptor.DESC_METHOD);
+		BuiltinDecimal128Constructor decimal128 = new BuiltinDecimal128Constructor(this);
+		standardObjects.setOwnProperty(BuiltinDecimal128Constructor.CLASSNAME,decimal128,PropertyDescriptor.DESC_METHOD);
+		// The global Decimal is the BigDecimal one, or the Decimal128 one (as in the proposal) when selected
+		standardObjects.setOwnProperty(BuiltinBigDecimalConstructor.CLASSNAME,useDecimal128() ? decimal128 : new BuiltinBigDecimalConstructor(this),PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(DateConstructor.CLASSNAME,new DateConstructor(this),PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(RegExpConstructor.CLASSNAME,new RegExpConstructor(this),PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(BuiltinIteratorConstructor.CLASSNAME,new BuiltinIteratorConstructor(this),PropertyDescriptor.DESC_METHOD);
@@ -683,6 +694,9 @@ public final class JSEnvironment implements JSConfiguration {
 		if(instance instanceof Number) {
 			if(instance instanceof BigInteger) {
 		        return new BigIntAccessor(this);
+			}
+			if(instance instanceof Decimal128) {
+				return new Decimal128Accessor(this);
 			}
 			if(instance instanceof BigDecimal) {
 				if(supportBigDecimal()) {
@@ -962,6 +976,10 @@ public final class JSEnvironment implements JSConfiguration {
 	@Override
 	public final boolean forceBigDecimalOperations() {
 		return configuration.forceBigDecimalOperations();
+	}
+	@Override
+	public final boolean useDecimal128() {
+		return configuration.useDecimal128();
 	}
 	@Override
 	public final boolean supportMixedBigNumber() {

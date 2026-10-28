@@ -1273,7 +1273,7 @@ public abstract class JsonParser {
 			}
 			// A normal double holds 15 significant digits: a longer literal may lose some,
 			// and the factory then keeps it as a BigDecimal
-			if(significant>15 && jsonFactory.overflowDecimal()==JsonFactory.OVERFLOW_DECIMAL.BIGDEC
+			if(significant>15 && jsonFactory.overflowDecimal()!=JsonFactory.OVERFLOW_DECIMAL.DOUBLE
 					&& !isShortest(mantissa, e, d)) {
 				return null;
 			}

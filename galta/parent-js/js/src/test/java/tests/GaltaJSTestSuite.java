@@ -324,6 +324,9 @@ public class GaltaJSTestSuite {
 		suite.addTestSuite(tests.javascript.builtin.regexp.RegExpJoniLoneSurrogateTest.class);
 		suite.addTestSuite(tests.javascript.builtin.regexp.RegExpJoniRepeatCaptureResetTest.class);
 		
+		// Decimal128
+		suite.addTestSuite(tests.galtajs.builtin.decimal128.Decimal128Test.class);
+
 		// Set
 		suite.addTestSuite(tests.javascript.builtin.set.prototype._IteratorTest.class);
 		suite.addTestSuite(tests.javascript.builtin.set.prototype.AddTest.class);
@@ -819,6 +822,7 @@ public class GaltaJSTestSuite {
 
 		// otherOp
 		suite.addTestSuite(tests.galtajs.op.ForceBigDecimalTest.class);
+		suite.addTestSuite(tests.galtajs.op.ForceDecimal128Test.class);
 		suite.addTestSuite(tests.galtajs.op.OverflowBigIntPromotionTest.class);
 		suite.addTestSuite(tests.galtajs.op.OverflowTest.class);
 		

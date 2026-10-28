@@ -154,6 +154,13 @@ public final class ExprBinaryOp extends ExprNode {
 	 * (an integer literal larger than 2^53 is not rounded). UNORDERED for NaN.
 	 */
 	static int compareNumbers(Number n1, Number n2) {
+		if(n1 instanceof org.monflabs.util.number.Decimal128 || n2 instanceof org.monflabs.util.number.Decimal128) {
+			// Exact, with the infinities and -0 of a Decimal128
+			if(isNaN(n1) || isNaN(n2)) {
+				return UNORDERED;
+			}
+			return Integer.signum(org.monflabs.json.JsonUtil.compareNumber(n1, n2));
+		}
 		if(n1 instanceof Double || n1 instanceof Float || n2 instanceof Double || n2 instanceof Float) {
 			double d1 = n1.doubleValue();
 			double d2 = n2.doubleValue();
@@ -194,7 +201,7 @@ public final class ExprBinaryOp extends ExprNode {
 		return false;
 	}
 	private static boolean isNaN(Number n) {
-		return (n instanceof Double d && d.isNaN()) || (n instanceof Float f && f.isNaN());
+		return org.monflabs.util.TypeUtil.isNaN(n);
 	}
 	
 	// RFC 9535: strings are compared by Unicode scalar values, not UTF-16 code units

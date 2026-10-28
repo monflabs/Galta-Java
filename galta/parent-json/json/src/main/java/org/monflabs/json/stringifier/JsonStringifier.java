@@ -859,6 +859,15 @@ public abstract class JsonStringifier {
     			return;
     		}
     	}
+    	if(n instanceof org.monflabs.util.number.Decimal128 dec) {
+    		// All the digits; -0 keeps its sign
+    		if(dec.isFinite()) {
+    			out(dec.toString());
+    		} else {
+    			outNullLiteral();
+    		}
+    		return;
+    	}
     	if(n instanceof java.math.BigInteger || n instanceof java.math.BigDecimal
     			|| n instanceof Short || n instanceof Byte) {
     		out(JsonUtil.toString(n));

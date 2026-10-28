@@ -136,6 +136,9 @@ public class MonfLabsMappingProvider implements MappingProvider {
     	if(t==BigDecimal.class) {
     		return toBigDecimal(n);
     	}
+    	if(t==org.monflabs.util.number.Decimal128.class) {
+    		return org.monflabs.util.TypeUtil.toDecimal128(n);
+    	}
     	if(t==Integer.class || t==Long.class || t==Short.class || t==Byte.class || t==BigInteger.class) {
     		BigInteger bi;
     		try {
@@ -162,7 +165,7 @@ public class MonfLabsMappingProvider implements MappingProvider {
      * representation is 0.1, but 9007199254740993 (2^53+1) or 1e300 as a float do not.
      */
     private static Object toFloatingExact(Number n, boolean toFloat) {
-    	if(n instanceof Double || n instanceof Float) {
+    	if(n instanceof Double || n instanceof Float || n instanceof org.monflabs.util.number.Decimal128) {
     		double d = n.doubleValue();
     		if(Double.isNaN(d) || Double.isInfinite(d)) {
     			return toFloat ? (Object)(float)d : (Object)d;
@@ -185,6 +188,12 @@ public class MonfLabsMappingProvider implements MappingProvider {
     private static BigDecimal toBigDecimal(Number n) {
     	if(n instanceof BigDecimal bd) return bd;
     	if(n instanceof BigInteger bi) return new BigDecimal(bi);
+    	if(n instanceof org.monflabs.util.number.Decimal128 dec) {
+    		if(!dec.isFinite()) {
+    			throw new MappingException("Cannot convert "+dec+" to a decimal number");
+    		}
+    		return dec.toBigDecimal();
+    	}
     	if(n instanceof Double || n instanceof Float) {
     		double d = n.doubleValue();
     		if(Double.isNaN(d) || Double.isInfinite(d)) {

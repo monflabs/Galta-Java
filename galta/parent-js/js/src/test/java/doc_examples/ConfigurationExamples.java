@@ -15,7 +15,7 @@
  */
 package doc_examples;
 
-import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.MathContext;
 
 import org.monflabs.galtajs.JSEnvironment;
@@ -48,7 +48,7 @@ public class ConfigurationExamples extends __BaseTestCase {
 		assertTrue(galta.supportBigDecimalLiteral());
 		assertTrue(galta.supportSequenceExtensions());
 		assertTrue(galta.supportJavaNative());
-		assertEquals(new BigDecimal("1"), (Object)galta.evaluateExpression("1m"));
+		assertEquals(Decimal128.of("1"), (Object)galta.evaluateExpression("1m"));
 		assertEquals("function", (Object)galta.evaluateExpression("typeof Java.type"));
 	}
 
@@ -94,7 +94,7 @@ public class ConfigurationExamples extends __BaseTestCase {
 	public void testEnableGaltaJSExtensionsRegistersNoLibrary() {
 		// The flags are on, but there is no Math, JSON, console... without StandardLibrary
 		JSEnvironment env = JSEnvironment.newBuilder().enableGaltaJSExtensions().build();
-		assertEquals(new BigDecimal("0.25"), (Object)env.evaluateExpression("1m/4m"));
+		assertEquals(Decimal128.of("0.25"), (Object)env.evaluateExpression("1m/4m"));
 		try {
 			env.evaluateExpression("Math.abs(-1)");
 			fail();
@@ -114,10 +114,12 @@ public class ConfigurationExamples extends __BaseTestCase {
 	}
 
 	public void testDecimalPrecision() {
+		// The MathContext applies to the BigDecimal decimals; a Decimal128 always has 34 digits
 		JSEnvironment env = GaltaJSEnvironment.newBuilder()
+				.useDecimal128(false)
 				.mathContext(MathContext.DECIMAL64, "java.math.MathContext.DECIMAL64")
 				.build();
-		assertEquals(new BigDecimal("0.3333333333333333"), (Object)env.evaluateExpression("1m/3m"));
+		assertEquals(new java.math.BigDecimal("0.3333333333333333"), (Object)env.evaluateExpression("1m/3m"));
 	}
 
 	public void testScriptCache() {

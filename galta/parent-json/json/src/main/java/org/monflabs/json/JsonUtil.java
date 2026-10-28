@@ -17,6 +17,7 @@ package org.monflabs.json;
 
 
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.text.MessageFormat;
 import java.time.LocalDate;
@@ -140,6 +141,12 @@ public abstract class JsonUtil extends TypeUtil {
 	public static BigDecimal checkBigDecimal(Object object) {
 		if(object instanceof Number n) {
 			return bigDecimalValue(n, true);
+		}
+		throw new JsonException(null,"Value {0} is not a number",toDebugString(object));
+	}
+	public static Decimal128 checkDecimal128(Object object) {
+		if(object instanceof Number n) {
+			return toDecimal128(n);
 		}
 		throw new JsonException(null,"Value {0} is not a number",toDebugString(object));
 	}
@@ -303,6 +310,20 @@ public abstract class JsonUtil extends TypeUtil {
 	public static BigDecimal checkBigDecimal(Object value, int index) {
 		try {
 			return checkBigDecimal(value);
+		} catch(JsonException e) {
+			throw at(e, indexLocation(index));
+		}
+	}
+	public static Decimal128 checkDecimal128(Object value, String key) {
+		try {
+			return checkDecimal128(value);
+		} catch(JsonException e) {
+			throw at(e, keyLocation(key));
+		}
+	}
+	public static Decimal128 checkDecimal128(Object value, int index) {
+		try {
+			return checkDecimal128(value);
 		} catch(JsonException e) {
 			throw at(e, indexLocation(index));
 		}
@@ -500,6 +521,16 @@ public abstract class JsonUtil extends TypeUtil {
 		}
 		try {
 			return new BigDecimal(value);
+		} catch(Exception e) {
+			throw new JsonException(e,"Cannot parse number value {0}", value);
+		}
+	}
+	public static Decimal128 parseDecimal128(String value) {
+		if(StringUtil.isEmpty(value)) {
+			throw new JsonException(null,"Value is null");
+		}
+		try {
+			return Decimal128.of(value);
 		} catch(Exception e) {
 			throw new JsonException(e,"Cannot parse number value {0}", value);
 		}
@@ -726,6 +757,17 @@ public abstract class JsonUtil extends TypeUtil {
 		return n!=null ? bigDecimalValue(n, false) : defaultValue;
 	}
 
+	/**
+	 * The Decimal128 value of a number (NaN and the infinities are kept; rounded to 34 digits).
+	 */
+	public static Decimal128 asDecimal128(Object v) {
+		return asDecimal128(v, Decimal128.ZERO);
+	}
+	public static Decimal128 asDecimal128(Object v, Decimal128 defaultValue) {
+		Number n = asNumber(v, null);
+		return n!=null ? toDecimal128(n) : defaultValue;
+	}
+
 	public static boolean asBoolean(Object v) {
 		return asBoolean(v, false);
 	}
@@ -743,6 +785,9 @@ public abstract class JsonUtil extends TypeUtil {
 			}
 			if(n instanceof BigInteger bi) {
 				return bi.signum()!=0;
+			}
+			if(n instanceof Decimal128 dec) {
+				return !dec.isNaN() && !dec.isZero();
 			}
 			double d = n.doubleValue();
 			return d!=0 && !Double.isNaN(d);
@@ -793,7 +838,7 @@ public abstract class JsonUtil extends TypeUtil {
 			double d = n.doubleValue();
 			return Double.isNaN(d) ? BigInteger.ZERO : BigInteger.valueOf(d>0 ? Long.MAX_VALUE : Long.MIN_VALUE);
 		}
-		if(n instanceof BigDecimal || n instanceof Double || n instanceof Float) {
+		if(n instanceof BigDecimal || n instanceof Double || n instanceof Float || n instanceof Decimal128) {
 			return toBigDecimal(n).toBigInteger();
 		}
 		// Other Number implementations (AtomicLong, LazilyParsedNumber...)
@@ -815,9 +860,6 @@ public abstract class JsonUtil extends TypeUtil {
 			return Double.isNaN(d) ? BigDecimal.ZERO : BigDecimal.valueOf(d>0 ? Double.MAX_VALUE : -Double.MAX_VALUE);
 		}
 		return toBigDecimal(n);
-	}
-	private static boolean isInfinite(Number n) {
-		return (n instanceof Double d && d.isInfinite()) || (n instanceof Float f && f.isInfinite());
 	}
 
 
@@ -881,6 +923,15 @@ public abstract class JsonUtil extends TypeUtil {
 		}
 		if(n instanceof BigDecimal bd) {
 			return clampToLong(bd.toBigInteger());
+		}
+		if(n instanceof Decimal128 dec) {
+			if(dec.isNaN()) {
+				return 0;
+			}
+			if(dec.isInfinite()) {
+				return dec.signum()>0 ? Long.MAX_VALUE : Long.MIN_VALUE;
+			}
+			return clampToLong(dec.toBigDecimal().toBigInteger());
 		}
 		// long, int... as is; double and float saturate (and NaN is 0)
 		return n.longValue();
@@ -1197,6 +1248,16 @@ public abstract class JsonUtil extends TypeUtil {
 		if(nan1 || nan2) {
 			return nan1 ? (nan2 ? 0 : 1) : -1;
 		}
+		if(n1 instanceof Decimal128 || n2 instanceof Decimal128) {
+			// Infinities compare by their sign with anything (a huge BigInteger is finite)
+			boolean inf1 = isInfinite(n1);
+			boolean inf2 = isInfinite(n2);
+			if(inf1 || inf2) {
+				int s1 = inf1 ? (n1.doubleValue()>0 ? 1 : -1) : 0;
+				int s2 = inf2 ? (n2.doubleValue()>0 ? 1 : -1) : 0;
+				return inf1 && inf2 ? Integer.compare(s1, s2) : inf1 ? s1 : -s2;
+			}
+		}
 		boolean i1 = isIntegral(n1);
 		boolean i2 = isIntegral(n2);
 		if(i1 && i2) {
@@ -1236,9 +1297,6 @@ public abstract class JsonUtil extends TypeUtil {
 	}
 	private static final long MAX_EXACT_DOUBLE_INT = 1L<<53;
 
-	private static boolean isNaN(Number n) {
-		return (n instanceof Double d && d.isNaN()) || (n instanceof Float f && f.isNaN());
-	}
 	private static boolean isIntegral(Number n) {
 		return n instanceof Integer || n instanceof Long || n instanceof Short || n instanceof Byte;
 	}
@@ -1249,6 +1307,9 @@ public abstract class JsonUtil extends TypeUtil {
 		}
 		if(n instanceof BigInteger bi) {
 			return new BigDecimal(bi);
+		}
+		if(n instanceof Decimal128 dec) {
+			return dec.toBigDecimal();	// -0 is 0
 		}
 		if(n instanceof Double d) {
 			return BigDecimal.valueOf(d);
@@ -1281,6 +1342,9 @@ public abstract class JsonUtil extends TypeUtil {
 		}
 		if(n instanceof Float f && (f.isNaN() || f.isInfinite())) {
 			return Double.hashCode(f.doubleValue());
+		}
+		if(n instanceof Decimal128 dec && !dec.isFinite()) {
+			return Double.hashCode(dec.doubleValue());	// NaN, like the doubles, and the infinities
 		}
 		BigDecimal bd = exactDecimal(n);
 		if(bd.signum()==0) {

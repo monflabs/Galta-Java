@@ -331,7 +331,9 @@ public class Console extends NativeObject {
 	                        		replaceArg = RuntimeUtil.toString(getEnvironment(), n);
 	                        	} else if(n instanceof BigInteger bi) {
 		                            replaceArg = bi.toString();
-	                        	} else if(n instanceof BigDecimal bd) {
+	                        	} else if(n instanceof org.monflabs.util.number.Decimal128 d128) {
+                        		replaceArg = d128.isFinite() ? d128.toBigInteger().toString() : RuntimeUtil.toString(getEnvironment(), n);
+                        	} else if(n instanceof BigDecimal bd) {
 	                        		replaceArg = JsonUtil.toBigInteger(bd).toString();
 	                        	} else {
 	                        		if(n instanceof Double || n instanceof Float) {

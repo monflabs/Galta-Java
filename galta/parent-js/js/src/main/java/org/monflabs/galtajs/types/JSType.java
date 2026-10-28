@@ -49,6 +49,7 @@ public class JSType {
 	public static JSType DOUBLE = new JSType(Double.TYPE);
 	public static JSType BIGINTEGER = new JSType(BigInteger.class);
 	public static JSType BIGDECIMAL = new JSType(BigDecimal.class);
+	public static JSType DECIMAL128 = new JSType(org.monflabs.util.number.Decimal128.class);
 	public static JSType STRING = new JSType(String.class);
 
 	// The value is definitely exactly `null` / exactly `undefined`.

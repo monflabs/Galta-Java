@@ -17,6 +17,7 @@ package org.monflabs.json;
 
 import java.io.Reader;
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -313,6 +314,14 @@ public interface JsonArray extends JsonContainer, List<Object> {
 			return o;
 		}
 		return JsonUtil.checkBigDecimal(v, index);
+	}
+	
+	public default Decimal128 getDecimal128(int index) {
+		Object v=item(index);
+		if(v instanceof Decimal128 o) {
+			return o;
+		}
+		return JsonUtil.checkDecimal128(v, index);
 	}
 	
 	public default String getString(int index) {
@@ -621,6 +630,20 @@ public interface JsonArray extends JsonContainer, List<Object> {
 				}
 				// Generate an error message...
 				return JsonUtil.checkBigDecimal(v, index);
+			}
+		}
+		return defaultValue;
+	}
+	
+	public default Decimal128 getDecimal128(int index, Decimal128 defaultValue) {
+		if(has(index)) {
+			Object v=get(index);
+			if(v!=null) {
+				if(v instanceof Decimal128 o) {
+					return o;
+				}
+				// Generate an error message...
+				return JsonUtil.checkDecimal128(v, index);
 			}
 		}
 		return defaultValue;
@@ -1592,6 +1615,12 @@ public interface JsonArray extends JsonContainer, List<Object> {
 		return JsonUtil.asBigInteger(getOrDefault(index,null),defaultValue);
 	}
 	
+	public default Decimal128 asDecimal128(int index) {
+		return JsonUtil.asDecimal128(getOrDefault(index,null));
+	}
+	public default Decimal128 asDecimal128(int index, Decimal128 defaultValue) {
+		return JsonUtil.asDecimal128(getOrDefault(index,null),defaultValue);
+	}
 	public default BigDecimal asBigDecimal(int index) {
 		return JsonUtil.asBigDecimal(getOrDefault(index,null));
 	}
@@ -1754,6 +1783,18 @@ public interface JsonArray extends JsonContainer, List<Object> {
 	}
 	public default BigInteger atBigInteger(int index) {
 		return getBigInteger(fromEnd(index));
+	}
+	public default Decimal128 atDecimal128(int index) {
+		return getDecimal128(fromEnd(index));
+	}
+	public default Decimal128 atDecimal128(int index, Decimal128 defaultValue) {
+		return getDecimal128(fromEnd(index), defaultValue);
+	}
+	public default Decimal128 asDecimal128At(int index) {
+		return asDecimal128(fromEnd(index));
+	}
+	public default Decimal128 asDecimal128At(int index, Decimal128 defaultValue) {
+		return asDecimal128(fromEnd(index), defaultValue);
 	}
 	public default BigDecimal atBigDecimal(int index) {
 		return getBigDecimal(fromEnd(index));

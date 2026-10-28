@@ -16,6 +16,7 @@
 package tests.json.util;
 
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -70,6 +71,16 @@ public class NumberEqualityTest extends ProjectTestCase {
 		assertEq(1e20, new BigInteger("100000000000000000000"));
 		assertEq(1e300, new BigDecimal("1e300"));
 		assertEq(-1e300, new BigDecimal("-1E+300"));
+		// Decimal128
+		assertEq(1, Decimal128.of("1.000"));
+		assertEq(1L, Decimal128.ONE);
+		assertEq(0.5, Decimal128.of("0.50"));
+		assertEq(0.1, Decimal128.of("0.1"));
+		assertEq(BigInteger.ONE, Decimal128.ONE);
+		assertEq(new BigDecimal("0.50"), Decimal128.of("0.5"));
+		assertEq(1e300, Decimal128.of("1e300"));
+		assertEq(Long.MAX_VALUE, Decimal128.of(Long.MAX_VALUE));
+		assertNotEq(Decimal128.of("0.1000000000000000000000000000000001"), 0.1);
 	}
 
 	public void testNegativeZero() {
@@ -77,6 +88,8 @@ public class NumberEqualityTest extends ProjectTestCase {
 		assertEq(-0.0, 0);
 		assertEq(-0.0f, 0L);
 		assertEq(-0.0, BigDecimal.ZERO);
+		assertEq(-0.0, Decimal128.of("-0"));
+		assertEq(0, Decimal128.of("-0"));
 		assertEq(JsonArray.of(-0.0), JsonArray.of(0.0));
 		assertEq(JsonObject.of("a", -0.0), JsonObject.of("a", 0));
 	}
@@ -86,6 +99,13 @@ public class NumberEqualityTest extends ProjectTestCase {
 		assertEq(Double.NaN, Float.NaN);
 		assertNotEq(Double.NaN, 0);
 		assertEq(Double.POSITIVE_INFINITY, Float.POSITIVE_INFINITY);
+		assertEq(Decimal128.NaN, Double.NaN);
+		assertNotEq(Decimal128.NaN, 0);
+		assertEq(Decimal128.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
+		assertNotEq(Decimal128.POSITIVE_INFINITY, Decimal128.NEGATIVE_INFINITY);
+		assertNotEq(Decimal128.of("1e6000"), Decimal128.POSITIVE_INFINITY);
+		assertTrue(JsonUtil.compare(Decimal128.NaN, Decimal128.POSITIVE_INFINITY)>0);
+		assertTrue(JsonUtil.compare(1, Decimal128.NaN)<0);
 		assertNotEq(Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY);
 		// No finite value equals an infinity, even a huge one
 		assertNotEq(BigDecimal.valueOf(Double.MAX_VALUE), Double.POSITIVE_INFINITY);
@@ -119,13 +139,15 @@ public class NumberEqualityTest extends ProjectTestCase {
 		List<Number> values = new ArrayList<>();
 		for(int i=0; i<300; i++) {
 			long l = r.nextInt(21)-10;
-			switch(r.nextInt(8)) {
+			switch(r.nextInt(10)) {
 				case 0 -> values.add((int)l);
 				case 1 -> values.add(l*(1L<<50));
 				case 2 -> values.add(l/4.0);
 				case 3 -> values.add((float)(l/2.0));
 				case 4 -> values.add(BigInteger.valueOf(l).shiftLeft(60));
 				case 5 -> values.add(BigDecimal.valueOf(l, 1));
+				case 8 -> values.add(Decimal128.of(BigDecimal.valueOf(l, 1)));
+				case 9 -> values.add(r.nextBoolean() ? Decimal128.NaN : Decimal128.of("-0"));
 				case 6 -> values.add(r.nextBoolean() ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY);
 				default -> values.add(l*(1L<<53)+r.nextInt(3));
 			}

@@ -43,8 +43,11 @@ assertEquals("1.0e21", DtoA.toJavaLiteral(1e21));               // Java-style, f
 | `NaN`, `+Infinity`, `-Infinity` | throws `ArithmeticException` | throws `ArithmeticException` |
 | `Double` / `Float` | from the shortest decimal form (`Double.toString`/`Float.toString`), so `0.1` and `0.1f` stay `0.1` | truncated toward zero |
 | `BigDecimal` | itself | `toBigInteger()` (truncated) |
+| `Decimal128` | its exact value (`-0` is `0`) | truncated |
 | `Integer`, `Long`, `Short`, `Byte` | exact | exact |
 | Other `Number` classes (for example Gson's `LazilyParsedNumber`) | parsed from `toString()` | parsed from `toString()`, truncated; `longValue()` if the text is not a number |
+
+`toDecimal128` converts to the IEEE 754 `Decimal128` (`org.monflabs.util.number`): integers exactly, a `Double` or `Float` through its shortest decimal form, a `BigDecimal` or `BigInteger` rounded half even to 34 digits (beyond the range: an infinity, or zero). `TypeUtil.isNaN(Number)` and `isInfinite(Number)` know `Double`, `Float` and `Decimal128`. `ClassMetadata` converts to a `Decimal128` target like to the other numeric ones.
 
 Sample: `doc_examples/util/NumbersAndTypesExamples.java` (`testTypeUtil`)
 

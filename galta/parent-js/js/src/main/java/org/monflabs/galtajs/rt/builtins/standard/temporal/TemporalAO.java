@@ -78,7 +78,7 @@ public final class TemporalAO {
 		return v instanceof CharSequence && !RuntimeUtil.isBoxedString(env(),v);
 	}
 	public static boolean isNumber(Object v) {
-		return v instanceof Number && !(v instanceof BigInteger) && !(v instanceof BigDecimal) && !RuntimeUtil.isBoxedNumber(env(),v);
+		return v instanceof Number && !(v instanceof BigInteger) && !(v instanceof BigDecimal) && !(v instanceof org.monflabs.util.number.Decimal128) && !RuntimeUtil.isBoxedNumber(env(),v);
 	}
 
 	public static Object getProp(Object obj, String key) {

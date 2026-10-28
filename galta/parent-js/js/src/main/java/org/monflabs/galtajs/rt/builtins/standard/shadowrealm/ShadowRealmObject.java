@@ -263,7 +263,7 @@ public class ShadowRealmObject extends NativeObject {
 				Object length = 0;
 				if(RuntimeUtil.getOwnPropertyDescriptor(env,target,"length")!=null) {
 					Object targetLen = RuntimeUtil.getProperty(env,target,"length");
-					if(targetLen instanceof Number n && !(n instanceof java.math.BigInteger) && !(n instanceof java.math.BigDecimal)) {
+					if(targetLen instanceof Number n && !(n instanceof java.math.BigInteger) && !(n instanceof java.math.BigDecimal) && !(n instanceof org.monflabs.util.number.Decimal128)) {
 						double d = n.doubleValue();
 						if(d==Double.POSITIVE_INFINITY) {
 							length = Double.POSITIVE_INFINITY;

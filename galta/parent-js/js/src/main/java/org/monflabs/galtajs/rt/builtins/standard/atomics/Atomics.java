@@ -500,7 +500,7 @@ public class Atomics extends NativeObject {
 				case pause -> {
 					Object n = param(args,0,RuntimeUtil.UNDEFINED);
 					if(n!=RuntimeUtil.UNDEFINED) {
-						if(!(n instanceof Number num) || (n instanceof java.math.BigInteger) || (n instanceof java.math.BigDecimal)) {
+						if(!(n instanceof Number num) || (n instanceof java.math.BigInteger) || (n instanceof java.math.BigDecimal) || (n instanceof org.monflabs.util.number.Decimal128)) {
 							throw RuntimeUtil.typeError("Atomics.pause argument must be a Number");
 						}
 						double d = num.doubleValue();

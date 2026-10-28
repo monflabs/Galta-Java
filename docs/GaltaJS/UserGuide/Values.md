@@ -8,7 +8,7 @@ GaltaJS represents JavaScript values with ordinary Java objects. This page gives
 |---|---|---|
 | `number` | `Integer`, `Long`, `Double` (also `Float` with the `f` suffix) | Whole values are narrowed to `Integer`; `int` overflow gives `Double`, or `Long` with `supportLongPromotion`. Array `length` is a `Long`; `Date` getters return `Double`. |
 | `bigint` | `java.math.BigInteger` | |
-| `decimal` (extension) | `java.math.BigDecimal` | See [Decimal](/GaltaJS/Extensions/Decimal). |
+| `decimal` (extension) | `org.monflabs.util.number.Decimal128` (or `java.math.BigDecimal`, see `useDecimal128`) | See [Decimal](/GaltaJS/Extensions/Decimal). |
 | `string` | `String` (any `CharSequence` is accepted) | |
 | `boolean` | `Boolean` | |
 | `symbol` | `rt/builtins/primitives/symbol/Symbol` | |

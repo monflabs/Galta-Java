@@ -77,7 +77,7 @@ public class Float32Array extends TypedArray {
 		if(index<0 || index>=getLength()) {
 			throw RuntimeUtil.rangeError("Invalid array index {0}",index);
 		}
-		if(!getEnvironment().supportMixedBigNumber() && (value instanceof BigInteger || value instanceof BigDecimal)) {
+		if(!getEnvironment().supportMixedBigNumber() && RuntimeUtil.isBigNumber(value)) {
 			throw RuntimeUtil.typeError("Invalid type for array {0}",RuntimeUtil.objectTypeName(getEnvironment(),value));
 		}
 		getArrayBuffer().writeFloat32(byteIndex(index),value.floatValue(),ArrayBuffer.LITTLE_INDIAN);

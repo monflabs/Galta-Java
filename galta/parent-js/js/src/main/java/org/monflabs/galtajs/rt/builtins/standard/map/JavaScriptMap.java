@@ -16,6 +16,8 @@
 package org.monflabs.galtajs.rt.builtins.standard.map;
 
 import java.math.BigDecimal;
+import org.monflabs.util.TypeUtil;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 
 import org.monflabs.galtajs.JSEnvironment;
@@ -70,6 +72,10 @@ public class JavaScriptMap extends CustomLinkedMap<Object> {
 		}
 		if(RuntimeUtil.isPrimitiveType(o) && !isBoxed(o)) {
 			// Treat all primitive numbers as equals
+			if(o instanceof Decimal128 d128) {
+				// -0 and +0 are one key; equal values must hash alike whatever the cohort
+				return mixedBigNumbers ? Double.hashCode(d128.isZero() ? 0.0 : d128.doubleValue()) : (d128.isZero() ? 0 : d128.hashCode());
+			}
 			if(o instanceof Number n) {
 				if(mixedBigNumbers || !(n instanceof BigInteger || n instanceof BigDecimal) ) {
 					double d = n.doubleValue();
@@ -84,7 +90,7 @@ public class JavaScriptMap extends CustomLinkedMap<Object> {
 		return System.identityHashCode(o);
     }
 	private static boolean isBig(Number n) {
-		return n instanceof BigInteger || n instanceof BigDecimal;
+		return n instanceof BigInteger || n instanceof BigDecimal || n instanceof Decimal128;
 	}
 	@Override
 	protected boolean equalsKey(Object o1, Object o2) {
@@ -109,7 +115,13 @@ public class JavaScriptMap extends CustomLinkedMap<Object> {
 			if(!mixedBigNumbers && isBig(n1)!=isBig(n2)) {
 				return false;
 			}
-			eq = RuntimeUtil.eqNumber(n1,n2,true);
+			if(n1 instanceof Decimal128 || n2 instanceof Decimal128) {
+				// SameValueZero: NaN equals NaN, -0 equals +0
+				Decimal128 d1 = TypeUtil.toDecimal128(n1), d2 = TypeUtil.toDecimal128(n2);
+				eq = (d1.isNaN() && d2.isNaN()) || d1.compare(d2)==0;
+			} else {
+				eq = RuntimeUtil.eqNumber(n1,n2,true);
+			}
 		} else {
 			return false;
 		}

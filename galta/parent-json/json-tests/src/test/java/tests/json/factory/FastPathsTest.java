@@ -300,6 +300,32 @@ public class FastPathsTest extends ProjectTestCase {
 		}
 	}
 
+	public void testDecimalFitsMatchesDecimal128() {
+		JsonFactory f = new org.monflabs.json.java.JavaJsonFactory() {
+			@Override
+			public OVERFLOW_DECIMAL overflowDecimal() { return OVERFLOW_DECIMAL.DEC128; }
+		};
+		Random r = new Random(5);
+		for(int i=0; i<20000; i++) {
+			String s;
+			switch(i%4) {
+				case 0: s = Double.toString(r.nextDouble()*Math.pow(10, r.nextInt(40)-20)); break;
+				case 1: s = new BigDecimal(r.nextDouble()).round(new java.math.MathContext(16+r.nextInt(6))).toString(); break;
+				case 2: s = (r.nextBoolean()?"-":"")+r.nextInt(100000)+"."+Long.toString(Math.abs(r.nextLong())); break;
+				default: s = r.nextInt(10)+"."+Long.toString(Math.abs(r.nextLong())).substring(0, 5)+"e"+(r.nextInt(600)-300);
+			}
+			Object parsed = f.parseDecimal(s);
+			double d = Double.parseDouble(s);
+			boolean fits = !Double.isInfinite(d) && (d!=0.0 ? new BigDecimal(s).compareTo(BigDecimal.valueOf(d))==0 : new BigDecimal(s).signum()==0);
+			if(fits) {
+				assertEquals(s, Double.class, parsed.getClass());
+			} else {
+				assertEquals(s, org.monflabs.util.number.Decimal128.class, parsed.getClass());
+				assertEquals(s, org.monflabs.util.number.Decimal128.of(s), parsed);
+			}
+		}
+	}
+
 	//
 	// Stringifier: strings and numbers
 	//

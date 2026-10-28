@@ -16,6 +16,9 @@
 package org.monflabs.galtajs.rt.builtins.standard.math;
 
 import java.math.BigDecimal;
+import org.monflabs.galtajs.rt.util.Decimal128Ops;
+import org.monflabs.util.number.Decimal128;
+import org.monflabs.util.number.DecimalRoundingMode;
 import java.math.BigInteger;
 import java.math.MathContext;
 import java.math.RoundingMode;
@@ -53,14 +56,16 @@ public class MathObject extends NativeObject {
 			BigDecimal bd_1 = new BigDecimal("1",mc);
 			BigDecimal bd_2 = new BigDecimal("2",mc);
 			BigDecimal bd_10 = new BigDecimal("10",mc);
-			setOwnProperty("Em",bd_e,PropertyDescriptor.DESC_STATICFIELDS);
-			setOwnProperty("LN10m",BigDecimalMath.log(bd_10,mc),PropertyDescriptor.DESC_STATICFIELDS);
-			setOwnProperty("LN2m",BigDecimalMath.log(bd_2,mc),PropertyDescriptor.DESC_STATICFIELDS);
-			setOwnProperty("LOG10Em",BigDecimalMath.log10(bd_e,mc),PropertyDescriptor.DESC_STATICFIELDS);
-			setOwnProperty("LOG2Em",bd_1.divide(BigDecimalMath.log(bd_2,mc), mc),PropertyDescriptor.DESC_STATICFIELDS);
-			setOwnProperty("PIm",BigDecimalMath.pi(mc),PropertyDescriptor.DESC_STATICFIELDS);
-			setOwnProperty("SQRT1_2m",BigDecimalMath.sqrt(bd_0_5,mc),PropertyDescriptor.DESC_STATICFIELDS);
-			setOwnProperty("SQRT2m",BigDecimalMath.sqrt(bd_2,mc),PropertyDescriptor.DESC_STATICFIELDS);
+			// Decimal128 values (34 digits) when the environment uses them, BigDecimal otherwise
+			boolean d128 = env.useDecimal128();
+			setOwnProperty("Em",constant(d128,bd_e),PropertyDescriptor.DESC_STATICFIELDS);
+			setOwnProperty("LN10m",constant(d128,BigDecimalMath.log(bd_10,mc)),PropertyDescriptor.DESC_STATICFIELDS);
+			setOwnProperty("LN2m",constant(d128,BigDecimalMath.log(bd_2,mc)),PropertyDescriptor.DESC_STATICFIELDS);
+			setOwnProperty("LOG10Em",constant(d128,BigDecimalMath.log10(bd_e,mc)),PropertyDescriptor.DESC_STATICFIELDS);
+			setOwnProperty("LOG2Em",constant(d128,bd_1.divide(BigDecimalMath.log(bd_2,mc), mc)),PropertyDescriptor.DESC_STATICFIELDS);
+			setOwnProperty("PIm",constant(d128,BigDecimalMath.pi(mc)),PropertyDescriptor.DESC_STATICFIELDS);
+			setOwnProperty("SQRT1_2m",constant(d128,BigDecimalMath.sqrt(bd_0_5,mc)),PropertyDescriptor.DESC_STATICFIELDS);
+			setOwnProperty("SQRT2m",constant(d128,BigDecimalMath.sqrt(bd_2,mc)),PropertyDescriptor.DESC_STATICFIELDS);
 		}
 
 		if(env.forceBigDecimalOperations()) {
@@ -127,6 +132,10 @@ public class MathObject extends NativeObject {
 		return OBJECTNAME;
 	}
 
+	private static Number constant(boolean decimal128, BigDecimal bd) {
+		return decimal128 ? Decimal128.of(bd) : bd;
+	}
+
 	private static enum MethodId {
 		abs,
 		acos,
@@ -181,10 +190,143 @@ public class MathObject extends NativeObject {
 			}
 		}
 
+		private static final Object NOT_HANDLED = new Object();
+		// Beyond these a result is Infinity or 0 for any Decimal128 (and we avoid computing huge series)
+		private static final Decimal128 EXP_OVERFLOW = Decimal128.of(14200), EXP_UNDERFLOW = Decimal128.of(-14400);
+
+		/**
+		 * The Math functions on Decimal128 values: computed with BigDecimalMath and rounded to 34 digits. The
+		 * non finite values go through the double version, which has the right special cases.
+		 */
+		private Object decimal128(JSEnvironment env, Object[] args) {
+			checkBigNumbers(env);
+			Number a0 = RuntimeUtil.toNumber(env, args[0]);
+			Decimal128 x = TypeUtil.toDecimal128(a0);
+			MathContext mc = new MathContext(45, RoundingMode.HALF_EVEN);
+			switch(methodId) {
+				case abs: return x.abs();
+				case sign: return x.isNaN() || x.isZero() ? x : (x.isNegative() ? Decimal128.ONE.negate() : Decimal128.ONE);
+				case ceil: return x.isFinite() ? x.round(0, DecimalRoundingMode.CEIL) : x;
+				case floor: return x.isFinite() ? x.round(0, DecimalRoundingMode.FLOOR) : x;
+				case trunc: return x.isFinite() ? x.round(0, DecimalRoundingMode.TRUNC) : x;
+				case round: {
+					// Rounds half toward +Infinity
+					if(!x.isFinite()) {
+						return x;
+					}
+					Decimal128 r = x.round(0, DecimalRoundingMode.TRUNC);
+					Decimal128 frac = x.subtract(r);
+					Decimal128 half = Decimal128.of("0.5");
+					if(frac.greaterThanOrEqual(half)) {
+						return r.add(Decimal128.ONE);
+					}
+					if(frac.lessThan(half.negate())) {
+						return r.subtract(Decimal128.ONE);
+					}
+					return r;
+				}
+				case atan2: case pow: case hypot: {
+					if(args.length<2) {
+						return Decimal128.NaN;
+					}
+					Number a1 = RuntimeUtil.toNumber(env, args[1]);
+					if(a1 instanceof BigDecimal) {
+						return NOT_HANDLED;
+					}
+					Decimal128 y = TypeUtil.toDecimal128(a1);
+					if(methodId==MethodId.pow) {
+						return Decimal128Ops.pow(x, y);
+					}
+					if(!x.isFinite() || !y.isFinite() || x.isZero() || y.isZero()) {
+						return Decimal128.of(methodId==MethodId.atan2 ? Math.atan2(x.doubleValue(), y.doubleValue()) : Math.hypot(x.doubleValue(), y.doubleValue()));
+					}
+					BigDecimal bx = x.toBigDecimal(), by = y.toBigDecimal();
+					if(methodId==MethodId.atan2) {
+						return Decimal128Ops.fn(() -> BigDecimalMath.atan2(bx, by, mc));
+					}
+					return Decimal128Ops.fn(() -> BigDecimalMath.sqrt(bx.multiply(bx, mc).add(by.multiply(by, mc), mc), mc));
+				}
+				case acos: case acosh: case asin: case asinh: case atan: case atanh: case cbrt: case cos: case cosh:
+				case exp: case expm1: case log: case log10: case log1p: case log2: case sin: case sinh: case sqrt:
+				case tan: case tanh:
+					return unary(x, mc);
+				default:
+					return NOT_HANDLED;
+			}
+		}
+
+		private Object unary(Decimal128 x, MathContext mc) {
+			if(x.isNaN()) {
+				return x;
+			}
+			if(!x.isFinite()) {
+				double d = x.doubleValue();
+				return Decimal128.of(switch(methodId) {
+					case acos -> Math.acos(d); case acosh -> acosh(d); case asin -> Math.asin(d); case asinh -> asinh(d);
+					case atan -> Math.atan(d); case atanh -> atanh(d); case cbrt -> Math.cbrt(d); case cos -> Math.cos(d);
+					case cosh -> Math.cosh(d); case exp -> Math.exp(d); case expm1 -> Math.expm1(d); case log -> Math.log(d);
+					case log10 -> Math.log10(d); case log1p -> Math.log1p(d); case log2 -> log2(d); case sin -> Math.sin(d);
+					case sinh -> Math.sinh(d); case sqrt -> Math.sqrt(d); case tan -> Math.tan(d); default -> Math.tanh(d);
+				});
+			}
+			BigDecimal bd = x.toBigDecimal();
+			boolean zero = x.isZero();
+			switch(methodId) {
+				// Exact or special results
+				case sqrt: if(x.isNegative() && !zero) return Decimal128.NaN; if(zero) return x; break;
+				case cbrt: if(zero) return x; break;
+				case sin: case tan: case sinh: case tanh: case asin: case asinh: case atan: case atanh: case expm1: case log1p:
+					if(zero) return x; break;
+				case cos: case cosh: case exp: if(zero) return Decimal128.ONE; break;
+				case log: case log10: case log2: if(zero) return Decimal128.NEGATIVE_INFINITY; break;
+				default: break;
+			}
+			if(methodId==MethodId.log1p) {
+				if(x.lessThanOrEqual(Decimal128.ONE.negate())) {
+					return x.equalTo(Decimal128.ONE.negate()) ? Decimal128.NEGATIVE_INFINITY : Decimal128.NaN;
+				}
+			}
+			if(methodId==MethodId.exp || methodId==MethodId.expm1) {
+				if(x.greaterThan(EXP_OVERFLOW)) {
+					return Decimal128.POSITIVE_INFINITY;
+				}
+				if(x.lessThan(EXP_UNDERFLOW)) {
+					return methodId==MethodId.exp ? Decimal128.ZERO : Decimal128.ONE.negate();
+				}
+			}
+			if(methodId==MethodId.cbrt) {
+				return Decimal128Ops.fn(() -> {
+					BigDecimal r = BigDecimalMath.root(bd.abs(), new BigDecimal(3), mc);
+					return bd.signum()<0 ? r.negate() : r;
+				});
+			}
+			return Decimal128Ops.fn(() -> switch(methodId) {
+				case acos -> BigDecimalMath.acos(bd, mc);
+				case acosh -> BigDecimalMath.acosh(bd, mc);
+				case asin -> BigDecimalMath.asin(bd, mc);
+				case asinh -> BigDecimalMath.asinh(bd, mc);
+				case atan -> BigDecimalMath.atan(bd, mc);
+				case atanh -> BigDecimalMath.atanh(bd, mc);
+				case cos -> BigDecimalMath.cos(bd, mc);
+				case cosh -> BigDecimalMath.cosh(bd, mc);
+				case exp -> BigDecimalMath.exp(bd, mc);
+				case expm1 -> BigDecimalMath.exp(bd, mc).subtract(BigDecimal.ONE, mc);
+				case log -> BigDecimalMath.log(bd, mc);
+				case log10 -> BigDecimalMath.log10(bd, mc);
+				case log1p -> BigDecimalMath.log(bd.add(BigDecimal.ONE, mc), mc);
+				case log2 -> BigDecimalMath.log2(bd, mc);
+				case sin -> BigDecimalMath.sin(bd, mc);
+				case sinh -> BigDecimalMath.sinh(bd, mc);
+				case sqrt -> BigDecimalMath.sqrt(bd, mc);
+				case tan -> BigDecimalMath.tan(bd, mc);
+				default -> BigDecimalMath.tanh(bd, mc);
+			});
+		}
+
 		private static Number toNum(JSEnvironment env, Object arg) {
 			Number val = RuntimeUtil.toNumber(env, arg);
 			if (env.forceBigDecimalOperations() && (val instanceof Double || val instanceof Float)) {
-				return TypeUtil.toBigDecimal(val);
+				return env.useDecimal128() ? TypeUtil.toDecimal128(val) : TypeUtil.toBigDecimal(val);
 			}
 			return val;
 		}
@@ -192,6 +334,13 @@ public class MathObject extends NativeObject {
 	    @Override
 		protected Object invoke(final Object obj, final Object[] args) {
 	    	JSEnvironment env = getEnvironment();
+
+	    	if(args.length>0 && (args[0] instanceof Decimal128 || (args.length>1 && args[1] instanceof Decimal128))) {
+	    		Object r = decimal128(env, args);
+	    		if(r!=NOT_HANDLED) {
+	    			return r;
+	    		}
+	    	}
 
 	        switch(methodId) {
             	case abs -> {
@@ -557,6 +706,18 @@ public class MathObject extends NativeObject {
 								if (TypeUtil.toBigDecimal(next).compareTo(TypeUtil.toBigDecimal(result)) > 0)
 									result = next;
 							}
+							case RuntimeUtil.NUMBER_DECIMAL128 -> {
+								checkBigNumbers(env);
+								Decimal128 dn = TypeUtil.toDecimal128(next), dr = TypeUtil.toDecimal128(result);
+								if (dr.isNaN()) {
+									result = dr;
+								} else if (dn.isNaN()) {
+									result = dn;
+								} else {
+									// The total order has -0 < +0
+									result = dn.compareTo(dr) > 0 ? dn : dr;
+								}
+							}
 							default -> {
 							}
 						}
@@ -600,6 +761,18 @@ public class MathObject extends NativeObject {
 								checkBigNumbers(env);
 								if (TypeUtil.toBigDecimal(next).compareTo(TypeUtil.toBigDecimal(result)) < 0)
 									result = next;
+							}
+							case RuntimeUtil.NUMBER_DECIMAL128 -> {
+								checkBigNumbers(env);
+								Decimal128 dn = TypeUtil.toDecimal128(next), dr = TypeUtil.toDecimal128(result);
+								if (dr.isNaN()) {
+									result = dr;
+								} else if (dn.isNaN()) {
+									result = dn;
+								} else {
+									// The total order has -0 < +0
+									result = dn.compareTo(dr) < 0 ? dn : dr;
+								}
 							}
 							default -> {
 							}

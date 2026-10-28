@@ -74,6 +74,17 @@ public class NumberParsingTest extends ProjectTestCase {
 		assertEquals(Double.POSITIVE_INFINITY, d.parse("1e400"));
 		assertEquals(0.0, d.parse("1e-400"));
 		assertEquals(3.141592653589793, d.parse("3.14159265358979323846"));
+
+		// With the DEC128 overflow option, a Decimal128 (rounded to 34 digits) when a double can't hold it
+		OptionsFactory x = new OptionsFactory();
+		x.overflowDecimal = OVERFLOW_DECIMAL.DEC128;
+		assertEquals(3.141592653589793, x.parse("3.141592653589793"));
+		assertEquals(0.1, x.parse("0.10000000000000000"));
+		assertEquals(org.monflabs.util.number.Decimal128.of("1e400"), x.parse("1e400"));
+		assertEquals(org.monflabs.util.number.Decimal128.of("1e-400"), x.parse("1e-400"));
+		assertEquals(org.monflabs.util.number.Decimal128.of("3.14159265358979323846"), x.parse("3.14159265358979323846"));
+		assertEquals(org.monflabs.util.number.Decimal128.of("0.1000000000000000000001"), x.parse("0.1000000000000000000001"));
+		assertEquals(0.0, x.parse("0.000000000000000000000"));
 	}
 
 	public void testZero() {

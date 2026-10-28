@@ -71,7 +71,7 @@ public class BuiltinNumberConstructor extends BasePrimitiveConstructor {
 		// contexts (which throws for a BigInt operand), this explicitly
 		// allows a BigInt argument via ToNumeric + BigInt::toNumber.
 		Number n = RuntimeUtil.toNumeric(getEnvironment(),parameters[0]);
-		if(n instanceof java.math.BigInteger || n instanceof java.math.BigDecimal) {
+		if(RuntimeUtil.isBigNumber(n)) {
 			return n.doubleValue();
 		}
 		return RuntimeUtil.objectAsPrimitive(getEnvironment(),n);
@@ -104,7 +104,7 @@ public class BuiltinNumberConstructor extends BasePrimitiveConstructor {
 		
 	    // Type(o) is Number: not a BigInt (or GaltaJS BigDecimal), not a Number object
 	    private boolean isNumberValue(Object o) {
-	    	return o instanceof Number && !(o instanceof java.math.BigInteger) && !(o instanceof java.math.BigDecimal)
+	    	return o instanceof Number && !(o instanceof java.math.BigInteger) && !(o instanceof java.math.BigDecimal) && !(o instanceof org.monflabs.util.number.Decimal128)
 	    			&& !RuntimeUtil.isBoxedNumber(getEnvironment(),o);
 	    }
 

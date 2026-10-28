@@ -72,7 +72,7 @@ public class Int16Array extends TypedArray {
 		if(index<0 || index>=getLength()) {
 			throw RuntimeUtil.rangeError("Invalid array index {0}",index);
 		}
-		if(!getEnvironment().supportMixedBigNumber() && (value instanceof BigInteger || value instanceof BigDecimal)) {
+		if(!getEnvironment().supportMixedBigNumber() && RuntimeUtil.isBigNumber(value)) {
 			throw RuntimeUtil.typeError("Invalid type for array {0}",RuntimeUtil.objectTypeName(getEnvironment(),value));
 		}
 		// See Int8Array.set() - Number.shortValue() narrows via intValue()

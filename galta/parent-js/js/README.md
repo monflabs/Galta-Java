@@ -112,8 +112,8 @@ Every extension is a flag on `JSEnvironment.Builder`, off in a plain
 ### Numbers
 
 Numbers are native Java numbers. The engine computes with `Integer`, `Long`,
-`Double`, `BigInteger` (the JavaScript `BigInt`) and `BigDecimal` (a `Decimal`
-extension, computed with `MathContext.DECIMAL128` by default), and understands
+`Double`, `BigInteger` (the JavaScript `BigInt`) and `Decimal128` (the `Decimal`
+extension: IEEE 754 decimal128, or `BigDecimal` with `useDecimal128(false)`), and understands
 `Byte`, `Short` and `Float` values as well. Literal suffixes (case insensitive)
 choose the class explicitly:
 
@@ -123,7 +123,7 @@ choose the class explicitly:
 - `const i = 0d   // Double`
 - `const i = 0.5f // Float`
 - `const i = 0n   // BigInteger`
-- `const i = 0m   // BigDecimal (supportBigDecimalLiteral)`
+- `const i = 0m   // Decimal128 (supportBigDecimalLiteral)`
 
 Following the specification, an integer operation whose result does not fit an
 `int` produces a `Double`, which can lose precision. With `supportLongPromotion`

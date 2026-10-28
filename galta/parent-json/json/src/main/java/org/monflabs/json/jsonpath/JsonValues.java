@@ -16,6 +16,7 @@
 package org.monflabs.json.jsonpath;
 
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -1474,6 +1475,20 @@ public class JsonValues implements Iterable<JsonValues> {
 		return bigIntegerValue();
 	}
 
+	public Decimal128 decimal128Value() {
+		if (type == TYPE.VALUE) {
+			return JsonUtil.checkDecimal128(value);
+		}
+		throw notSingleValue();
+	}
+
+	public Decimal128 decimal128Value(Decimal128 def) {
+		if (type == TYPE.EMPTY) {
+			return def;
+		}
+		return decimal128Value();
+	}
+
 	public BigDecimal bigDecimalValue() {
 		if (type == TYPE.VALUE) {
 			return JsonUtil.checkBigDecimal(value);
@@ -1669,6 +1684,16 @@ public class JsonValues implements Iterable<JsonValues> {
 		return JsonUtil.asBigInteger(value(),defaultValue);
 	}
 	
+	public Decimal128 asDecimal128() {
+		return JsonUtil.asDecimal128(value());
+	}
+	public Decimal128 asDecimal128(Decimal128 defaultValue) {
+		if (type == TYPE.EMPTY) {
+			return defaultValue;
+		}
+		return JsonUtil.asDecimal128(value(),defaultValue);
+	}
+	
 	public BigDecimal asBigDecimal() {
 		return JsonUtil.asBigDecimal(value());
 	}
@@ -1783,6 +1808,10 @@ public class JsonValues implements Iterable<JsonValues> {
 		return testNumber(other, EQ);
 	}
 
+	public boolean eq(Decimal128 other) {
+		return testNumber(other, EQ);
+	}
+
 	public boolean eq(BigDecimal other) {
 		return testNumber(other, EQ);
 	}
@@ -1806,7 +1835,7 @@ public class JsonValues implements Iterable<JsonValues> {
 		return other!=null && !isNaN(v) && !isNaN(other);
 	}
 	private static boolean isNaN(Number n) {
-		return (n instanceof Double d && d.isNaN()) || (n instanceof Float f && f.isNaN());
+		return org.monflabs.util.TypeUtil.isNaN(n);
 	}
 
 	// Comparison results
@@ -1873,6 +1902,10 @@ public class JsonValues implements Iterable<JsonValues> {
 		return !eq(other);
 	}
 
+	public boolean ne(Decimal128 other) {
+		return !eq(other);
+	}
+
 	public boolean ne(BigDecimal other) {
 		return !eq(other);
 	}
@@ -1906,6 +1939,10 @@ public class JsonValues implements Iterable<JsonValues> {
 	}
 
 	public boolean lt(BigInteger other) {
+		return testNumber(other, LT);
+	}
+
+	public boolean lt(Decimal128 other) {
 		return testNumber(other, LT);
 	}
 
@@ -1945,6 +1982,10 @@ public class JsonValues implements Iterable<JsonValues> {
 		return testNumber(other, LTE);
 	}
 
+	public boolean lte(Decimal128 other) {
+		return testNumber(other, LTE);
+	}
+
 	public boolean lte(BigDecimal other) {
 		return testNumber(other, LTE);
 	}
@@ -1981,6 +2022,10 @@ public class JsonValues implements Iterable<JsonValues> {
 		return testNumber(other, GT);
 	}
 
+	public boolean gt(Decimal128 other) {
+		return testNumber(other, GT);
+	}
+
 	public boolean gt(BigDecimal other) {
 		return testNumber(other, GT);
 	}
@@ -2014,6 +2059,10 @@ public class JsonValues implements Iterable<JsonValues> {
 	}
 
 	public boolean gte(BigInteger other) {
+		return testNumber(other, GTE);
+	}
+
+	public boolean gte(Decimal128 other) {
 		return testNumber(other, GTE);
 	}
 

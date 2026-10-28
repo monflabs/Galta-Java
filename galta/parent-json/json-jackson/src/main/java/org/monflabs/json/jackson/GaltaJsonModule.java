@@ -251,6 +251,13 @@ public class GaltaJsonModule extends SimpleModule {
 				gen.writeNumber(b);
 			} else if(v instanceof BigDecimal b) {
 				gen.writeNumber(b);
+			} else if(v instanceof org.monflabs.util.number.Decimal128 dec) {
+				if(dec.isFinite()) {
+					// All the digits (and -0)
+					gen.writeNumber(dec.toBigDecimal());
+				} else {
+					gen.writeNull();
+				}
 			} else if(v instanceof JsonContainer c) {
 				writeContainer(c, gen, provider, path);
 			} else if(v instanceof java.util.Date d) {

@@ -15,7 +15,7 @@
  */
 package doc_examples;
 
-import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.util.List;
 
@@ -41,7 +41,7 @@ public class NumbersExamples extends __BaseTestCase {
 		assertEquals(Double.class,     env.evaluateExpression("1d").getClass());    // unless the suffix says otherwise
 		assertEquals(Float.class,      env.evaluateExpression("1.5f").getClass());
 		assertEquals(BigInteger.class, (Object)env.evaluateExpression("1n").getClass());
-		assertEquals(BigDecimal.class, (Object)env.evaluateExpression("1m").getClass());
+		assertEquals(Decimal128.class, (Object)env.evaluateExpression("1m").getClass());
 		// Suffixes are case-insensitive and work with all radixes
 		assertEquals(255L, (Object)env.evaluateExpression("0xFFl"));
 		assertEquals(5L, (Object)env.evaluateExpression("0b101L"));
@@ -87,8 +87,8 @@ public class NumbersExamples extends __BaseTestCase {
 		JSEnvironment env = GaltaJSEnvironment.create();
 		assertEquals(new BigInteger("3"), (Object)env.evaluateExpression("6 / 2n"));
 		assertEquals(new BigInteger("36"), (Object)env.evaluateExpression("6 ** 2n"));
-		assertEquals(new BigDecimal("3.0"), (Object)env.evaluateExpression("6.0m / 2"));
-		assertEquals(new BigDecimal("3.3"), (Object)env.evaluateExpression("1.1m + 2.2m"));
+		assertEquals(Decimal128.of("3"), (Object)env.evaluateExpression("6.0m / 2"));
+		assertEquals(Decimal128.of("3.3"), (Object)env.evaluateExpression("1.1m + 2.2m"));
 
 		// Standard JavaScript refuses to mix them
 		JSEnvironment js = JavaScriptEnvironment.create();
@@ -99,7 +99,7 @@ public class NumbersExamples extends __BaseTestCase {
 		// supportBigDecimalPromotion: JSON numbers too precise for a double are parsed as Decimal
 		JSEnvironment env = GaltaJSEnvironment.newBuilder().supportBigDecimalPromotion(true).build();
 		Object v = env.evaluateExpression("JSON.parse('{\"v\": 1234567890.12345678901234567890}').v");
-		assertEquals(new BigDecimal("1234567890.12345678901234567890"), v);
+		assertEquals(Decimal128.of("1234567890.12345678901234567890"), v);
 
 		Object plain = GaltaJSEnvironment.create().evaluateExpression("JSON.parse('{\"v\": 1234567890.12345678901234567890}').v");
 		assertEquals(1.2345678901234567E9, plain);

@@ -16,6 +16,7 @@
 package org.monflabs.galtajs.node.literal;
 
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.text.MessageFormat;
 
@@ -116,7 +117,7 @@ public class ASTLiteral extends ASTNode {
 	// Only called from unary expression
 	public boolean astPlus() {
 		if(value instanceof Number n) {
-			if(n instanceof BigInteger || n instanceof BigDecimal) {
+			if(n instanceof BigInteger || n instanceof BigDecimal || n instanceof Decimal128) {
 				return false;
 			}
 			if(n instanceof Integer v && v==0) {
@@ -201,6 +202,8 @@ public class ASTLiteral extends ASTNode {
 			return JSType.BIGINTEGER;
 		} else if(value instanceof BigDecimal) {
 			return JSType.BIGDECIMAL;
+		} else if(value instanceof Decimal128) {
+			return JSType.DECIMAL128;
 		} else if(value instanceof String) {
 			return JSType.STRING;
 		}
@@ -370,6 +373,13 @@ public class ASTLiteral extends ASTNode {
 		} else if(lastChar=='m' || lastChar=='M') {
 			if(env.supportBigDecimalLiteral()) {
 				s = s.substring(0,s.length()-1);
+				if(env.useDecimal128()) {
+					try {
+						return Decimal128.of(s);
+					} catch(NumberFormatException e) {
+						throw RuntimeUtil.syntaxError("Invalid decimal literal {0}", s);
+					}
+				}
 				return new BigDecimal(s,env.getMathContext());
 			} else {
 				throw RuntimeUtil.syntaxError("Decimal syntax is not supported");
@@ -950,6 +960,8 @@ public class ASTLiteral extends ASTNode {
         		return "BigInteger.TEN";
     		}
     		return StringFormat.format("new BigInteger(\"{0}\")", n.toString());
+    	} else if(value instanceof Decimal128 n) {
+    		return StringFormat.format("Decimal128.of(\"{0}\")", n.toString());
     	} else if(value instanceof BigDecimal n) {
     		if(n.equals(BigDecimal.ZERO)) {
         		return "BigDecimal.ZERO";
@@ -1048,6 +1060,12 @@ public class ASTLiteral extends ASTNode {
     			}
         	} else if(value instanceof BigInteger n) {
         		return maybeParens(needsParens, StringFormat.format("{0}n", n.toString()));
+        	} else if(value instanceof Decimal128 n) {
+        		// Not a literal for the non finite values
+        		if(!n.isFinite()) {
+        			return maybeParens(needsParens, n.isNaN() ? "Decimal128(NaN)" : (n.isNegative() ? "-Decimal128(Infinity)" : "Decimal128(Infinity)"));
+        		}
+        		return maybeParens(needsParens, StringFormat.format("{0}m", n.toString()));
         	} else if(value instanceof BigDecimal n) {
         		return maybeParens(needsParens, StringFormat.format("{0}m", n.toString()));
     		} else {
@@ -1073,6 +1091,7 @@ public class ASTLiteral extends ASTNode {
     	if(n instanceof Float f) return f < 0;
     	if(n instanceof BigInteger bi) return bi.signum() < 0;
     	if(n instanceof BigDecimal bd) return bd.signum() < 0;
+    	if(n instanceof Decimal128 d) return d.isNegative();
     	return false;
     }
 

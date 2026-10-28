@@ -28,6 +28,7 @@ public class AllGaltaJSTests extends TestSuite {
 		TestSuite suite = new TestSuite();
 
 		// Pure Java checks, independent of the execution mode
+		suite.addTestSuite(tests.galtajs.builtin.decimal128.Decimal128JavaTest.class);
 		suite.addTestSuite(tests.javascript.builtin.number.DtoAOracleTest.class);
 		suite.addTestSuite(tests.javascript.regression.EngineRegressionJavaTest.class);
 		suite.addTestSuite(tests.javascript.regression.EngineRegression2JavaTest.class);

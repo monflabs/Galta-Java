@@ -71,7 +71,7 @@ public class Uint8ClampedArray extends TypedArray {
 		if(index<0 || index>=getLength()) {
 			throw RuntimeUtil.rangeError("Invalid array index {0}",index);
 		}
-		if(!getEnvironment().supportMixedBigNumber() && (value instanceof BigInteger || value instanceof BigDecimal)) {
+		if(!getEnvironment().supportMixedBigNumber() && RuntimeUtil.isBigNumber(value)) {
 			throw RuntimeUtil.typeError("Invalid type for array {0}",RuntimeUtil.objectTypeName(getEnvironment(),value));
 		}
 		getArrayBuffer().writeUint8(byteIndex(index),(short)RuntimeUtil.toUint8Clamp(value));

@@ -143,6 +143,8 @@ public class BuiltinNumberPrototype extends BasePrimitivePrototype {
 					v = new BigInteger(n.toByteArray());
 				} else if(v instanceof BigDecimal n) {
 					v = new BigDecimal(n.unscaledValue(), n.scale(),env.getMathContext());
+				} else if(v instanceof org.monflabs.util.number.Decimal128 n) {
+					v = n.copy();
 				} else if(v instanceof Byte n) {
 					v = Byte.valueOf(n.byteValue());
 				} else if(v instanceof Short n) {

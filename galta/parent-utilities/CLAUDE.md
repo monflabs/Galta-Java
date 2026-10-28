@@ -28,6 +28,7 @@ Key classes:
 - `Console` — ANSI-colored console output
 - `LRUCache` — simple bounded LRU cache
 - `CacheProvider` — cache abstraction interface
+- `number.Decimal128` — immutable IEEE 754 decimal128 (BID, two `long`s) following the ECMAScript Decimal proposal: single NaN, no cohorts (values are canonical, `-0` is distinct), `add`/`subtract`/`multiply`/`divide`/`remainder`/`round`/`scale10`, `toString`/`toFixed`/`toPrecision`, exact `BigDecimal`/`BigInteger` conversion both ways; `number.DecimalRoundingMode` are the proposal's five modes. Needs Java 21 (`Math.unsignedMultiplyHigh`)
 
 Numeric formatting uses embedded ports of the Ryu (`double`→string) and DtoA algorithms for accurate and fast number-to-string conversion.
 

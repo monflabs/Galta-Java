@@ -17,6 +17,7 @@ package org.monflabs.json;
 
 import java.io.Reader;
 import java.math.BigDecimal;
+import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -307,6 +308,14 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 		return JsonUtil.checkBigDecimal(v, key);
 	}
 	
+	public default Decimal128 getDecimal128(String key) {
+		Object v=get(key);
+		if(v instanceof Decimal128 o) {
+			return o;
+		}
+		return JsonUtil.checkDecimal128(v, key);
+	}
+	
 	public default String getString(String key) {
 		Object v=get(key);
 		if(v instanceof String o) {
@@ -554,6 +563,18 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 			}
 			// Generate an error message...
 			return JsonUtil.checkBigDecimal(v, key);
+		}
+		return defaultValue;
+	}
+	
+	public default Decimal128 getDecimal128(String key, Decimal128 defaultValue) {
+		Object v=get(key);
+		if(v!=null) {
+			if(v instanceof Decimal128 o) {
+				return o;
+			}
+			// Generate an error message...
+			return JsonUtil.checkDecimal128(v, key);
 		}
 		return defaultValue;
 	}
@@ -879,6 +900,12 @@ public interface JsonObject extends Map<String,Object>, JsonContainer {
 		return JsonUtil.asBigInteger(get(key),defaultValue);
 	}
 	
+	public default Decimal128 asDecimal128(String key) {
+		return JsonUtil.asDecimal128(get(key));
+	}
+	public default Decimal128 asDecimal128(String key, Decimal128 defaultValue) {
+		return JsonUtil.asDecimal128(get(key),defaultValue);
+	}
 	public default BigDecimal asBigDecimal(String key) {
 		return JsonUtil.asBigDecimal(get(key));
 	}
