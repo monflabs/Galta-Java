@@ -24,6 +24,7 @@ public class AllUiSwingTests extends TestSuite {
 		suite.addTestSuite(tests.ui.SwingComponentsTest.class);
 		suite.addTestSuite(tests.ui.MultiSplitPaneTest.class);
 		suite.addTestSuite(tests.ui.SwingUtilitiesTest.class);
+		suite.addTestSuite(tests.ui.VirtualTableTest.class);
 
 		return suite;
 	}
