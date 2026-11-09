@@ -66,6 +66,7 @@ import org.monflabs.galtajs.rt.builtins.primitives.number.BuiltinNumberPrototype
 import org.monflabs.galtajs.rt.builtins.standard.bigint.BuiltinBigIntPrototype;
 import org.monflabs.galtajs.rt.builtins.standard.bigdecimal.BuiltinBigDecimalPrototype;
 import org.monflabs.galtajs.rt.builtins.standard.decimal128.BuiltinDecimal128Prototype;
+import org.monflabs.galtajs.rt.builtins.standard.bigdecimal.DecimalArithmetic;
 import org.monflabs.galtajs.rt.builtins.primitives.string.BuiltinStringPrototype;
 import org.monflabs.galtajs.rt.builtins.primitives.symbol.BuiltinSymbolPrototype;
 import org.monflabs.galtajs.rt.builtins.primitives.symbol.Symbol;
@@ -314,6 +315,21 @@ public class RuntimeUtil {
 		}
 		return PROMOTE[t1][t2];
 	}
+	/**
+	 * True when a binary arithmetic operation is a Decimal one: an operand is a
+	 * BigDecimal and the other is a BigDecimal, a Number that a BigDecimal cannot
+	 * represent (NaN, +-Infinity, -0 - the Decimal special values) or, when mixing
+	 * is allowed, any number.
+	 */
+	public static boolean isDecimalOperation(JSEnvironment env, Number n1, Number n2) {
+		if(n1 instanceof BigDecimal) {
+			return n2 instanceof BigDecimal || DecimalArithmetic.isSpecial(n2) || env.supportMixedBigNumber();
+		}
+		if(n2 instanceof BigDecimal) {
+			return DecimalArithmetic.isSpecial(n1) || env.supportMixedBigNumber();
+		}
+		return false;
+	}
 	public static int promoteNumberUnchecked(int t1, int t2) {
 		if(t1==t2) {
 			return t1;
@@ -432,6 +448,9 @@ public class RuntimeUtil {
 
 		Number n1 = toNumeric(env,o1);
 		Number n2 = toNumeric(env,o2);
+		if(isDecimalOperation(env,n1,n2)) {
+			return DecimalArithmetic.add(n1,n2,env.getMathContext());
+		}
         switch(promoteNumber(env, numberType(n1), numberType(n2))) {
         	case NUMBER_INTEGER: {
     			// Avoid creating exceptions for perf reasons
@@ -443,10 +462,10 @@ public class RuntimeUtil {
         	}
         	case NUMBER_DOUBLE: {
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.add(n1,n2);
         			}
-            		return TypeUtil.toBigDecimal(n1).add(TypeUtil.toBigDecimal(n2),env.getMathContext());
+            		return DecimalArithmetic.add(n1,n2,env.getMathContext());
         		}
         		double d = TypeUtil.toDouble(n1)+TypeUtil.toDouble(n2);
         		// Should we transform the (double) to an int or long, if the result is one of them
@@ -464,7 +483,7 @@ public class RuntimeUtil {
         		return TypeUtil.toBigInteger(n1).add(TypeUtil.toBigInteger(n2));
         	}
         	case NUMBER_BIGDECIMAL: {
-        		return TypeUtil.toBigDecimal(n1).add(TypeUtil.toBigDecimal(n2),env.getMathContext());
+        		return DecimalArithmetic.add(n1,n2,env.getMathContext());
         	}
         	case NUMBER_DECIMAL128: {
         		return Decimal128Ops.add(n1,n2);
@@ -530,10 +549,10 @@ public class RuntimeUtil {
         	}
         	case NUMBER_DOUBLE: {
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.increment(n1);
         			}
-            		return TypeUtil.toBigDecimal(n1).add(BigDecimal.ONE,env.getMathContext());
+            		return DecimalArithmetic.add(n1,BigDecimal.ONE,env.getMathContext());
         		}
         		return TypeUtil.toDouble(n1)+1;
         	}
@@ -541,7 +560,7 @@ public class RuntimeUtil {
         		return TypeUtil.toBigInteger(n1).add(BigInteger.ONE);
         	}
         	case NUMBER_BIGDECIMAL: {
-        		return TypeUtil.toBigDecimal(n1).add(BigDecimal.ONE,env.getMathContext());
+        		return DecimalArithmetic.add(n1,BigDecimal.ONE,env.getMathContext());
         	}
         	case NUMBER_DECIMAL128: {
         		return Decimal128Ops.increment(n1);
@@ -584,6 +603,9 @@ public class RuntimeUtil {
 
 		Number n1 = toNumeric(env,o1);
 		Number n2 = toNumeric(env,o2);
+		if(isDecimalOperation(env,n1,n2)) {
+			return DecimalArithmetic.subtract(n1,n2,env.getMathContext());
+		}
         switch(promoteNumber(env, numberType(n1), numberType(n2))) {
         	case NUMBER_INTEGER: {
     			// Avoid creating exceptions for perf reasons
@@ -595,10 +617,10 @@ public class RuntimeUtil {
         	}
         	case NUMBER_DOUBLE: {
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.subtract(n1,n2);
         			}
-            		return TypeUtil.toBigDecimal(n1).subtract(TypeUtil.toBigDecimal(n2),env.getMathContext());
+            		return DecimalArithmetic.subtract(n1,n2,env.getMathContext());
         		}
         		return TypeUtil.toDouble(n1)-TypeUtil.toDouble(n2);
         	}
@@ -606,7 +628,7 @@ public class RuntimeUtil {
         		return TypeUtil.toBigInteger(n1).subtract(TypeUtil.toBigInteger(n2));
         	}
         	case NUMBER_BIGDECIMAL: {
-        		return TypeUtil.toBigDecimal(n1).subtract(TypeUtil.toBigDecimal(n2),env.getMathContext());
+        		return DecimalArithmetic.subtract(n1,n2,env.getMathContext());
         	}
         	case NUMBER_DECIMAL128: {
         		return Decimal128Ops.subtract(n1,n2);
@@ -674,10 +696,10 @@ public class RuntimeUtil {
         	}
         	case NUMBER_DOUBLE: {
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.decrement(n1);
         			}
-            		return TypeUtil.toBigDecimal(n1).subtract(BigDecimal.ONE,env.getMathContext());
+            		return DecimalArithmetic.add(n1,BigDecimal.ONE.negate(),env.getMathContext());
         		}
         		return TypeUtil.toDouble(n1)-1;
         	}
@@ -685,7 +707,7 @@ public class RuntimeUtil {
         		return TypeUtil.toBigInteger(n1).subtract(BigInteger.ONE);
         	}
         	case NUMBER_BIGDECIMAL: {
-        		return TypeUtil.toBigDecimal(n1).subtract(BigDecimal.ONE,env.getMathContext());
+        		return DecimalArithmetic.add(n1,BigDecimal.ONE.negate(),env.getMathContext());
         	}
         	case NUMBER_DECIMAL128: {
         		return Decimal128Ops.decrement(n1);
@@ -725,6 +747,9 @@ public class RuntimeUtil {
 		
 		Number n1 = toNumeric(env,o1);
 		Number n2 = toNumeric(env,o2);
+		if(isDecimalOperation(env,n1,n2)) {
+			return DecimalArithmetic.multiply(n1,n2,env.getMathContext());
+		}
         switch(promoteNumber(env, numberType(n1), numberType(n2))) {
         	case NUMBER_INTEGER: {
     			// Avoid creating exceptions for perf reasons
@@ -736,10 +761,10 @@ public class RuntimeUtil {
         	}
         	case NUMBER_DOUBLE: {
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.multiply(n1,n2);
         			}
-            		return TypeUtil.toBigDecimal(n1).multiply(TypeUtil.toBigDecimal(n2),env.getMathContext());
+            		return DecimalArithmetic.multiply(n1,n2,env.getMathContext());
         		}
         		return TypeUtil.toDouble(n1)*TypeUtil.toDouble(n2);
         	}
@@ -747,7 +772,7 @@ public class RuntimeUtil {
         		return TypeUtil.toBigInteger(n1).multiply(TypeUtil.toBigInteger(n2));
         	}
         	case NUMBER_BIGDECIMAL: {
-        		return TypeUtil.toBigDecimal(n1).multiply(TypeUtil.toBigDecimal(n2),env.getMathContext());
+        		return DecimalArithmetic.multiply(n1,n2,env.getMathContext());
         	}
         	case NUMBER_DECIMAL128: {
         		return Decimal128Ops.multiply(n1,n2);
@@ -818,6 +843,9 @@ public class RuntimeUtil {
 
 		Number n1 = toNumeric(env,o1);
 		Number n2 = toNumeric(env,o2);
+		if(isDecimalOperation(env,n1,n2)) {
+			return DecimalArithmetic.remainder(n1,n2,env.getMathContext());
+		}
         switch(promoteNumber(env, numberType(n1), numberType(n2))) {
         	case NUMBER_INTEGER: {
     			int div = n2.intValue();
@@ -837,14 +865,10 @@ public class RuntimeUtil {
         	}
         	case NUMBER_DOUBLE: {
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.remainder(n1,n2);
         			}
-        			BigDecimal div = TypeUtil.toBigDecimal(n2);
-        			if(div.compareTo(BigDecimal.ZERO)==0) {
-        				throw rangeError("Division by zero");
-        			}
-            		return TypeUtil.toBigDecimal(n1).remainder(div,env.getMathContext());
+            		return DecimalArithmetic.remainder(n1,n2,env.getMathContext());
         		}
     			double div = TypeUtil.toDouble(n2);
     			if(div==0) {
@@ -860,11 +884,7 @@ public class RuntimeUtil {
         		return TypeUtil.toBigInteger(n1).remainder(div);
         	}
         	case NUMBER_BIGDECIMAL: {
-    			BigDecimal div = TypeUtil.toBigDecimal(n2);
-    			if(div.compareTo(BigDecimal.ZERO)==0) {
-    				throw rangeError("Division by zero");
-    			}
-        		return TypeUtil.toBigDecimal(n1).remainder(div,env.getMathContext());
+        		return DecimalArithmetic.remainder(n1,n2,env.getMathContext());
         	}
         	case NUMBER_DECIMAL128: {
         		return Decimal128Ops.remainder(n1,n2);
@@ -896,7 +916,7 @@ public class RuntimeUtil {
 					return di;
 				}
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.divide(i1,i2);
         			}
             		return TypeUtil.toBigDecimal(i1).divide(TypeUtil.toBigDecimal(i2),env.getMathContext());
@@ -907,6 +927,9 @@ public class RuntimeUtil {
 
 		Number n1 = toNumeric(env,o1);
 		Number n2 = toNumeric(env,o2);
+		if(isDecimalOperation(env,n1,n2)) {
+			return DecimalArithmetic.divide(n1,n2,env.getMathContext());
+		}
         switch(promoteNumber(env, numberType(n1), numberType(n2))) {
         	case NUMBER_INTEGER: {
     			int div = n2.intValue();
@@ -922,7 +945,7 @@ public class RuntimeUtil {
     				return di;
     			}
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.divide(n1,n2);
         			}
             		return TypeUtil.toBigDecimal(n1).divide(TypeUtil.toBigDecimal(n2),env.getMathContext());
@@ -948,14 +971,10 @@ public class RuntimeUtil {
         	}
         	case NUMBER_DOUBLE: {
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.divide(n1,n2);
         			}
-        			BigDecimal div = TypeUtil.toBigDecimal(n2);
-        			if(div.compareTo(BigDecimal.ZERO)==0) {
-        				throw rangeError("Division by zero");
-        			}
-            		return TypeUtil.toBigDecimal(n1).divide(div,env.getMathContext());
+            		return DecimalArithmetic.divide(n1,n2,env.getMathContext());
         		}
         		double d1 = TypeUtil.toDouble(n1);
     			double div = TypeUtil.toDouble(n2);
@@ -974,11 +993,7 @@ public class RuntimeUtil {
         		return TypeUtil.toBigInteger(n1).divide(div);
         	}
         	case NUMBER_BIGDECIMAL: {
-    			BigDecimal div = TypeUtil.toBigDecimal(n2);
-    			if(div.compareTo(BigDecimal.ZERO)==0) {
-    				throw rangeError("Division by zero");
-    			}
-        		return TypeUtil.toBigDecimal(n1).divide(div,env.getMathContext());
+        		return DecimalArithmetic.divide(n1,n2,env.getMathContext());
         	}
         	case NUMBER_DECIMAL128: {
         		return Decimal128Ops.divide(n1,n2);
@@ -1002,6 +1017,9 @@ public class RuntimeUtil {
 	public static Object power(JSEnvironment env, Object o1, Object o2) {
 		Number n1 = toNumeric(env,o1);
 		Number n2 = toNumeric(env,o2);
+		if(isDecimalOperation(env,n1,n2)) {
+			return DecimalArithmetic.pow(n1,n2,env.getMathContext());
+		}
         switch(promoteNumber(env, numberType(n1), numberType(n2))) {
         	case NUMBER_INTEGER: 
         	case NUMBER_LONG: {
@@ -1020,12 +1038,10 @@ public class RuntimeUtil {
         	}
         	case NUMBER_DOUBLE: {
         		if(env.forceBigDecimalOperations()) {
-        			if(env.useDecimal128()) {
+        			if(!env.useBigDecimal()) {
         				return Decimal128Ops.pow(n1,n2);
         			}
-            		BigDecimal d1 = JsonUtil.toBigDecimal(n1);
-            		BigDecimal d2 = JsonUtil.toBigDecimal(n2);
-            		return BigDecimalMath.pow(d1, d2, env.getMathContext());
+            		return DecimalArithmetic.pow(n1,n2,env.getMathContext());
         		}
         		return Math.pow(n1.doubleValue(), n2.doubleValue());
         	}
@@ -1045,9 +1061,7 @@ public class RuntimeUtil {
         		return b1.pow(b2.intValueExact());
         	}
         	case NUMBER_BIGDECIMAL: {
-        		BigDecimal d1 = JsonUtil.toBigDecimal(n1);
-        		BigDecimal d2 = JsonUtil.toBigDecimal(n2);
-        		return BigDecimalMath.pow(d1, d2, env.getMathContext());
+        		return DecimalArithmetic.pow(n1,n2,env.getMathContext());
         	}
         	case NUMBER_DECIMAL128: {
         		return Decimal128Ops.pow(n1,n2);
@@ -1247,11 +1261,12 @@ public class RuntimeUtil {
 	    		return TypeUtil.toBigInteger(n1).compareTo(TypeUtil.toBigInteger(n2))==0;
 	    	}
 	    	case NUMBER_BIGDECIMAL: {
-	    		// Use compareTo and not equals as 8!=8.0
-	    		return TypeUtil.toBigDecimal(n1).compareTo(TypeUtil.toBigDecimal(n2))==0;
+	    		// Compare the values (8m==8.0m), a side may be +-Infinity
+	    		Integer c = DecimalArithmetic.compare(n1, n2);
+	    		return c!=null && c==0;
 	    	}
 	    	case NUMBER_DECIMAL128: {
-	    		Decimal128 d1 = TypeUtil.toDecimal128(n1), d2 = TypeUtil.toDecimal128(n2);
+	    		Decimal128 d1 = Decimal128Ops.of(n1), d2 = Decimal128Ops.of(n2);
 	    		if(sameValue) {
 	    			// SameValue: NaN is NaN and -0 is not +0
 	    			return d1.equals(d2);
@@ -1296,11 +1311,12 @@ public class RuntimeUtil {
 	    		return TypeUtil.toBigInteger(n1).compareTo(TypeUtil.toBigInteger(n2));
 	    	}
 	    	case NUMBER_BIGDECIMAL: {
-	    		// Use compareTo and not equals as 8!=8.0
-	    		return TypeUtil.toBigDecimal(n1).compareTo(TypeUtil.toBigDecimal(n2));
+	    		// Compare the values (8m==8.0m), a side may be +-Infinity
+	    		Integer c = DecimalArithmetic.compare(n1, n2);
+	    		return c!=null ? c : 0;
 	    	}
 	    	case NUMBER_DECIMAL128: {
-	    		return TypeUtil.toDecimal128(n1).compareTo(TypeUtil.toDecimal128(n2));
+	    		return Decimal128Ops.of(n1).compareTo(Decimal128Ops.of(n2));
 	    	}
 	    	case NUMBER_NAN: {
 	    		return 0;
@@ -1454,10 +1470,12 @@ public class RuntimeUtil {
         		return TypeUtil.toBigInteger(n1).compareTo(TypeUtil.toBigInteger(n2))<0;
         	}
         	case NUMBER_BIGDECIMAL: {
-        		return TypeUtil.toBigDecimal(n1).compareTo(TypeUtil.toBigDecimal(n2))<0;
+        		// A side may be +-Infinity
+        		Integer c = DecimalArithmetic.compare(n1, n2);
+        		return c!=null ? c<0 : valueForNaN;
         	}
         	case NUMBER_DECIMAL128: {
-        		Decimal128 d1 = TypeUtil.toDecimal128(n1), d2 = TypeUtil.toDecimal128(n2);
+        		Decimal128 d1 = Decimal128Ops.of(n1), d2 = Decimal128Ops.of(n2);
         		if(d1.isNaN() || d2.isNaN()) {
         			return valueForNaN;
         		}
@@ -1547,13 +1565,13 @@ public class RuntimeUtil {
 							return false;
 						}
 					}
-					// Both should be BigDecimal
+					// Both should be Decimals - a Decimal NaN, +-Infinity or -0 is a Number
 					if( n1 instanceof BigDecimal ) {
-						if( !(n2 instanceof BigDecimal) ) {
+						if( !(n2 instanceof BigDecimal) && !DecimalArithmetic.isSpecial(n2) ) {
 							return false;
 						}
 					} else {
-						if( n2 instanceof BigDecimal ) {
+						if( n2 instanceof BigDecimal && !DecimalArithmetic.isSpecial(n1) ) {
 							return false;
 						}
 					}
@@ -1688,7 +1706,7 @@ public class RuntimeUtil {
 		}
 		if(t1==JavascriptType.NUMBER) {
 			if(o1 instanceof Decimal128 || o2 instanceof Decimal128) {
-				Decimal128 d1 = TypeUtil.toDecimal128((Number)o1), d2 = TypeUtil.toDecimal128((Number)o2);
+				Decimal128 d1 = Decimal128Ops.of((Number)o1), d2 = Decimal128Ops.of((Number)o2);
 				return (d1.isNaN() && d2.isNaN()) || d1.compare(d2)==0;
 			}
 			return eqNumber((Number)o1,(Number)o2,true);
@@ -2038,11 +2056,7 @@ public class RuntimeUtil {
         		return v.negate();
         	}
         	case NUMBER_BIGDECIMAL: {
-        		BigDecimal v = TypeUtil.toBigDecimal(n1);
-        		if(v.equals(BigDecimal.ZERO)) {
-        			return -0.0;
-        		}
-        		return v.negate();
+        		return DecimalArithmetic.negate(n1);
         	}
         	case NUMBER_DECIMAL128: {
         		return Decimal128Ops.negate(n1);

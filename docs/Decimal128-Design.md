@@ -1,6 +1,6 @@
 # Decimal128 vs BigDecimal: design decision
 
-Status: **decided and implemented** in `org.monflabs.util.number` (utilities); the JSON integration (`DEC128`) is done, the GaltaJS engine integration is done (`useDecimal128`).
+Status: **decided and implemented** in `org.monflabs.util.number` (utilities); the JSON integration (`DEC128`) is done, the GaltaJS engine integration is done (`useBigDecimal` selects `BigDecimal` instead).
 
 ## Goal
 

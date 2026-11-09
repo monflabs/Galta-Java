@@ -113,7 +113,7 @@ Every extension is a flag on `JSEnvironment.Builder`, off in a plain
 
 Numbers are native Java numbers. The engine computes with `Integer`, `Long`,
 `Double`, `BigInteger` (the JavaScript `BigInt`) and `Decimal128` (the `Decimal`
-extension: IEEE 754 decimal128, or `BigDecimal` with `useDecimal128(false)`), and understands
+extension: IEEE 754 decimal128, or `BigDecimal` with the GaltaJS extensions), and understands
 `Byte`, `Short` and `Float` values as well. Literal suffixes (case insensitive)
 choose the class explicitly:
 

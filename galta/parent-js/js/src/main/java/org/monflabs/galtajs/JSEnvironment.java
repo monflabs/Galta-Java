@@ -245,6 +245,8 @@ public final class JSEnvironment implements JSConfiguration {
 			this.configuration.supportBigDecimalLiteral = true;
 			this.configuration.supportMixedBigNumber = true;
 			this.configuration.supportBigNumberMath = true;
+			// Decimals are BigDecimal (arbitrary precision, the Java type) with the extensions, Decimal128 otherwise
+			this.configuration.useBigDecimal = true;
 			this.configuration.supportSequenceExtensions = true;
 			this.configuration.isOptimizedSetAndMapCtor = true;
 			this.configuration.supportParseIntOctal = false;
@@ -397,9 +399,9 @@ public final class JSEnvironment implements JSConfiguration {
 			this.configuration.forceBigDecimalOperations = forceBigDecimalOperations;
 			return this;
 		}
-		public Builder useDecimal128(boolean useDecimal128) {
+		public Builder useBigDecimal(boolean useBigDecimal) {
 			checkBuilder();
-			this.configuration.useDecimal128 = useDecimal128;
+			this.configuration.useBigDecimal = useBigDecimal;
 			return this;
 		}
 		public Builder supportMixedBigNumber(boolean supportMixedBigNumber) {
@@ -597,7 +599,7 @@ public final class JSEnvironment implements JSConfiguration {
 		BuiltinDecimal128Constructor decimal128 = new BuiltinDecimal128Constructor(this);
 		standardObjects.setOwnProperty(BuiltinDecimal128Constructor.CLASSNAME,decimal128,PropertyDescriptor.DESC_METHOD);
 		// The global Decimal is the BigDecimal one, or the Decimal128 one (as in the proposal) when selected
-		standardObjects.setOwnProperty(BuiltinBigDecimalConstructor.CLASSNAME,useDecimal128() ? decimal128 : new BuiltinBigDecimalConstructor(this),PropertyDescriptor.DESC_METHOD);
+		standardObjects.setOwnProperty(BuiltinBigDecimalConstructor.CLASSNAME,useBigDecimal() ? new BuiltinBigDecimalConstructor(this) : decimal128,PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(DateConstructor.CLASSNAME,new DateConstructor(this),PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(RegExpConstructor.CLASSNAME,new RegExpConstructor(this),PropertyDescriptor.DESC_METHOD);
 		standardObjects.setOwnProperty(BuiltinIteratorConstructor.CLASSNAME,new BuiltinIteratorConstructor(this),PropertyDescriptor.DESC_METHOD);
@@ -978,8 +980,8 @@ public final class JSEnvironment implements JSConfiguration {
 		return configuration.forceBigDecimalOperations();
 	}
 	@Override
-	public final boolean useDecimal128() {
-		return configuration.useDecimal128();
+	public final boolean useBigDecimal() {
+		return configuration.useBigDecimal();
 	}
 	@Override
 	public final boolean supportMixedBigNumber() {

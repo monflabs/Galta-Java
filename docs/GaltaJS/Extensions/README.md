@@ -35,6 +35,7 @@ Defaults come from `ConfigurationImpl`; the third column is what `enableGaltaJSE
 | `supportBigDecimalPromotion` | `false` | - | JSON numbers that do not fit a `double` parse as `Decimal` | [Numbers](/GaltaJS/Extensions/Numbers) |
 | `supportMixedBigNumber` | `false` | `true` | `BigInt`/`Decimal` and regular numbers can be mixed in one operation | [Numbers](/GaltaJS/Extensions/Numbers) |
 | `supportBigNumberMath` | `false` | `true` | `Math` accepts big numbers and exposes `Decimal` constants | [Decimal](/GaltaJS/Extensions/Decimal) |
+| `useBigDecimal` | `false` | `true` | Decimals are `BigDecimal` (arbitrary precision) instead of `Decimal128` (IEEE 754) | [Decimal](/GaltaJS/Extensions/Decimal) |
 | `forceBigDecimalOperations` | `false` | - | Every floating-point literal and operation is a `Decimal` | [Decimal](/GaltaJS/Extensions/Decimal) |
 | `supportJavaNative` | `false` | `true` | `$`-prefixed access to the Java members of any value; set by `JavaLibrary` too | [Java Interop](/GaltaJS/UserGuide/JavaInterop) |
 | `supportGlobalAlias` | `false` | - | `global` as an alias of `globalThis` | [Syntax](/GaltaJS/Extensions/Syntax) |

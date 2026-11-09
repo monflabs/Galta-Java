@@ -15,13 +15,20 @@ All notable changes to Galta. Versions follow the `<revision>` of the root
 
 ### GaltaJS
 
-- Decimals are now `Decimal128` by default (new builder flag `useDecimal128`, default
-  `true`): `m` literals, `forceBigDecimalOperations`, the decimals the JSON factory
-  parses, and the `Math.PIm`-style constants. `useDecimal128(false)` restores the
-  `BigDecimal` decimals; both types are always supported as values. New global
+- Decimals are now `Decimal128` by default (new builder flag `useBigDecimal`, default
+  `false`): `m` literals, `forceBigDecimalOperations`, the decimals the JSON factory
+  parses, and the `Math.PIm`-style constants. `enableGaltaJSExtensions()` (so
+  `GaltaJSEnvironment`) keeps `BigDecimal` decimals (`useBigDecimal(true)`); both types
+  are always supported as values. New global
   `Decimal128` (the proposal's prototype methods), `NaN`/`Infinity`/`-0` decimals,
   division by zero giving `Infinity`/`NaN`, and `Math` functions on `Decimal128`.
   `typeof` stays `"decimal"`. See `docs/GaltaJS/Extensions/Decimal.md`.
+- `BigDecimal` decimals follow IEEE 754 decimal128 too: `NaN`, the infinities and `-0`
+  are the matching Numbers, division by zero gives `Infinity`/`NaN` (no `RangeError`),
+  zero results carry their sign, results beyond the `MathContext` format's exponent
+  range overflow or underflow, and `Math` returns the IEEE results outside of a
+  function's domain. `Math.floor`/`ceil`/`round`/`trunc` on a decimal return a decimal
+  (not a `BigInt`).
 
 ### JSON library
 
@@ -48,9 +55,9 @@ First public release: Galta is published to Maven Central under the
 
 ### GaltaJS
 
-- Decimals are now `Decimal128` by default (new builder flag `useDecimal128`, default
-  `true`): `m` literals, `forceBigDecimalOperations`, the decimals the JSON factory
-  parses, and the `Math.PIm`-style constants. `useDecimal128(false)` restores the
+- Decimals are now `Decimal128` by default (new builder flag `useBigDecimal`, default
+  `false`): `m` literals, `forceBigDecimalOperations`, the decimals the JSON factory
+  parses, and the `Math.PIm`-style constants. `useBigDecimal(true)` restores the
   `BigDecimal` decimals; both types are always supported as values. New global
   `Decimal128` (the proposal's prototype methods), `NaN`/`Infinity`/`-0` decimals,
   division by zero giving `Infinity`/`NaN`, and `Math` functions on `Decimal128`.

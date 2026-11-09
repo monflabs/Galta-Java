@@ -21,7 +21,6 @@ import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.Constructor;
 import org.monflabs.galtajs.rt.builtins.primitives.BaseStandardConstructor;
-import org.monflabs.util.TypeUtil;
 
 /**
  * 
@@ -47,14 +46,20 @@ public class BuiltinBigDecimalConstructor extends BaseStandardConstructor {
 	@Override
 	public Object call(Object _this, Object[] parameters) {
 		Object v = param(parameters, 0, RuntimeUtil.UNDEFINED);
+		// NaN and +-Infinity are Decimal values too, represented by the matching Number. As in the proposal, a
+		// Number goes through its string form, so -0 is +0 (the string "-0" gives -0)
 		if(v instanceof Number n ) {
-			if((n instanceof Double || n instanceof Float) && !Double.isFinite(n.doubleValue())) {
-				throw RuntimeUtil.rangeError("The number {0} cannot be converted to a Decimal because it is not finite", n);
+			if((n instanceof Double || n instanceof Float) && n.doubleValue()==0) {
+				return BigDecimal.ZERO;
 			}
-			return TypeUtil.toBigDecimal(n);
+			return DecimalArithmetic.toDecimal(n, getEnvironment().getMathContext());
 		}
 		if(v instanceof CharSequence s) {
-			return new BigDecimal(s.toString(),getEnvironment().getMathContext());
+			try {
+				return DecimalArithmetic.parse(s.toString(), getEnvironment().getMathContext());
+			} catch(NumberFormatException ex) {
+				throw RuntimeUtil.syntaxError("Cannot convert {0} to a Decimal", s);
+			}
 		}
 		throw RuntimeUtil.typeError("Cannot convert {0} to a Decimal",RuntimeUtil.objectTypeName(getEnvironment(),v));
 	}	

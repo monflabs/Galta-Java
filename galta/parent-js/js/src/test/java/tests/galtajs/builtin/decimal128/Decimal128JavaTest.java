@@ -19,11 +19,12 @@ import java.math.BigDecimal;
 
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.environments.GaltaJSEnvironment;
+import org.monflabs.galtajs.environments.JavaScriptEnvironment;
 import org.monflabs.tests.__BaseTestCase;
 import org.monflabs.util.number.Decimal128;
 
 /**
- * Decimal128 in the engine, checked through the Java API: the {@code useDecimal128} flag, the JsonFactory
+ * Decimal128 in the engine, checked through the Java API: the {@code useBigDecimal} flag, the JsonFactory
  * settings and the Java interop.
  */
 public class Decimal128JavaTest extends __BaseTestCase {
@@ -33,14 +34,27 @@ public class Decimal128JavaTest extends __BaseTestCase {
 	}
 
 	public void testFlagDefaultsToDecimal128() throws Exception {
-		JSEnvironment env = GaltaJSEnvironment.newBuilder().build();
-		assertTrue(env.useDecimal128());
+		// Decimal128 by default, without the GaltaJS extensions
+		JSEnvironment env = JavaScriptEnvironment.newBuilder().supportBigDecimalLiteral(true).supportBigDecimal(true).build();
+		assertFalse(env.useBigDecimal());
 		assertEquals(Decimal128.of("1.5"), eval(env, "1.5m"));
 		assertEquals(Decimal128.of("0.3"), eval(env, "0.1m + 0.2m"));
+		assertFalse(JSEnvironment.newBuilder().build().useBigDecimal());
+	}
+
+	public void testGaltaJSExtensionsUseBigDecimal() throws Exception {
+		// BigDecimal with the GaltaJS extensions...
+		JSEnvironment env = GaltaJSEnvironment.create();
+		assertTrue(env.useBigDecimal());
+		assertEquals(new BigDecimal("1.5"), eval(env, "1.5m"));
+		assertEquals(new BigDecimal("0.3"), eval(env, "0.1m + 0.2m"));
+		// ...unless set after enableGaltaJSExtensions()
+		JSEnvironment d128 = GaltaJSEnvironment.newBuilder().useBigDecimal(false).build();
+		assertEquals(Decimal128.of("1.5"), eval(d128, "1.5m"));
 	}
 
 	public void testFlagOffKeepsBigDecimal() throws Exception {
-		JSEnvironment env = GaltaJSEnvironment.newBuilder().useDecimal128(false).build();
+		JSEnvironment env = GaltaJSEnvironment.newBuilder().useBigDecimal(true).build();
 		assertEquals(new BigDecimal("1.5"), eval(env, "1.5m"));
 		// A Decimal128 is still supported in parallel
 		assertEquals(Decimal128.of("1.5"), eval(env, "Decimal128('1.5')"));
@@ -48,24 +62,24 @@ public class Decimal128JavaTest extends __BaseTestCase {
 	}
 
 	public void testJsonFactoryHonorsTheFlag() throws Exception {
-		JSEnvironment on = GaltaJSEnvironment.newBuilder().useDecimal128(true).forceBigDecimalOperations(true).build();
+		JSEnvironment on = GaltaJSEnvironment.newBuilder().useBigDecimal(false).forceBigDecimalOperations(true).build();
 		assertEquals(Decimal128.of("1.5"), eval(on, "JSON.parse('{\"a\":1.5}').a"));
-		JSEnvironment off = GaltaJSEnvironment.newBuilder().useDecimal128(false).forceBigDecimalOperations(true).build();
+		JSEnvironment off = GaltaJSEnvironment.newBuilder().useBigDecimal(true).forceBigDecimalOperations(true).build();
 		assertEquals(new BigDecimal("1.5"), eval(off, "JSON.parse('{\"a\":1.5}').a"));
 		// Not forced: doubles
-		JSEnvironment dbl = GaltaJSEnvironment.newBuilder().useDecimal128(true).forceBigDecimalOperations(false).build();
+		JSEnvironment dbl = GaltaJSEnvironment.newBuilder().useBigDecimal(false).forceBigDecimalOperations(false).build();
 		assertEquals(Double.valueOf(1.5), eval(dbl, "JSON.parse('{\"a\":1.5}').a"));
 	}
 
 	public void testJsonFactoryOverflow() throws Exception {
-		JSEnvironment env = GaltaJSEnvironment.newBuilder().useDecimal128(true).supportBigDecimalPromotion(true).build();
+		JSEnvironment env = GaltaJSEnvironment.newBuilder().useBigDecimal(false).supportBigDecimalPromotion(true).build();
 		Object v = eval(env, "JSON.parse('[0.1234567890123456789012345]')[0]");
 		assertTrue(String.valueOf(v), v instanceof Decimal128);
 		assertEquals(Decimal128.of("0.1234567890123456789012345"), v);
 	}
 
 	public void testJavaCasts() throws Exception {
-		JSEnvironment env = GaltaJSEnvironment.newBuilder().useDecimal128(true).build();
+		JSEnvironment env = GaltaJSEnvironment.newBuilder().useBigDecimal(false).build();
 		// Casts with the Java classes
 		assertEquals(new BigDecimal("1.5"), eval(env, "Java.type('java.math.BigDecimal')(1.5m)"));
 		assertEquals(Decimal128.of("2.5"), eval(env, "Java.type('org.monflabs.util.number.Decimal128')(2.5)"));
@@ -76,7 +90,7 @@ public class Decimal128JavaTest extends __BaseTestCase {
 	}
 
 	public void testDecimal128FromJava() throws Exception {
-		JSEnvironment env = GaltaJSEnvironment.newBuilder().useDecimal128(true).build();
+		JSEnvironment env = GaltaJSEnvironment.newBuilder().useBigDecimal(false).build();
 		Decimal128 d = Decimal128.of("2.25");
 		assertEquals(Decimal128.of("4.5"), env.evaluateScript("this * 2m", d));
 		assertEquals("decimal", env.evaluateScript("typeof this", d));

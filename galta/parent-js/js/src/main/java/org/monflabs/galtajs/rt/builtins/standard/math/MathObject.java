@@ -28,6 +28,7 @@ import java.util.List;
 
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.external.ch_obermuhlner_math_big.BigDecimalMath;
+import org.monflabs.galtajs.rt.builtins.standard.bigdecimal.DecimalArithmetic;
 import org.monflabs.galtajs.rt.RuntimeUtil;
 import org.monflabs.galtajs.rt.builtins.BaseMethod;
 import org.monflabs.galtajs.rt.builtins.NativeObject;
@@ -57,7 +58,7 @@ public class MathObject extends NativeObject {
 			BigDecimal bd_2 = new BigDecimal("2",mc);
 			BigDecimal bd_10 = new BigDecimal("10",mc);
 			// Decimal128 values (34 digits) when the environment uses them, BigDecimal otherwise
-			boolean d128 = env.useDecimal128();
+			boolean d128 = !env.useBigDecimal();
 			setOwnProperty("Em",constant(d128,bd_e),PropertyDescriptor.DESC_STATICFIELDS);
 			setOwnProperty("LN10m",constant(d128,BigDecimalMath.log(bd_10,mc)),PropertyDescriptor.DESC_STATICFIELDS);
 			setOwnProperty("LN2m",constant(d128,BigDecimalMath.log(bd_2,mc)),PropertyDescriptor.DESC_STATICFIELDS);
@@ -201,14 +202,15 @@ public class MathObject extends NativeObject {
 		private Object decimal128(JSEnvironment env, Object[] args) {
 			checkBigNumbers(env);
 			Number a0 = RuntimeUtil.toNumber(env, args[0]);
-			Decimal128 x = TypeUtil.toDecimal128(a0);
+			Decimal128 x = Decimal128Ops.of(a0);
 			MathContext mc = new MathContext(45, RoundingMode.HALF_EVEN);
 			switch(methodId) {
 				case abs: return x.abs();
 				case sign: return x.isNaN() || x.isZero() ? x : (x.isNegative() ? Decimal128.ONE.negate() : Decimal128.ONE);
-				case ceil: return x.isFinite() ? x.round(0, DecimalRoundingMode.CEIL) : x;
-				case floor: return x.isFinite() ? x.round(0, DecimalRoundingMode.FLOOR) : x;
-				case trunc: return x.isFinite() ? x.round(0, DecimalRoundingMode.TRUNC) : x;
+				// Math semantics, not the proposal's round(): a negative value rounding to zero is -0
+				case ceil: return x.isFinite() ? signedZero(x, x.round(0, DecimalRoundingMode.CEIL)) : x;
+				case floor: return x.isFinite() ? signedZero(x, x.round(0, DecimalRoundingMode.FLOOR)) : x;
+				case trunc: return x.isFinite() ? signedZero(x, x.round(0, DecimalRoundingMode.TRUNC)) : x;
 				case round: {
 					// Rounds half toward +Infinity
 					if(!x.isFinite()) {
@@ -223,7 +225,7 @@ public class MathObject extends NativeObject {
 					if(frac.lessThan(half.negate())) {
 						return r.subtract(Decimal128.ONE);
 					}
-					return r;
+					return signedZero(x, r);
 				}
 				case atan2: case pow: case hypot: {
 					if(args.length<2) {
@@ -233,12 +235,12 @@ public class MathObject extends NativeObject {
 					if(a1 instanceof BigDecimal) {
 						return NOT_HANDLED;
 					}
-					Decimal128 y = TypeUtil.toDecimal128(a1);
+					Decimal128 y = Decimal128Ops.of(a1);
 					if(methodId==MethodId.pow) {
 						return Decimal128Ops.pow(x, y);
 					}
 					if(!x.isFinite() || !y.isFinite() || x.isZero() || y.isZero()) {
-						return Decimal128.of(methodId==MethodId.atan2 ? Math.atan2(x.doubleValue(), y.doubleValue()) : Math.hypot(x.doubleValue(), y.doubleValue()));
+						return Decimal128Ops.ofIeee(methodId==MethodId.atan2 ? Math.atan2(x.doubleValue(), y.doubleValue()) : Math.hypot(x.doubleValue(), y.doubleValue()));
 					}
 					BigDecimal bx = x.toBigDecimal(), by = y.toBigDecimal();
 					if(methodId==MethodId.atan2) {
@@ -260,14 +262,11 @@ public class MathObject extends NativeObject {
 				return x;
 			}
 			if(!x.isFinite()) {
-				double d = x.doubleValue();
-				return Decimal128.of(switch(methodId) {
-					case acos -> Math.acos(d); case acosh -> acosh(d); case asin -> Math.asin(d); case asinh -> asinh(d);
-					case atan -> Math.atan(d); case atanh -> atanh(d); case cbrt -> Math.cbrt(d); case cos -> Math.cos(d);
-					case cosh -> Math.cosh(d); case exp -> Math.exp(d); case expm1 -> Math.expm1(d); case log -> Math.log(d);
-					case log10 -> Math.log10(d); case log1p -> Math.log1p(d); case log2 -> log2(d); case sin -> Math.sin(d);
-					case sinh -> Math.sinh(d); case sqrt -> Math.sqrt(d); case tan -> Math.tan(d); default -> Math.tanh(d);
-				});
+				return Decimal128Ops.ofIeee(doubleFunction(x.doubleValue()));
+			}
+			if(methodId==MethodId.acos && x.equalTo(Decimal128.ONE)) {
+				// Exact; BigDecimalMath leaves a residue
+				return Decimal128.ZERO;
 			}
 			BigDecimal bd = x.toBigDecimal();
 			boolean zero = x.isZero();
@@ -300,7 +299,7 @@ public class MathObject extends NativeObject {
 					return bd.signum()<0 ? r.negate() : r;
 				});
 			}
-			return Decimal128Ops.fn(() -> switch(methodId) {
+			Decimal128 r = Decimal128Ops.fn(() -> switch(methodId) {
 				case acos -> BigDecimalMath.acos(bd, mc);
 				case acosh -> BigDecimalMath.acosh(bd, mc);
 				case asin -> BigDecimalMath.asin(bd, mc);
@@ -321,12 +320,32 @@ public class MathObject extends NativeObject {
 				case tan -> BigDecimalMath.tan(bd, mc);
 				default -> BigDecimalMath.tanh(bd, mc);
 			});
+			// NaN when BigDecimalMath fails outside of its domain: the double function has the IEEE result
+			// (atanh(1) is Infinity)
+			return r.isNaN() ? Decimal128Ops.ofIeee(doubleFunction(x.doubleValue())) : r;
+		}
+
+		/** The double version of the unary function. */
+		private double doubleFunction(double d) {
+			return switch(methodId) {
+				case acos -> Math.acos(d); case acosh -> acosh(d); case asin -> Math.asin(d); case asinh -> asinh(d);
+				case atan -> Math.atan(d); case atanh -> atanh(d); case cbrt -> Math.cbrt(d); case cos -> Math.cos(d);
+				case cosh -> Math.cosh(d); case exp -> Math.exp(d); case expm1 -> Math.expm1(d); case log -> Math.log(d);
+				case log10 -> Math.log10(d); case log1p -> Math.log1p(d); case log2 -> log2(d); case sin -> Math.sin(d);
+				case sinh -> Math.sinh(d); case sqrt -> Math.sqrt(d); case tan -> Math.tan(d); default -> Math.tanh(d);
+			};
+		}
+
+		/** A zero result of rounding a negative value is -0. */
+		private static Decimal128 signedZero(Decimal128 x, Decimal128 r) {
+			return r.isZero() && x.isNegative() ? Decimal128.NEGATIVE_ZERO : r;
 		}
 
 		private static Number toNum(JSEnvironment env, Object arg) {
 			Number val = RuntimeUtil.toNumber(env, arg);
 			if (env.forceBigDecimalOperations() && (val instanceof Double || val instanceof Float)) {
-				return env.useDecimal128() ? TypeUtil.toDecimal128(val) : TypeUtil.toBigDecimal(val);
+				// BigDecimal: NaN, +-Infinity and -0 stay Numbers
+				return env.useBigDecimal() ? DecimalArithmetic.toDecimal(val, env.getMathContext()) : Decimal128Ops.of(val);
 			}
 			return val;
 		}
@@ -375,7 +394,11 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
         					BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-        					return BigDecimalMath.acos(bd, env.getMathContext());
+        					if(bd.compareTo(BigDecimal.ONE)==0) {
+        						// Exact; BigDecimalMath leaves a residue
+        						return BigDecimal.ZERO;
+        					}
+        					return DecimalArithmetic.math(bd, () -> BigDecimalMath.acos(bd, env.getMathContext()), Math::acos, false, env.getMathContext());
             			}
 
             			double d = RuntimeUtil.toDouble(getEnvironment(),val);
@@ -391,7 +414,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.acosh(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.acosh(bd, env.getMathContext()), this::acosh, false, env.getMathContext());
             			}
         				double d = RuntimeUtil.toDouble(getEnvironment(),val);
         				if(!Double.isNaN(d)) {
@@ -406,7 +429,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.asin(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.asin(bd, env.getMathContext()), Math::asin, true, env.getMathContext());
             			}
         				double d = RuntimeUtil.toDouble(getEnvironment(),val);
         				if(!Double.isNaN(d) && -1.0<=d && d<=1.0) {
@@ -421,7 +444,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.asinh(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.asinh(bd, env.getMathContext()), this::asinh, true, env.getMathContext());
             			}
         				double d = RuntimeUtil.toDouble(getEnvironment(),val);
         				if(!Double.isNaN(d)) {
@@ -436,7 +459,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.atan(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.atan(bd, env.getMathContext()), Math::atan, true, env.getMathContext());
             			}
         				double d = RuntimeUtil.toDouble(getEnvironment(),val);
         				if(!Double.isNaN(d)) {
@@ -451,9 +474,17 @@ public class MathObject extends NativeObject {
             			Number val2 = toNum(env, args[1]);
             			if(val instanceof BigInteger || val instanceof BigDecimal || val2 instanceof BigInteger || val2 instanceof BigDecimal) {
             				checkBigNumbers(env);
+            				MathContext mc = env.getMathContext();
+            				if(DecimalArithmetic.isSpecial(val) || DecimalArithmetic.isSpecial(val2)) {
+            					return DecimalArithmetic.fromDouble(Math.atan2(val.doubleValue(), val2.doubleValue()), mc);
+            				}
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
             				BigDecimal bd2 = RuntimeUtil.toBigDecimal(env, val2);
-            				return BigDecimalMath.atan2(bd, bd2, env.getMathContext());
+            				if(bd.signum()==0) {
+            					// atan2(+0, x): +0 for x>=+0, pi for x<0
+            					return bd2.signum()<0 ? BigDecimalMath.pi(mc) : BigDecimal.ZERO;
+            				}
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.atan2(bd, bd2, mc), y -> Math.atan2(y, bd2.doubleValue()), true, mc);
             			}
             			double d = RuntimeUtil.toDouble(getEnvironment(),val);
             			double d2 = RuntimeUtil.toDouble(getEnvironment(),val2);
@@ -469,7 +500,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.atanh(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.atanh(bd, env.getMathContext()), this::atanh, true, env.getMathContext());
             			}
         				double d = RuntimeUtil.toDouble(getEnvironment(),val);
         				if(!Double.isNaN(d) && -1.0<=d && d<=1.0) {
@@ -484,7 +515,9 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.root(bd, new BigDecimal("3"), env.getMathContext());
+            				// The cube root of a negative number is the negated root of its absolute value
+            				BigDecimal root = BigDecimalMath.root(bd.abs(), new BigDecimal("3"), env.getMathContext());
+            				return DecimalArithmetic.finish(bd.signum()<0 ? root.negate() : root, false, env.getMathContext());
             			}
            				return Math.cbrt(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -498,7 +531,7 @@ public class MathObject extends NativeObject {
             				return v;
             			} else if(val instanceof BigDecimal v) {
             				checkBigNumbers(env);
-            				return v.setScale(0, RoundingMode.CEILING).toBigIntegerExact();
+            				return DecimalArithmetic.toIntegral(v, RoundingMode.CEILING);
             			}
            				return Math.ceil(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -520,7 +553,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.cos(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.cos(bd, env.getMathContext()), Math::cos, false, env.getMathContext());
             			}
            				return Math.cos(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -532,7 +565,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.cosh(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.cosh(bd, env.getMathContext()), Math::cosh, false, env.getMathContext());
             			}
            				return Math.cosh(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -544,7 +577,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.exp(bd, env.getMathContext());
+            				return DecimalArithmetic.exp(bd, env.getMathContext());
             			}
            				return Math.exp(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -557,7 +590,8 @@ public class MathObject extends NativeObject {
             				checkBigNumbers(env);
             				MathContext mc = env.getMathContext();
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.exp(bd, mc).subtract(BigDecimal.ONE, mc);
+            				// exp() is +Infinity or 0 when out of range: expm1 is then +Infinity or -1
+            				return DecimalArithmetic.subtract(DecimalArithmetic.exp(bd, mc), BigDecimal.ONE, mc);
             			}
            				return Math.expm1(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -586,7 +620,7 @@ public class MathObject extends NativeObject {
             				return v;
             			} else if(val instanceof BigDecimal v) {
             				checkBigNumbers(env);
-            				return v.setScale(0, RoundingMode.FLOOR).toBigIntegerExact();
+            				return DecimalArithmetic.toIntegral(v, RoundingMode.FLOOR);
             			}
            				return Math.floor(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -625,7 +659,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.log(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.log(bd, env.getMathContext()), Math::log, false, env.getMathContext());
             			}
            				return Math.log(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -637,7 +671,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.log10(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.log10(bd, env.getMathContext()), Math::log10, false, env.getMathContext());
             			}
            				return Math.log10(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -650,7 +684,7 @@ public class MathObject extends NativeObject {
             				checkBigNumbers(env);
             				MathContext mc = env.getMathContext();
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.log(bd.add(BigDecimal.ONE, mc), mc);
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.log(bd.add(BigDecimal.ONE, mc), mc), Math::log1p, true, mc);
             			}
            				return Math.log1p(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -662,7 +696,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.log2(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.log2(bd, env.getMathContext()), Method::log2, false, env.getMathContext());
             			}
            				return log2(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -676,6 +710,11 @@ public class MathObject extends NativeObject {
 						Number next = toNum(env, args[i]);
 						if (RuntimeUtil.numberType(next) == RuntimeUtil.NUMBER_NAN) {
 							result = next;
+							continue;
+						}
+						if (RuntimeUtil.isDecimalOperation(env, result, next)) {
+							checkBigNumbers(env);
+							result = DecimalArithmetic.max(result, next);
 							continue;
 						}
 						int pt = RuntimeUtil.promoteNumber(env, RuntimeUtil.numberType(result),RuntimeUtil.numberType(next));
@@ -708,7 +747,7 @@ public class MathObject extends NativeObject {
 							}
 							case RuntimeUtil.NUMBER_DECIMAL128 -> {
 								checkBigNumbers(env);
-								Decimal128 dn = TypeUtil.toDecimal128(next), dr = TypeUtil.toDecimal128(result);
+								Decimal128 dn = Decimal128Ops.of(next), dr = Decimal128Ops.of(result);
 								if (dr.isNaN()) {
 									result = dr;
 								} else if (dn.isNaN()) {
@@ -732,6 +771,11 @@ public class MathObject extends NativeObject {
 						Number next = toNum(env, args[i]);
 						if (RuntimeUtil.numberType(next) == RuntimeUtil.NUMBER_NAN) {
 							result = next;
+							continue;
+						}
+						if (RuntimeUtil.isDecimalOperation(env, result, next)) {
+							checkBigNumbers(env);
+							result = DecimalArithmetic.min(result, next);
 							continue;
 						}
 						int pt = RuntimeUtil.promoteNumber(env, RuntimeUtil.numberType(result),RuntimeUtil.numberType(next));
@@ -764,7 +808,7 @@ public class MathObject extends NativeObject {
 							}
 							case RuntimeUtil.NUMBER_DECIMAL128 -> {
 								checkBigNumbers(env);
-								Decimal128 dn = TypeUtil.toDecimal128(next), dr = TypeUtil.toDecimal128(result);
+								Decimal128 dn = Decimal128Ops.of(next), dr = Decimal128Ops.of(result);
 								if (dr.isNaN()) {
 									result = dr;
 								} else if (dn.isNaN()) {
@@ -791,9 +835,7 @@ public class MathObject extends NativeObject {
             						return base.pow(exp.intValueExact());
             					} catch(ArithmeticException ignored) {}
             				}
-            				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				BigDecimal bd2 = RuntimeUtil.toBigDecimal(env, val2);
-            				return BigDecimalMath.pow(bd, bd2, env.getMathContext());
+            				return DecimalArithmetic.pow(val, val2, env.getMathContext());
             			}
                         return Math.pow(RuntimeUtil.toDouble(getEnvironment(),val), RuntimeUtil.toDouble(getEnvironment(),val2));
             		}
@@ -811,7 +853,7 @@ public class MathObject extends NativeObject {
             			} else if(val instanceof BigDecimal v) {
             				checkBigNumbers(env);
             				// JS round: floor(x + 0.5) — rounds half toward +infinity
-            				return v.add(new BigDecimal("0.5")).setScale(0, RoundingMode.FLOOR).toBigIntegerExact();
+            				return DecimalArithmetic.toIntegral(v, null);
             			}
             			double d = RuntimeUtil.toDouble(getEnvironment(),val);
                         if (d != d || d == 0 || Double.isInfinite(d)) {
@@ -851,7 +893,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.sin(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.sin(bd, env.getMathContext()), Math::sin, true, env.getMathContext());
             			}
            				return Math.sin(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -863,7 +905,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.sinh(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.sinh(bd, env.getMathContext()), Math::sinh, true, env.getMathContext());
             			}
            				return Math.sinh(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -875,7 +917,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.sqrt(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.sqrt(bd, env.getMathContext()), Math::sqrt, false, env.getMathContext());
             			}
            				return Math.sqrt(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -890,7 +932,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.tan(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.tan(bd, env.getMathContext()), Math::tan, true, env.getMathContext());
             			}
            				return Math.tan(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -902,7 +944,7 @@ public class MathObject extends NativeObject {
             			if(val instanceof BigInteger || val instanceof BigDecimal) {
             				checkBigNumbers(env);
             				BigDecimal bd = RuntimeUtil.toBigDecimal(env, val);
-            				return BigDecimalMath.tanh(bd, env.getMathContext());
+            				return DecimalArithmetic.math(bd, () -> BigDecimalMath.tanh(bd, env.getMathContext()), Math::tanh, true, env.getMathContext());
             			}
            				return Math.tanh(RuntimeUtil.toDouble(getEnvironment(),val));
             		}
@@ -916,7 +958,7 @@ public class MathObject extends NativeObject {
             				return v;
             			} else if(val instanceof BigDecimal v) {
             				checkBigNumbers(env);
-            				return v.setScale(0, RoundingMode.DOWN).toBigIntegerExact();
+            				return DecimalArithmetic.toIntegral(v, RoundingMode.DOWN);
             			}
             			double d = RuntimeUtil.toDouble(getEnvironment(),val);
             			return d < 0 ? Math.ceil(d) : Math.floor(d);

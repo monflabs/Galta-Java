@@ -716,6 +716,12 @@ public class GaltaJSTestSuite {
 		suite.addTestSuite(tests.galtajs.builtin.bigdecimal.prototype.ToStringTest.class);
 		suite.addTestSuite(tests.galtajs.builtin.bigdecimal.prototype.ValueOfTest.class);
 		suite.addTestSuite(tests.galtajs.builtin.bigdecimal.BigDecimalTest.class);
+		// Decimal special values, Decimal128 and BigDecimal
+		suite.addTestSuite(tests.galtajs.builtin.decimal.Decimal128SpecialValuesTest.class);
+		suite.addTestSuite(tests.galtajs.builtin.decimal.Decimal128SpecialValuesNoMixingTest.class);
+		suite.addTestSuite(tests.galtajs.builtin.decimal.BigDecimalSpecialValuesTest.class);
+		suite.addTestSuite(tests.galtajs.builtin.decimal.BigDecimalSpecialValuesNoMixingTest.class);
+		suite.addTestSuite(tests.galtajs.builtin.decimal.BigDecimalDecimal64SpecialValuesTest.class);
 		
 		// Set
 		suite.addTestSuite(tests.galtajs.builtin.set.JavaSetTest.class);

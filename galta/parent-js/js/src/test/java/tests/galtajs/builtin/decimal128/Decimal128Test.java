@@ -33,6 +33,6 @@ public class Decimal128Test extends GaltaJSTestCase {
 	protected JSEnvironment.Builder createEnvironment() {
 		return GlobalTestEnvironment.newBuilder()
 				.enableGaltaJSExtensions()
-				.useDecimal128(true);
+				.useBigDecimal(false);
 	}
 }

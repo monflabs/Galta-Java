@@ -20,6 +20,7 @@ import org.monflabs.util.number.Decimal128;
 import java.math.BigInteger;
 import java.text.MessageFormat;
 
+import org.monflabs.galtajs.rt.builtins.standard.bigdecimal.DecimalArithmetic;
 import org.monflabs.galtajs.JSEnvironment;
 import org.monflabs.galtajs.JSException;
 import org.monflabs.galtajs.JSParseException;
@@ -373,14 +374,15 @@ public class ASTLiteral extends ASTNode {
 		} else if(lastChar=='m' || lastChar=='M') {
 			if(env.supportBigDecimalLiteral()) {
 				s = s.substring(0,s.length()-1);
-				if(env.useDecimal128()) {
+				if(!env.useBigDecimal()) {
 					try {
 						return Decimal128.of(s);
 					} catch(NumberFormatException e) {
 						throw RuntimeUtil.syntaxError("Invalid decimal literal {0}", s);
 					}
 				}
-				return new BigDecimal(s,env.getMathContext());
+				// Out of the Decimal exponent range, the literal is +-Infinity or 0
+				return DecimalArithmetic.finish(new BigDecimal(s,env.getMathContext()),false,env.getMathContext());
 			} else {
 				throw RuntimeUtil.syntaxError("Decimal syntax is not supported");
 			}

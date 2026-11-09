@@ -33,7 +33,7 @@ public class ForceDecimal128Test extends GaltaJSTestCase {
 	protected JSEnvironment.Builder createEnvironment() {
 		return GlobalTestEnvironment.newBuilder()
 				.enableGaltaJSExtensions()
-				.useDecimal128(true)
+				.useBigDecimal(false)
 				.forceBigDecimalOperations(true);
 	}
 }

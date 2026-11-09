@@ -23,8 +23,23 @@ public final class Decimal128Ops {
 	private Decimal128Ops() {
 	}
 
+	/**
+	 * An operand as a Decimal128. A Number -0 stays -0: this is the conversion of an operation (as {@code -0m + -0}),
+	 * not the one of the {@code Decimal} constructor where -0 is +0.
+	 */
 	public static Decimal128 of(Number n) {
+		if((n instanceof Double || n instanceof Float) && n.doubleValue()==0) {
+			return ofIeee(n.doubleValue());
+		}
 		return TypeUtil.toDecimal128(n);
+	}
+
+	/**
+	 * A double IEEE result (Math.pow, Math.atan2...) as a Decimal128, keeping -0. Unlike {@link Decimal128#of(double)},
+	 * the conversion of the {@code Decimal} constructor where -0 is +0.
+	 */
+	public static Decimal128 ofIeee(double d) {
+		return d==0 && Double.doubleToRawLongBits(d)<0 ? Decimal128.NEGATIVE_ZERO : Decimal128.of(d);
 	}
 
 	public static Decimal128 add(Number a, Number b) {
@@ -64,12 +79,25 @@ public final class Decimal128Ops {
 		Decimal128 x = of(a);
 		Decimal128 y = of(b);
 		if (!x.isFinite() || !y.isFinite() || x.isZero() || y.isZero()) {
-			return Decimal128.of(Math.pow(x.doubleValue(), y.doubleValue()));
+			return ofIeee(Math.pow(x.doubleValue(), y.doubleValue()));
 		}
 		if (y.isInteger() && y.abs().compare(Decimal128.of(Long.MAX_VALUE)) < 0) {
 			return x.pow(y.longValue());
 		}
-		return fn(() -> BigDecimalMath.pow(x.toBigDecimal(), y.toBigDecimal(), WORK));
+		// Out of range results are known without computing them (that would fail or take very long):
+		// log10|x^y| = y*log10|x|
+		Decimal128 ax = x.abs();
+		double magnitude = y.doubleValue() * (ax.exponent() + Math.log10(ax.mantissa().doubleValue()));
+		boolean negative = x.isNegative() && y.isInteger() && y.toBigInteger().testBit(0);
+		if (magnitude > 6146) {
+			return negative ? Decimal128.NEGATIVE_INFINITY : Decimal128.POSITIVE_INFINITY;
+		}
+		if (magnitude < -6178) {
+			return negative ? Decimal128.NEGATIVE_ZERO : Decimal128.ZERO;
+		}
+		Decimal128 r = fn(() -> BigDecimalMath.pow(x.toBigDecimal(), y.toBigDecimal(), WORK));
+		// NaN when BigDecimalMath fails: the double result has the IEEE special case (NaN for a negative base)
+		return r.isNaN() ? ofIeee(Math.pow(x.doubleValue(), y.doubleValue())) : r;
 	}
 
 	/** Compares two values: -1, 0, 1 or {@link Decimal128#UNORDERED}. */

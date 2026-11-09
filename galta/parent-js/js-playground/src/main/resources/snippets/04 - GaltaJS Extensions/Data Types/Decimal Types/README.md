@@ -1,0 +1,3 @@
+# Decimal Types
+
+Compares the two Java types a GaltaJS decimal can have: `java.math.BigDecimal` (the type of `m` literals with the GaltaJS extensions, `useBigDecimal`) and `org.monflabs.util.number.Decimal128` (IEEE 754 decimal128, the default without the extensions). Each type is forced explicitly through `Java.type()`, using `new BigDecimal(...)` (a Java constructor returns a boxed decimal, unboxed with `valueOf()`) and `Decimal128.of(...)` (it has no public constructor). The snippet then shows exact arithmetic, precision, range and overflow, the special values (`NaN`, the infinities and `-0` are Numbers for a `BigDecimal` and Decimal128 values for a `Decimal128`), and what mixing the two types returns.

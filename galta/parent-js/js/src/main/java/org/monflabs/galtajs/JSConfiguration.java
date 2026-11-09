@@ -96,8 +96,8 @@ public interface JSConfiguration {
 	public boolean supportBigNumberMath();
 	public boolean forceBigDecimalOperations();
 	public boolean supportMixedBigNumber();
-	/** When true, decimal literals (<code>1.5m</code>), forced decimal operations and the JSON factory decimals use {@link org.monflabs.util.number.Decimal128} instead of {@link java.math.BigDecimal}. Decimal128 values are always supported, this only selects the default type. */
-	public boolean useDecimal128();
+	/** When true, decimal literals (<code>1.5m</code>), forced decimal operations and the JSON factory decimals use {@link java.math.BigDecimal} instead of {@link org.monflabs.util.number.Decimal128}. Both types are always supported as values, this only selects the default type. False by default (Decimal128); {@code enableGaltaJSExtensions()} sets it to true. */
+	public boolean useBigDecimal();
 	public boolean supportParseIntOctal();
 
 	//

@@ -74,7 +74,7 @@ public final class ConfigurationImpl implements JSConfiguration {
 	boolean supportBigNumberMath=false;
 	boolean forceBigDecimalOperations=false;
 	boolean supportMixedBigNumber=false;
-	boolean useDecimal128=true;
+	boolean useBigDecimal=false;
 	boolean supportParseIntOctal=true;
 	
 	boolean supportSequenceExtensions=false;
@@ -216,8 +216,8 @@ public final class ConfigurationImpl implements JSConfiguration {
 		return forceBigDecimalOperations;
 	}
 	@Override
-	public final boolean useDecimal128() {
-		return useDecimal128;
+	public final boolean useBigDecimal() {
+		return useBigDecimal;
 	}
 	@Override
 	public final boolean supportMixedBigNumber() {
