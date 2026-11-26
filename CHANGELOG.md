@@ -40,6 +40,12 @@ All notable changes to Galta. Versions follow the `<revision>` of the root
   range overflow or underflow, and `Math` returns the IEEE results outside of a
   function's domain. `Math.floor`/`ceil`/`round`/`trunc` on a decimal return a decimal
   (not a `BigInt`).
+- Debugger: a client that dropped its WebSocket without a close left the server
+  refusing every later client ("Another client is already attached") until it
+  restarted, and a client attaching right after a close could be refused. A new
+  client now waits up to 2 seconds for the previous session to end. The debugger
+  panel also ignores the late answers of a connection it has left: a call of the
+  previous connection failing as it closed could detach the new one.
 
 ### JSON library
 

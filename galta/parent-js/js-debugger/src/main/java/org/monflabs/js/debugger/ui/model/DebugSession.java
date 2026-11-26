@@ -185,8 +185,13 @@ public final class DebugSession {
     }
 
     private void enableAndArm() {
+        final ConnectionListener listener = activeListener;
         connection.call("Runtime.enable", null);
         connection.call("Debugger.enable", null).whenComplete((result, error) -> run(() -> {
+            if (activeListener != listener) {
+                // the answer to a connection that is gone
+                return;
+            }
             if (error != null) {
                 onClosed(String.valueOf(error.getMessage()));
                 return;
@@ -370,8 +375,9 @@ public final class DebugSession {
         if (bp.condition() != null) {
             params.put("condition", bp.condition());
         }
+        final ConnectionListener listener = activeListener;
         connection.call("Debugger.setBreakpointByUrl", params).whenComplete((result, error) -> run(() -> {
-            if (error != null || result == null) {
+            if (error != null || result == null || activeListener != listener) {
                 return;
             }
             final Breakpoint current = breakpoints.get(bp.key());

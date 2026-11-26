@@ -43,6 +43,7 @@ public class AllGaltaJSTests extends TestSuite {
 		suite.addTestSuite(tests.cdp.CdpProtocolTest.class);
 		suite.addTestSuite(tests.cdp.InProcessCdpProtocolTest.class);
 		suite.addTestSuite(tests.cdp.CdpSafetyTest.class);
+		suite.addTestSuite(tests.cdp.CdpReattachTest.class);
 		suite.addTestSuite(tests.debug.DebuggerSafetyTest.class);
 		suite.addTestSuite(tests.javascript.regression.LibraryRegressionJavaTest.class);
 		suite.addTestSuite(org.monflabs.galtajs.rt.interpreter.PICConcurrencyTest.class);

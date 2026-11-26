@@ -22,6 +22,7 @@ import org.monflabs.js.debugger.ui.InProcessDebuggerPanelTest;
 import org.monflabs.js.debugger.ui.panel.SourcePanelTest;
 import org.monflabs.js.debugger.ui.panel.SourceViewTest;
 import org.monflabs.js.debugger.ui.test.CdpConnectionTest;
+import org.monflabs.js.debugger.ui.test.DebugSessionReattachTest;
 import org.monflabs.js.debugger.ui.test.DebugSessionTest;
 import org.monflabs.js.debugger.ui.test.InProcessCdpConnectionTest;
 import org.monflabs.js.debugger.ui.test.InProcessDebugSessionTest;
@@ -38,6 +39,7 @@ public class AllDebuggerTests extends TestSuite {
 		suite.addTestSuite(SourceViewTest.class);
 		suite.addTestSuite(CdpConnectionTest.class);
 		suite.addTestSuite(DebugSessionTest.class);
+		suite.addTestSuite(DebugSessionReattachTest.class);
 		suite.addTestSuite(InProcessCdpConnectionTest.class);
 		suite.addTestSuite(InProcessDebugSessionTest.class);
 

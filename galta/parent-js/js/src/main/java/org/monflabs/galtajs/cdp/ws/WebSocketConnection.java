@@ -135,8 +135,8 @@ public final class WebSocketConnection implements AutoCloseable, CdpTransport {
 				case OP_PONG -> { /* nothing to do */ }
 				case OP_CLOSE -> {
 					if (!closed) {
-						frame(OP_CLOSE, payload.length >= 2 ? new byte[] { payload[0], payload[1] } : new byte[0]);
 						closed = true;
+						frame(OP_CLOSE, payload.length >= 2 ? new byte[] { payload[0], payload[1] } : new byte[0]);
 					}
 					return;
 				}
@@ -147,6 +147,7 @@ public final class WebSocketConnection implements AutoCloseable, CdpTransport {
 				}
 			}
 		} finally {
+			closed = true;
 			closeSocket();
 		}
 	}
