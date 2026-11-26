@@ -27,6 +27,7 @@ public class AllLangGaltaJSTests extends TestSuite {
 		suite.addTestSuite(ExecuteGaltaJSTest.class);
 		suite.addTestSuite(tests.galtajs.PlaygroundEngineTest.class);
 		suite.addTestSuite(tests.ui.AstDescriptionTest.class);
+		suite.addTestSuite(tests.galtajs.SnippetUrlNamesTest.class);
 		suite.addTest(AllSnippetsExecutionTest.suite());
 
 		return suite;

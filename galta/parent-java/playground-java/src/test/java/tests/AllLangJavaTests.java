@@ -29,6 +29,7 @@ public class AllLangJavaTests extends TestSuite {
 		suite.addTestSuite(tests.jshell.JShellScriptConverterTest.class);
 		suite.addTestSuite(tests.snippets.PackagedSnippetsTest.class);
 		suite.addTestSuite(tests.snippets.ScratchpadTest.class);
+		suite.addTestSuite(tests.snippets.SnippetUrlNamesTest.class);
 
 		return suite;
 	}

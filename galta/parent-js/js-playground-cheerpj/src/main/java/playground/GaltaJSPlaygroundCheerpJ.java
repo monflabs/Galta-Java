@@ -34,6 +34,12 @@ import playground.impl.GaltaJSPlaygroundFrame;
  */
 public class GaltaJSPlaygroundCheerpJ extends GaltaJSPlayground{
 
+    /**
+     * Opens the playground over the whole page.
+     *
+     * @param args {@code --theme=dark} or {@code --theme=light}; {@code --snippet=NAME} opens
+     *        that snippet: the page passes the {@code snippet} parameter of its URL
+     */
     public static void main(String[] args) {
     	SwingUtilities.invokeLater( () -> {
     		IDEApplication.newBuilder()
@@ -43,6 +49,9 @@ public class GaltaJSPlaygroundCheerpJ extends GaltaJSPlayground{
 			configure();
 			
         	PlaygroundFrame f = new GaltaJSPlaygroundFrame();
+        	f.setInitialSnippet(PlaygroundFrame.getSnippetArgument(args));
+        	// the URL names the snippet shown, so that it can be bookmarked or shared
+        	f.setSnippetShownListener(GaltaJSPlaygroundCheerpJ::showInUrlIfAvailable);
         	f.setUndecorated(true);
             f.setExtendedState(JFrame.MAXIMIZED_BOTH);
             f.setVisible(true);
@@ -63,5 +72,28 @@ public class GaltaJSPlaygroundCheerpJ extends GaltaJSPlayground{
     		}
     	}
     	return null;
+    }
+
+    /**
+     * Sets the {@code snippet} parameter of the page's URL, without a reload or a history
+     * entry, and the page's title. Implemented in JavaScript by the page
+     * ({@code docs/playground/index.html}).
+     *
+     * @param name the snippet's name in the URL
+     * @param title the snippet's title
+     */
+    static native void showInUrl(String name, String title);
+
+    // A page that does not implement the native (cheerpj/index.html) leaves the URL alone
+    private static boolean urlAvailable = true;
+
+    private static void showInUrlIfAvailable(String name, String title) {
+    	if(urlAvailable) {
+    		try {
+    			showInUrl(name, title);
+    		} catch(UnsatisfiedLinkError e) {
+    			urlAvailable = false;
+    		}
+    	}
     }
 }

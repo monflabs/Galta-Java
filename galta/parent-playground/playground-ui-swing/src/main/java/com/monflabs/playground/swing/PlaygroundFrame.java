@@ -38,6 +38,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import javax.swing.AbstractAction;
@@ -141,6 +143,12 @@ public class PlaygroundFrame extends IDEFrame {
 	 */
 	public static final String SETTINGS_PATH = "playground";
 
+	/**
+	 * The URL name of the scratchpad (see {@link SnippetTree.Node#getUrlName()} for the
+	 * snippets).
+	 */
+	public static final String SCRATCHPAD_URL_NAME = "scratchpad";
+
 	private final ExecutionController controller = new ExecutionController(
 			ctx -> PlaygroundConfiguration.get().createExecutionEngine(ctx),
 			new ExecutionListener());
@@ -151,6 +159,8 @@ public class PlaygroundFrame extends IDEFrame {
     private ExecutionContext executionContext;
     private boolean dirty;
     private boolean initialSnippetLoaded;
+    private String initialSnippet;
+    private BiConsumer<String,String> snippetShownListener;
 
     // The text editors of the current snippet, by file name, and the ones
     // modified since their text was last copied to the execution context -
@@ -398,6 +408,9 @@ public class PlaygroundFrame extends IDEFrame {
         	}
         	if(node instanceof DefaultMutableTreeNode n) {
         		saveSetting(u -> u.put(settingPath("lastSnippet"), nodeKey(n)));
+        		if(snippetShownListener!=null && urlName(n)!=null) {
+        			snippetShownListener.accept(urlName(n), nodeTitle(n));
+        		}
         	}
         });
     }
@@ -587,8 +600,57 @@ public class PlaygroundFrame extends IDEFrame {
     }
 
     /**
-     * Selects the snippet loaded first: the last selected one when it was
-     * persisted and still exists, the first one otherwise.
+     * The snippet loaded first, instead of the last one shown: the browser build
+     * passes the one named in the page's URL. To be called before the frame is
+     * displayable.
+     *
+     * @param urlName a name of {@link SnippetTree.Node#getUrlName()} or
+     *        {@link #SCRATCHPAD_URL_NAME}, or null; an unknown one is ignored
+     */
+    public void setInitialSnippet(String urlName) {
+    	this.initialSnippet = urlName;
+    }
+
+    /**
+     * Tells a listener each snippet shown (a folder of the tree included), for a
+     * host that shows it elsewhere: the browser build puts its name in the page's
+     * URL.
+     *
+     * @param listener called on the event dispatch thread with the URL name of the
+     *        snippet ({@link SnippetTree.Node#getUrlName()}) and its title
+     */
+    public void setSnippetShownListener(BiConsumer<String,String> listener) {
+    	this.snippetShownListener = listener;
+    }
+
+    /**
+     * The snippet asked for by a {@code --snippet=NAME} argument, or null.
+     */
+    public static String getSnippetArgument(String[] args) {
+    	String name = null;
+    	for(String a: args) {
+    		if(a.startsWith("--snippet=")) {
+    			name = a.substring("--snippet=".length());
+    		}
+    	}
+    	return name;
+    }
+
+    private static String urlName(DefaultMutableTreeNode node) {
+    	if(node instanceof ScratchpadTreeNode) {
+    		return SCRATCHPAD_URL_NAME;
+    	}
+    	return node instanceof SnippetTreeNode stn ? stn.treeNode.getUrlName() : null;
+    }
+
+    private static String nodeTitle(DefaultMutableTreeNode node) {
+    	return node instanceof SnippetTreeNode stn ? stn.treeNode.getTitle() : node.toString();
+    }
+
+    /**
+     * Selects the snippet loaded first: the one of {@link #setInitialSnippet(String)}
+     * when it exists, else the last selected one when it was persisted and still
+     * exists, else the first one.
      */
     protected void selectInitialNode() {
     	DefaultMutableTreeNode tree = (DefaultMutableTreeNode)snippetTree.getModel().getRoot();
@@ -596,20 +658,32 @@ public class PlaygroundFrame extends IDEFrame {
     		return;
     	}
     	DefaultMutableTreeNode node = (DefaultMutableTreeNode)tree.getChildAt(0);
-    	Config c = settings();
-    	String last = c!=null ? c.getString(settingPath("lastSnippet"), null) : null;
-    	if(last!=null) {
-    		var e = tree.depthFirstEnumeration();
-    		while(e.hasMoreElements()) {
-    			if(e.nextElement() instanceof DefaultMutableTreeNode n && last.equals(nodeKey(n)) && n!=tree) {
-    				node = n;
-    				break;
-    			}
-    		}
+    	DefaultMutableTreeNode asked = initialSnippet!=null ? findNode(tree, n -> n!=tree && initialSnippet.equals(urlName(n))) : null;
+    	if(asked!=null) {
+    		node = asked;
+    	} else {
+	    	Config c = settings();
+	    	String last = c!=null ? c.getString(settingPath("lastSnippet"), null) : null;
+	    	if(last!=null) {
+	    		DefaultMutableTreeNode n = findNode(tree, x -> last.equals(nodeKey(x)) && x!=tree);
+	    		if(n!=null) {
+	    			node = n;
+	    		}
+	    	}
     	}
     	TreePath path = new TreePath(node.getPath());
     	snippetTree.getSelectionModel().setSelectionPath(path);
     	snippetTree.scrollPathToVisible(path);
+    }
+
+    private static DefaultMutableTreeNode findNode(DefaultMutableTreeNode tree, Predicate<DefaultMutableTreeNode> test) {
+    	var e = tree.depthFirstEnumeration();
+    	while(e.hasMoreElements()) {
+    		if(e.nextElement() instanceof DefaultMutableTreeNode n && test.test(n)) {
+    			return n;
+    		}
+    	}
+    	return null;
     }
 
     private void loadSnippet(SnippetTree.Node node) {

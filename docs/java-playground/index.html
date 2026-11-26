@@ -83,11 +83,31 @@
         const dir = location.pathname.replace(/[^/]*$/, "");
         const jar = "/app" + dir + "javaplayground-cheerpj.jar";
         try {
-          await cheerpjInit({ version: 21 });
+          const pageTitle = document.title;
+          await cheerpjInit({
+            version: 21,
+            natives: {
+              // JavaPlaygroundCheerpJ.showInUrl: the snippet shown is in the URL, to bookmark or share
+              async Java_playground_JavaPlaygroundCheerpJ_showInUrl(lib, name, title) {
+                const params = new URLSearchParams(location.search);
+                params.set("snippet", name);
+                // a name is made of [a-z0-9-] and slashes, which stay readable
+                const query = params.toString().replace(/%2F/g, "/");
+                history.replaceState(null, "", location.pathname + "?" + query + location.hash);
+                document.title = pageTitle + " - " + title.replace(/`/g, "");
+              },
+            },
+          });
           cheerpjCreateDisplay(-1, -1, document.getElementById("cheerpj"));
           document.getElementById("loading").remove();
-          // The playground starts in the same mode
-          await cheerpjRunMain("playground.JavaPlaygroundCheerpJ", jar, "--theme=" + theme);
+          // The playground starts in the same mode, on the snippet named in the URL
+          // (?snippet=getting-started/hello-galta), else as before
+          const args = ["--theme=" + theme];
+          const snippet = new URLSearchParams(location.search).get("snippet");
+          if (snippet) {
+            args.push("--snippet=" + snippet);
+          }
+          await cheerpjRunMain("playground.JavaPlaygroundCheerpJ", jar, ...args);
         } catch (e) {
           document.getElementById("loading").textContent =
             "The playground could not be started: " + e;

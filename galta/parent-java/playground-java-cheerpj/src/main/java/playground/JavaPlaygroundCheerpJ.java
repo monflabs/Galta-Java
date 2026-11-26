@@ -33,6 +33,12 @@ import com.monflabs.playground.swing.PlaygroundFrame;
  */
 public class JavaPlaygroundCheerpJ extends JavaPlayground {
 
+    /**
+     * Opens the playground over the whole page.
+     *
+     * @param args {@code --theme=dark} or {@code --theme=light}; {@code --snippet=NAME} opens
+     *        that snippet: the page passes the {@code snippet} parameter of its URL
+     */
     public static void main(String[] args) {
     	// CheerpJ has no lib/jrt-fs.jar: the Java compiler (ecj) uses its jrt:/ file system
     	EcjJrtSupport.install();
@@ -44,6 +50,9 @@ public class JavaPlaygroundCheerpJ extends JavaPlayground {
 			configure();
 
         	PlaygroundFrame f = new PlaygroundFrame();
+        	f.setInitialSnippet(PlaygroundFrame.getSnippetArgument(args));
+        	// the URL names the snippet shown, so that it can be bookmarked or shared
+        	f.setSnippetShownListener(JavaPlaygroundCheerpJ::showInUrlIfAvailable);
         	f.setUndecorated(true);
             f.setExtendedState(JFrame.MAXIMIZED_BOTH);
             f.setVisible(true);
@@ -64,5 +73,28 @@ public class JavaPlaygroundCheerpJ extends JavaPlayground {
     		}
     	}
     	return null;
+    }
+
+    /**
+     * Sets the {@code snippet} parameter of the page's URL, without a reload or a history
+     * entry, and the page's title. Implemented in JavaScript by the page
+     * ({@code docs/java-playground/index.html}).
+     *
+     * @param name the snippet's name in the URL
+     * @param title the snippet's title
+     */
+    static native void showInUrl(String name, String title);
+
+    // A page that does not implement the native (cheerpj/index.html) leaves the URL alone
+    private static boolean urlAvailable = true;
+
+    private static void showInUrlIfAvailable(String name, String title) {
+    	if(urlAvailable) {
+    		try {
+    			showInUrl(name, title);
+    		} catch(UnsatisfiedLinkError e) {
+    			urlAvailable = false;
+    		}
+    	}
     }
 }

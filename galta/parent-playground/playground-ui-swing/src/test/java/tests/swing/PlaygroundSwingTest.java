@@ -22,6 +22,13 @@ import tests.ProjectTestCase;
  */
 public class PlaygroundSwingTest extends ProjectTestCase {
 
+	public void testSnippetArgument() throws Exception {
+		assertEquals("getting-started/hello", com.monflabs.playground.swing.PlaygroundFrame.getSnippetArgument(new String[] {"--theme=dark", "--snippet=getting-started/hello"}));
+		assertEquals("b", com.monflabs.playground.swing.PlaygroundFrame.getSnippetArgument(new String[] {"--snippet=a", "--snippet=b"}));
+		assertNull(com.monflabs.playground.swing.PlaygroundFrame.getSnippetArgument(new String[] {"--theme=dark"}));
+		assertNull(com.monflabs.playground.swing.PlaygroundFrame.getSnippetArgument(new String[0]));
+	}
+
 	public void testLoadedTextIsNotUndoable() throws Exception {
 		javax.swing.SwingUtilities.invokeAndWait(() -> {
 			org.monflabs.ui.swing.ide.syntax.SyntaxTextArea ta = new org.monflabs.ui.swing.ide.syntax.SyntaxTextArea();

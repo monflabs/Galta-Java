@@ -37,7 +37,9 @@ server root.
 `buildtools/build-site.sh` copies the jar to `docs/playground/`, whose
 `index.html` computes the `/app/...` path from its own location so it works under
 the site's `/Galta-Java/` base path; the publish-docs workflow deploys the site
-on every push to master. The same page can be previewed with
+on every push to master. That page also passes its `?snippet=NAME` parameter as
+`--snippet=NAME`, and implements the entry point's `showInUrl` native, which puts the
+snippet shown in the URL. The same page can be previewed with
 `./buildtools/build-site.sh && ./serve-docs.sh` (from the repository root), then
 <http://localhost:3030/playground/>. Keep the CheerpJ loader version of the two
 pages in sync.

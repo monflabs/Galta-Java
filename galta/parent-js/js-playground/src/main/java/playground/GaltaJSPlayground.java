@@ -56,6 +56,7 @@ public class GaltaJSPlayground {
 	//   java -jar jsplaygroud.jar
 	// Remote debug
 	//   java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8000 -jar jsplaygroud.jar
+	// --snippet=NAME opens that snippet (SnippetTree.Node.getUrlName(), e.g. hello-javascript)
     public static void main(String[] args) {
     	// Built on the main thread, before any component exists (as FlatLaf
     	// recommends): reading the OS appearance runs external commands, which
@@ -70,6 +71,7 @@ public class GaltaJSPlayground {
             configure();
 
         	PlaygroundFrame f = new GaltaJSPlaygroundFrame();
+        	f.setInitialSnippet(PlaygroundFrame.getSnippetArgument(args));
         	f.initialSize();   
             f.setVisible(true);
     	});

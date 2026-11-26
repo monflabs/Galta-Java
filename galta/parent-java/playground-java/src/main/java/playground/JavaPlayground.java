@@ -47,6 +47,12 @@ import playground.impl.engine.jshell.JShellExecutionEngine;
  */
 public class JavaPlayground {
 
+    /**
+     * Opens the playground.
+     *
+     * @param args {@code --snippet=NAME} opens that snippet (a name of
+     *        {@code SnippetTree.Node.getUrlName()}, such as {@code getting-started/hello-galta})
+     */
     public static void main(String[] args) {
     	SwingUtilities.invokeLater( () -> {
     		IDEApplication.newBuilder()
@@ -69,6 +75,7 @@ public class JavaPlayground {
 	        configure();
 
 	    	PlaygroundFrame f = new PlaygroundFrame();
+	    	f.setInitialSnippet(PlaygroundFrame.getSnippetArgument(args));
 	    	f.initialSize();   
 	        f.setVisible(true);
     	});

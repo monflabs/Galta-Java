@@ -6,6 +6,17 @@ All notable changes to Galta. Versions follow the `<revision>` of the root
 
 ## Unreleased
 
+### Playground
+
+- In the browser playgrounds (GaltaJS and Java), the page's URL names the snippet shown
+  (`playground/index.html?snippet=ecma-specification/features/es2020/optional-chaining`)
+  and is updated when another one is selected, without a reload or a history entry; the
+  page's title follows. Opening such a URL opens that snippet; an unknown name opens what
+  opened before. The name is the snippet's folders without their ordering numbers, in lower
+  case with hyphens (`SnippetTree.Node.getUrlName()`; the scratchpad is `scratchpad`). The
+  desktop playgrounds accept `--snippet=NAME`; `PlaygroundFrame` has
+  `setInitialSnippet()` and `setSnippetShownListener()`.
+
 ### Utilities
 
 - New `org.monflabs.util.number.Decimal128`: the IEEE 754 decimal128 value of the
